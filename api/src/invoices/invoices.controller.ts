@@ -26,7 +26,7 @@ export class InvoicesController {
     FileInterceptor('file', {
       storage: diskStorage({
         destination: (req, _file, cb) => {
-          const tenantId = req.user?.tenantId || 'public';
+          const tenantId = (req.user as RequestUser | undefined)?.tenantId || 'public';
           const dest = path.join(uploadRoot, tenantId);
           fs.mkdirSync(dest, { recursive: true });
           cb(null, dest);
