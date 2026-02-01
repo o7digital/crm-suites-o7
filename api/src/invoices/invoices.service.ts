@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
 import { UploadInvoiceDto } from './dto/upload-invoice.dto';
 import * as path from 'path';
+import { Prisma } from '@prisma/client';
 
 interface ExtractionResult {
   amount?: number;
@@ -38,7 +39,7 @@ export class InvoicesService {
         status: 'READY',
         issuedDate: dto.issuedDate ? new Date(dto.issuedDate) : extraction.issuedDate,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : extraction.dueDate,
-        extractedRaw: extraction,
+        extractedRaw: extraction as Prisma.InputJsonValue,
       },
     });
 

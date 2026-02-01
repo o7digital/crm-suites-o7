@@ -3,7 +3,8 @@ import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
-import { CurrentUser, RequestUser } from '../common/user.decorator';
+import { CurrentUser } from '../common/user.decorator';
+import type { RequestUser } from '../common/user.decorator';
 
 @UseGuards(JwtAuthGuard)
 @Controller('clients')

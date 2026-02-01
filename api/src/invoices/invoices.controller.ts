@@ -1,12 +1,14 @@
-import { Controller, Get, Post, UseGuards, UploadedFile, UseInterceptors, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards, UploadedFile, UseInterceptors, Body, Param, Req } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
 import { InvoicesService } from './invoices.service';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
-import { CurrentUser, RequestUser } from '../common/user.decorator';
+import { CurrentUser } from '../common/user.decorator';
+import type { RequestUser } from '../common/user.decorator';
 import { UploadInvoiceDto } from './dto/upload-invoice.dto';
+import { Request } from 'express';
 
 const uploadRoot = path.join(process.cwd(), 'uploads');
 
@@ -40,8 +42,11 @@ export class InvoicesController {
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: UploadInvoiceDto,
     @CurrentUser() user: RequestUser,
+    @Req() req: Request & { user?: RequestUser },
   ) {
-    return this.invoicesService.storeFile(file, user, dto);
+    // tenantId from JWT (RequestUser) preferred
+    const effectiveUser = req.user || user;
+    return this.invoicesService.storeFile(file, effectiveUser, dto);
   }
 
   @Get()
