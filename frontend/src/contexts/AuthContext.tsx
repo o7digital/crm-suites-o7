@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../lib/supabaseClient';
 
 type User = {
@@ -40,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const syncSession = (session: NonNullable<Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']>) => {
+  const syncSession = (session: Session) => {
     const metadata = (session.user.user_metadata as any) || {};
     const tenantId = metadata.tenant_id || metadata.tenantId || session.user.id;
     const tenantName = metadata.tenant_name || metadata.tenantName;
