@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { getSupabaseClient } from '../lib/supabaseClient';
 
 type User = {
   id: string;
@@ -30,7 +30,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    const supabase = safeSupabase();
+    supabase?.auth.getSession().then(({ data }) => {
       const session = data.session;
       if (session) {
         syncSession(session);
@@ -66,6 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
+    const supabase = mustSupabase();
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !data.session) {
       throw new Error(error?.message || 'Unable to login');
@@ -76,6 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (payload: { tenantName: string; name: string; email: string; password: string }) => {
     const tenantId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`;
+    const supabase = mustSupabase();
     const { data, error } = await supabase.auth.signUp({
       email: payload.email,
       password: payload.password,
@@ -95,12 +98,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
-    supabase.auth.signOut();
+    const supabase = safeSupabase();
+    supabase?.auth.signOut();
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
   };
+
+  function safeSupabase() {
+    try {
+      return getSupabaseClient();
+    } catch {
+      return null;
+    }
+  }
+
+  function mustSupabase() {
+    const client = safeSupabase();
+    if (!client) throw new Error('Supabase configuration is missing');
+    return client;
+  }
 
   const value = useMemo(
     () => ({
