@@ -9,6 +9,7 @@ import { TasksModule } from './tasks/tasks.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ExportModule } from './export/export.module';
+import { BootstrapModule } from './bootstrap/bootstrap.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ExportModule } from './export/export.module';
     InvoicesModule,
     DashboardModule,
     ExportModule,
+    BootstrapModule,
   ],
   controllers: [AppController],
   providers: [AppService],

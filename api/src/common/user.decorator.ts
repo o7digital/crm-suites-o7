@@ -4,6 +4,8 @@ export interface RequestUser {
   userId: string;
   tenantId: string;
   email: string;
+  name?: string;
+  tenantName?: string;
 }
 
 export const CurrentUser = createParamDecorator(
