@@ -9,9 +9,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
   },
 });
-/**
- * Client-side Supabase singleton. Does not instantiate during SSR to avoid build-time env errors.
- */
 'use client';
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
