@@ -1,6 +1,7 @@
 # Multi-stage build for the NestJS API
 
 FROM node:20-alpine AS builder
+RUN apk add --no-cache openssl1.1-compat
 WORKDIR /app
 # Install dependencies
 COPY api/package*.json api/tsconfig*.json api/nest-cli.json ./api/
@@ -11,6 +12,7 @@ COPY api/src ./api/src
 RUN cd api && npm run build
 
 FROM node:20-alpine
+RUN apk add --no-cache openssl1.1-compat
 WORKDIR /app
 COPY --from=builder /app/api/dist ./dist
 COPY --from=builder /app/api/package*.json ./
