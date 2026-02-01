@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users   User[]
+  clients Client[]
+  tasks   Task[]
+  invoices Invoice[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  tenantId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  company   String?
+  notes     String?
+  tenantId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id])
+  tasks   Task[]
+  invoices Invoice[]
+}
+
+model Task {
+  id        String     @id @default(uuid())
+  title     String
+  status    TaskStatus @default(PENDING)
+  dueDate   DateTime?
+  tenantId  String
+  clientId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  client Client @relation(fields: [clientId], references: [id])
+}
+
+model Invoice {
+  id           String         @id @default(uuid())
+  tenantId     String
+  clientId     String?
+  amount       Decimal        @db.Decimal(10, 2)
+  currency     String         @default("USD")
+  status       InvoiceStatus  @default(NEW)
+  filePath     String
+  issuedDate   DateTime?
+  dueDate      DateTime?
+  extractedRaw Json?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  client Client? @relation(fields: [clientId], references: [id])
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+}
+
+enum InvoiceStatus {
+  NEW
+  PROCESSING
+  READY
+}
