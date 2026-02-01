@@ -98,7 +98,7 @@ export function useAuth() {
 
 export function useApi(token: string | null) {
   return useMemo(() => {
-    const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+    const authHeader: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
     return async (path: string, init?: RequestInit) => {
       const headers: Record<string, string> = { ...authHeader };
       if (!(init?.body instanceof FormData)) {
