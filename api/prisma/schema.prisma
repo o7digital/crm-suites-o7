@@ -1,5 +1,7 @@
 generator client {
   provider = "prisma-client-js"
+  // Force Prisma to fetch the musl + OpenSSL 3 engine (avoids the default OpenSSL 1.1 build)
+  binaryTargets = ["linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
