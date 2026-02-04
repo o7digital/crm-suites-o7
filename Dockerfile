@@ -1,8 +1,10 @@
 # Multi-stage build for the NestJS API
 
 FROM node:20-alpine AS builder
-# OpenSSL 3 is bundled in the default alpine openssl package
-RUN apk add --no-cache openssl
+# Install OpenSSL 3 (default) and the compat package that provides libssl.so.1.1.
+# Prisma sometimes still pulls the 1.1-linked engine on musl; having both avoids
+# runtime "libssl.so.1.1 not found" crashes while keeping the 3.0 binary available.
+RUN apk add --no-cache openssl openssl1.1-compat
 WORKDIR /app
 # Install dependencies
 COPY api/package*.json api/tsconfig*.json api/nest-cli.json ./api/
@@ -16,7 +18,7 @@ COPY api/src ./api/src
 RUN cd api && npm run build
 
 FROM node:20-alpine
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl openssl1.1-compat
 WORKDIR /app
 COPY --from=builder /app/api/dist ./dist
 COPY --from=builder /app/api/package*.json ./
