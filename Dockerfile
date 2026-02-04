@@ -15,6 +15,9 @@ RUN cd api && npm ci
 # Generate Prisma client for musl + OpenSSL 3
 ENV PRISMA_CLI_BINARY_TARGETS=linux-musl-openssl-3.0.x
 RUN cd api && npx prisma generate --binary-target linux-musl-openssl-3.0.x
+# Ensure the default engine filename resolves to the OpenSSL 3 build
+RUN cd api/node_modules/.prisma/client && \
+  ln -sf libquery_engine-linux-musl-openssl-3.0.x.so.node libquery_engine-linux-musl.so.node
 # Build sources
 COPY api/src ./api/src
 RUN cd api && npm run build
@@ -30,5 +33,8 @@ COPY --from=builder /app/api/prisma ./prisma
 ENV PRISMA_CLI_BINARY_TARGETS=linux-musl-openssl-3.0.x
 RUN npm ci --omit=dev \
   && npx prisma generate --binary-target linux-musl-openssl-3.0.x
+# Ensure the default engine filename resolves to the OpenSSL 3 build
+RUN cd node_modules/.prisma/client && \
+  ln -sf libquery_engine-linux-musl-openssl-3.0.x.so.node libquery_engine-linux-musl.so.node
 ENV PORT=8080
 CMD ["node", "dist/main.js"]
