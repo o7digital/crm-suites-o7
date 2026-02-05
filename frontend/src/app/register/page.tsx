@@ -13,14 +13,20 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    setInfo(null);
     setLoading(true);
     try {
-      await register({ tenantName, name, email, password });
+      const result = await register({ tenantName, name, email, password });
+      if (result === 'confirm') {
+        setInfo('Check your email to confirm your account, then sign in.');
+        return;
+      }
       router.push('/');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unable to register';
@@ -76,6 +82,7 @@ export default function RegisterPage() {
               required
             />
           </div>
+          {info && <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{info}</div>}
           {error && <div className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-200">{error}</div>}
           <button type="submit" className="btn-primary w-full justify-center" disabled={loading}>
             {loading ? 'Creating…' : 'Create account'}

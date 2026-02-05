@@ -17,7 +17,7 @@ type AuthContextValue = {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (payload: { tenantName: string; name: string; email: string; password: string }) => Promise<void>;
+  register: (payload: { tenantName: string; name: string; email: string; password: string }) => Promise<'signed-in' | 'confirm'>;
   logout: () => void;
 };
 
@@ -123,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (payload: { tenantName: string; name: string; email: string; password: string }) => {
       const tenantId = generateTenantId();
       const supabase = mustSupabase();
+      const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined;
       const { data, error } = await supabase.auth.signUp({
         email: payload.email,
         password: payload.password,
@@ -132,13 +133,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             tenant_id: tenantId,
             tenant_name: payload.tenantName,
           },
+          emailRedirectTo,
         },
       });
-      if (error || !data.session) {
-        throw new Error(error?.message || 'Unable to register');
+      if (error) {
+        throw new Error(error.message || 'Unable to register');
+      }
+      if (!data.session) {
+        return 'confirm';
       }
       await bootstrapTenant(data.session.access_token);
       syncSession(data.session);
+      return 'signed-in';
     },
     [bootstrapTenant, mustSupabase, syncSession],
   );
