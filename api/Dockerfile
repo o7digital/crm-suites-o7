@@ -7,8 +7,7 @@ WORKDIR /app
 # Install dependencies
 COPY package*.json nest-cli.json tsconfig*.json ./
 COPY prisma ./prisma
-ENV PRISMA_CLI_BINARY_TARGETS=debian-openssl-3.0.x
-RUN npm ci && npx prisma generate --binary-target debian-openssl-3.0.x
+RUN npm ci && npx prisma generate
 # Build sources
 COPY src ./src
 RUN npm run build
@@ -20,7 +19,6 @@ WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/prisma ./prisma
-ENV PRISMA_CLI_BINARY_TARGETS=debian-openssl-3.0.x
-RUN npm ci --omit=dev && npx prisma generate --binary-target debian-openssl-3.0.x
+RUN npm ci --omit=dev && npx prisma generate
 ENV PORT=8080
 CMD ["node", "dist/main.js"]
