@@ -1,11 +1,17 @@
 [phases.setup]
 nixPkgs = ["nodejs-20_x", "npm"]
 
+[variables]
+PRISMA_CLI_BINARY_TARGETS = "debian-openssl-3.0.x"
+
 [phases.install]
 cmds = ["cd api && npm ci"]
 
 [phases.build]
-cmds = ["cd api && npm run build"]
+cmds = [
+  "cd api && npx prisma generate --binary-target debian-openssl-3.0.x",
+  "cd api && npm run build",
+]
 
 [start]
-cmd = "cd api && npm run start:prod"
+cmd = "cd api && npx prisma generate --binary-target debian-openssl-3.0.x && npx prisma migrate deploy && npm run start:prod"
