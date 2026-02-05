@@ -1,12 +1,16 @@
 {
+  "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "commands": [
-      "cd api && npm ci",
-      "cd api && npx prisma generate --binary-target debian-openssl-3.0.x",
-      "cd api && npm run build"
-    ]
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "./Dockerfile"
   },
   "deploy": {
-    "command": "cd api && npx prisma migrate deploy && npm run start:prod"
+    "preDeployCommand": [
+      "npx prisma generate --binary-target debian-openssl-3.0.x",
+      "npx prisma migrate deploy"
+    ],
+    "startCommand": "node dist/main.js",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
   }
 }
