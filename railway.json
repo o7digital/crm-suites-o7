@@ -1,0 +1,12 @@
+{
+  "build": {
+    "commands": [
+      "cd api && npm ci",
+      "cd api && npx prisma generate --binary-target debian-openssl-3.0.x",
+      "cd api && npm run build"
+    ]
+  },
+  "deploy": {
+    "command": "cd api && npx prisma migrate deploy && npm run start:prod"
+  }
+}
