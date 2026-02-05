@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
@@ -22,17 +22,17 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchClients = () => {
-    api('/clients')
+  const fetchClients = useCallback(() => {
+    api<Client[]>('/clients')
       .then(setClients)
-      .catch((err) => setError(err.message))
+      .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  };
+  }, [api]);
 
   useEffect(() => {
     if (!token) return;
     fetchClients();
-  }, [token]);
+  }, [token, fetchClients]);
 
   const handleCreate = async (payload: Partial<Client>) => {
     setError(null);
@@ -88,7 +88,7 @@ export default function ClientsPage() {
   );
 }
 
-function ClientForm({ onSubmit }: { onSubmit: (payload: any) => Promise<void> }) {
+function ClientForm({ onSubmit }: { onSubmit: (payload: Partial<Client>) => Promise<void> }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [company, setCompany] = useState('');

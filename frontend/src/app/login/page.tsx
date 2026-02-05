@@ -24,8 +24,9 @@ export default function LoginPage() {
     try {
       await login(email, password);
       router.push('/');
-    } catch (err: any) {
-      setError(err.message || 'Unable to login');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unable to login';
+      setError(message);
     } finally {
       setLoading(false);
     }

@@ -9,7 +9,15 @@ import Link from 'next/link';
 type DashboardPayload = {
   clients: number;
   tasks: Record<string, number>;
-  invoices: { total: number; amount: number; recent: any[] };
+  invoices: { total: number; amount: number; recent: InvoiceSummary[] };
+};
+
+type InvoiceSummary = {
+  id: string;
+  amount: number;
+  currency: string;
+  createdAt: string;
+  status: string;
 };
 
 export default function DashboardPage() {

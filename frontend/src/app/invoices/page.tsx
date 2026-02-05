@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
@@ -12,7 +12,7 @@ type Invoice = {
   status: string;
   createdAt: string;
   client?: { id: string; name: string };
-  extractedRaw?: any;
+  extractedRaw?: { notes?: string };
 };
 
 type Client = { id: string; name: string };
@@ -25,20 +25,20 @@ export default function InvoicesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = () => {
-    Promise.all([api('/clients'), api('/invoices')])
+  const load = useCallback(() => {
+    Promise.all([api<Client[]>('/clients'), api<Invoice[]>('/invoices')])
       .then(([clientsData, invoicesData]) => {
         setClients(clientsData);
         setInvoices(invoicesData);
       })
-      .catch((err) => setError(err.message))
+      .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  };
+  }, [api]);
 
   useEffect(() => {
     if (!token) return;
     load();
-  }, [token]);
+  }, [token, load]);
 
   const handleUpload = async (form: FormData) => {
     await api('/invoices/upload', { method: 'POST', body: form });

@@ -22,8 +22,9 @@ export default function RegisterPage() {
     try {
       await register({ tenantName, name, email, password });
       router.push('/');
-    } catch (err: any) {
-      setError(err.message || 'Unable to register');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unable to register';
+      setError(message);
     } finally {
       setLoading(false);
     }

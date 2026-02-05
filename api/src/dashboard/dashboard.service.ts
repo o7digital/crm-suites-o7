@@ -28,10 +28,10 @@ export class DashboardService {
       }),
     ]);
 
-    const taskByStatus = taskCounts.reduce<Record<string, number>>((acc, item) => {
-      acc[item.status] = item._count;
-      return acc;
-    }, {});
+    const taskByStatus: Record<string, number> = {};
+    for (const { status, _count } of taskCounts) {
+      taskByStatus[status] = _count;
+    }
 
     return {
       clients: clientCount,

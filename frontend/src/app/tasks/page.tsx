@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
@@ -14,6 +14,7 @@ type Task = {
 };
 
 type Client = { id: string; name: string };
+type TaskInput = { title: string; clientId: string; dueDate?: string };
 
 export default function TasksPage() {
   const { token } = useAuth();
@@ -22,20 +23,20 @@ export default function TasksPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadData = () => {
-    Promise.all([api('/tasks'), api('/clients')]).then(([tasksData, clientsData]) => {
+  const loadData = useCallback(() => {
+    Promise.all([api<Task[]>('/tasks'), api<Client[]>('/clients')]).then(([tasksData, clientsData]) => {
       setTasks(tasksData);
       setClients(clientsData);
       setLoading(false);
     });
-  };
+  }, [api]);
 
   useEffect(() => {
     if (!token) return;
     loadData();
-  }, [token]);
+  }, [token, loadData]);
 
-  const handleCreate = async (payload: any) => {
+  const handleCreate = async (payload: TaskInput) => {
     await api('/tasks', { method: 'POST', body: JSON.stringify(payload) });
     loadData();
   };
@@ -100,7 +101,7 @@ export default function TasksPage() {
   );
 }
 
-function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload: any) => Promise<void> }) {
+function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload: TaskInput) => Promise<void> }) {
   const [title, setTitle] = useState('');
   const [clientId, setClientId] = useState('');
   const [dueDate, setDueDate] = useState('');

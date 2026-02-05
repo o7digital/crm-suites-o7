@@ -1,14 +1,19 @@
 import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { TaskStatus } from '@prisma/client';
+
+export enum TaskStatusEnum {
+  PENDING = 'PENDING',
+  IN_PROGRESS = 'IN_PROGRESS',
+  DONE = 'DONE',
+}
 
 export class CreateTaskDto {
   @IsString()
   @IsNotEmpty()
   title: string;
 
-  @IsEnum(TaskStatus)
+  @IsEnum(TaskStatusEnum)
   @IsOptional()
-  status?: TaskStatus;
+  status?: TaskStatusEnum;
 
   @IsDateString()
   @IsOptional()

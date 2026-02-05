@@ -39,7 +39,7 @@ export class InvoicesService {
         status: 'READY',
         issuedDate: dto.issuedDate ? new Date(dto.issuedDate) : extraction.issuedDate,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : extraction.dueDate,
-        extractedRaw: extraction as Prisma.InputJsonValue,
+        extractedRaw: extraction as any,
       },
     });
 

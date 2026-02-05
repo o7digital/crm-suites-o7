@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../lib/supabaseClient';
 
@@ -25,101 +25,132 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
+function generateTenantId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback that remains deterministic per call without running during render
+  return `tenant-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const supabase = safeSupabase();
-    supabase?.auth.getSession().then(({ data }) => {
-      const session = data.session;
-      if (session) {
-        syncSession(session);
-      }
-      setLoading(false);
-    });
+  const safeSupabase = useCallback(() => {
+    try {
+      return getSupabaseClient();
+    } catch {
+      return null;
+    }
   }, []);
 
-  const syncSession = (session: Session) => {
-    const metadata = (session.user.user_metadata as any) || {};
-    const tenantId = metadata.tenant_id || metadata.tenantId || session.user.id;
-    const tenantName = metadata.tenant_name || metadata.tenantName;
+  const mustSupabase = useCallback(() => {
+    const client = safeSupabase();
+    if (!client) throw new Error('Supabase configuration is missing');
+    return client;
+  }, [safeSupabase]);
+
+  const syncSession = useCallback((session: Session) => {
+    const metadata = (session.user.user_metadata ?? {}) as Record<string, unknown>;
+    const tenantId =
+      (metadata.tenant_id as string | undefined) ||
+      (metadata.tenantId as string | undefined) ||
+      session.user.id;
+    const tenantName =
+      (metadata.tenant_name as string | undefined) || (metadata.tenantName as string | undefined);
+
     const mappedUser: User = {
       id: session.user.id,
       email: session.user.email || '',
-      name: metadata.name || metadata.full_name || session.user.email || 'User',
+      name: (metadata.name as string) || (metadata.full_name as string) || session.user.email || 'User',
       tenantId,
       tenantName,
     };
+
     setToken(session.access_token);
     setUser(mappedUser);
     localStorage.setItem('token', session.access_token);
     localStorage.setItem('user', JSON.stringify(mappedUser));
-  };
+  }, []);
 
-  const bootstrapTenant = async (accessToken: string) => {
+  const bootstrapTenant = useCallback(async (accessToken: string) => {
     await fetch(`${API_URL}/bootstrap`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
     }).catch(() => undefined);
-  };
+  }, []);
 
-  const login = async (email: string, password: string) => {
-    const supabase = mustSupabase();
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error || !data.session) {
-      throw new Error(error?.message || 'Unable to login');
-    }
-    await bootstrapTenant(data.session.access_token);
-    syncSession(data.session);
-  };
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const supabase = safeSupabase();
+      if (!supabase) {
+        if (active) setLoading(false);
+        return;
+      }
+      const { data } = await supabase.auth.getSession();
+      if (!active) return;
+      const session = data.session;
+      if (session) {
+        syncSession(session);
+      }
+      setLoading(false);
+    })();
 
-  const register = async (payload: { tenantName: string; name: string; email: string; password: string }) => {
-    const tenantId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`;
-    const supabase = mustSupabase();
-    const { data, error } = await supabase.auth.signUp({
-      email: payload.email,
-      password: payload.password,
-      options: {
-        data: {
-          name: payload.name,
-          tenant_id: tenantId,
-          tenant_name: payload.tenantName,
+    return () => {
+      active = false;
+    };
+  }, [safeSupabase, syncSession]);
+
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const supabase = mustSupabase();
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error || !data.session) {
+        throw new Error(error?.message || 'Unable to login');
+      }
+      await bootstrapTenant(data.session.access_token);
+      syncSession(data.session);
+    },
+    [bootstrapTenant, mustSupabase, syncSession],
+  );
+
+  const register = useCallback(
+    async (payload: { tenantName: string; name: string; email: string; password: string }) => {
+      const tenantId = generateTenantId();
+      const supabase = mustSupabase();
+      const { data, error } = await supabase.auth.signUp({
+        email: payload.email,
+        password: payload.password,
+        options: {
+          data: {
+            name: payload.name,
+            tenant_id: tenantId,
+            tenant_name: payload.tenantName,
+          },
         },
-      },
-    });
-    if (error || !data.session) {
-      throw new Error(error?.message || 'Unable to register');
-    }
-    await bootstrapTenant(data.session.access_token);
-    syncSession(data.session);
-  };
+      });
+      if (error || !data.session) {
+        throw new Error(error?.message || 'Unable to register');
+      }
+      await bootstrapTenant(data.session.access_token);
+      syncSession(data.session);
+    },
+    [bootstrapTenant, mustSupabase, syncSession],
+  );
 
-  const logout = () => {
+  const logout = useCallback(() => {
     const supabase = safeSupabase();
     supabase?.auth.signOut();
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-  };
-
-  function safeSupabase() {
-    try {
-      return getSupabaseClient();
-    } catch {
-      return null;
-    }
-  }
-
-  function mustSupabase() {
-    const client = safeSupabase();
-    if (!client) throw new Error('Supabase configuration is missing');
-    return client;
-  }
+  }, [safeSupabase]);
 
   const value = useMemo(
     () => ({
@@ -130,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       register,
       logout,
     }),
-    [user, token, loading],
+    [loading, login, logout, register, token, user],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -145,7 +176,7 @@ export function useAuth() {
 export function useApi(token: string | null) {
   return useMemo(() => {
     const authHeader: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-    return async (path: string, init?: RequestInit) => {
+    return async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
       const headers: Record<string, string> = { ...authHeader };
       if (!(init?.body instanceof FormData)) {
         headers['Content-Type'] = 'application/json';
@@ -162,9 +193,9 @@ export function useApi(token: string | null) {
       }
       const ct = res.headers.get('content-type');
       if (ct && ct.includes('text/csv')) {
-        return res.text();
+        return (await res.text()) as T;
       }
-      return res.json();
+      return (await res.json()) as T;
     };
   }, [token]);
 }
