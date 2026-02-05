@@ -18,7 +18,7 @@ type AuthContextValue = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (payload: { tenantName: string; name: string; email: string; password: string }) => Promise<'signed-in' | 'confirm'>;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -149,14 +149,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [bootstrapTenant, mustSupabase, syncSession],
   );
 
-  const logout = useCallback(() => {
-    const supabase = safeSupabase();
-    supabase?.auth.signOut();
-    setToken(null);
-    setUser(null);
+  const clearAuthStorage = useCallback(() => {
+    if (typeof window === 'undefined') return;
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-  }, [safeSupabase]);
+    try {
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      if (!supabaseUrl) return;
+      const projectRef = new URL(supabaseUrl).host.split('.')[0];
+      localStorage.removeItem(`sb-${projectRef}-auth-token`);
+    } catch {
+      // ignore malformed URL / storage issues
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    const supabase = safeSupabase();
+    try {
+      await supabase?.auth.signOut();
+    } catch {
+      // ignore logout errors and still clear local session
+    }
+    setToken(null);
+    setUser(null);
+    clearAuthStorage();
+  }, [clearAuthStorage, safeSupabase]);
 
   const value = useMemo(
     () => ({
