@@ -29,7 +29,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!token) return;
-    api('/dashboard')
+    api<DashboardPayload>('/dashboard')
       .then(setData)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
