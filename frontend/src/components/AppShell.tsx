@@ -10,6 +10,8 @@ const nav = [
   { href: '/clients', label: 'Clients' },
   { href: '/tasks', label: 'Tasks' },
   { href: '/invoices', label: 'Invoices' },
+  { href: '/crm', label: 'CRM' },
+  { href: '/forecast', label: 'Forecast' },
   { href: '/export', label: 'Export' },
 ];
 

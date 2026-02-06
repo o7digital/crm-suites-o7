@@ -19,6 +19,10 @@ model Tenant {
   clients Client[]
   tasks   Task[]
   invoices Invoice[]
+  pipelines Pipeline[]
+  stages Stage[]
+  deals Deal[]
+  dealStageHistory DealStageHistory[]
 }
 
 model User {
@@ -81,6 +85,69 @@ model Invoice {
   client Client? @relation(fields: [clientId], references: [id])
 }
 
+model Pipeline {
+  id        String   @id @default(uuid())
+  name      String
+  isDefault Boolean  @default(false)
+  tenantId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  stages Stage[]
+  deals  Deal[]
+}
+
+model Stage {
+  id         String      @id @default(uuid())
+  name       String
+  position   Int
+  probability Float      @default(0)
+  status     StageStatus @default(OPEN)
+  tenantId   String
+  pipelineId String
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id])
+  deals    Deal[]
+  historyFrom DealStageHistory[] @relation("FromStage")
+  historyTo   DealStageHistory[] @relation("ToStage")
+}
+
+model Deal {
+  id               String   @id @default(uuid())
+  title            String
+  value            Decimal  @db.Decimal(12, 2)
+  currency         String   @default("USD")
+  expectedCloseDate DateTime?
+  tenantId         String
+  pipelineId       String
+  stageId          String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id])
+  stage    Stage    @relation(fields: [stageId], references: [id])
+  history  DealStageHistory[]
+}
+
+model DealStageHistory {
+  id          String   @id @default(uuid())
+  tenantId    String
+  dealId      String
+  fromStageId String?
+  toStageId   String
+  movedAt     DateTime @default(now())
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  deal     Deal   @relation(fields: [dealId], references: [id])
+  fromStage Stage? @relation("FromStage", fields: [fromStageId], references: [id])
+  toStage   Stage  @relation("ToStage", fields: [toStageId], references: [id])
+}
+
 enum TaskStatus {
   PENDING
   IN_PROGRESS
@@ -91,4 +158,10 @@ enum InvoiceStatus {
   NEW
   PROCESSING
   READY
+}
+
+enum StageStatus {
+  OPEN
+  WON
+  LOST
 }

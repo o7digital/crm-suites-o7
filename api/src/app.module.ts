@@ -10,6 +10,10 @@ import { InvoicesModule } from './invoices/invoices.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ExportModule } from './export/export.module';
 import { BootstrapModule } from './bootstrap/bootstrap.module';
+import { PipelinesModule } from './pipelines/pipelines.module';
+import { StagesModule } from './stages/stages.module';
+import { DealsModule } from './deals/deals.module';
+import { ForecastModule } from './forecast/forecast.module';
 
 @Module({
   imports: [
@@ -22,6 +26,10 @@ import { BootstrapModule } from './bootstrap/bootstrap.module';
     DashboardModule,
     ExportModule,
     BootstrapModule,
+    PipelinesModule,
+    StagesModule,
+    DealsModule,
+    ForecastModule,
   ],
   controllers: [AppController],
   providers: [AppService],
