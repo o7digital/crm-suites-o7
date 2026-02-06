@@ -42,7 +42,38 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
               configService.get<string>('SUPABASE_JWT_SECRET') ||
               configService.get<string>('JWT_SECRET') ||
               'dev-secret';
-            return done(null, secret);
+
+            const candidates: Array<string | Buffer> = [secret];
+            // If the secret looks base64-ish, also try decoded bytes.
+            if (secret.endsWith('=') || /^[A-Za-z0-9+/]+={0,2}$/.test(secret)) {
+              try {
+                candidates.push(Buffer.from(secret, 'base64'));
+              } catch {
+                // ignore decode errors
+              }
+            }
+
+            let lastErr: Error | null = null;
+            for (const candidate of candidates) {
+              try {
+                jwt.verify(rawJwtToken, candidate, { algorithms: [alg] });
+                if (process.env.JWT_DEBUG === 'true') {
+                  // eslint-disable-next-line no-console
+                  console.log('[auth] jwt hs verify ok', {
+                    using: candidate instanceof Buffer ? 'base64-decoded' : 'raw',
+                  });
+                }
+                return done(null, candidate);
+              } catch (err) {
+                lastErr = err as Error;
+              }
+            }
+
+            if (process.env.JWT_DEBUG === 'true' && lastErr) {
+              // eslint-disable-next-line no-console
+              console.log('[auth] jwt hs verify failed', { message: lastErr.message });
+            }
+            return done(lastErr ?? new Error('JWT HS verification failed'), undefined);
           }
 
           const payload = decoded.payload || {};
