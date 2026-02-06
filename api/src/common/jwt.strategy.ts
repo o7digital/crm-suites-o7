@@ -30,6 +30,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           }
 
           const alg = decoded.header.alg as string | undefined;
+          const kid = decoded.header.kid as string | undefined;
+          const iss = (decoded.payload as Record<string, unknown> | undefined)?.iss as string | undefined;
+
+          if (process.env.JWT_DEBUG === 'true') {
+            // eslint-disable-next-line no-console
+            console.log('[auth] jwt header', { alg, kid, iss });
+          }
           if (alg && alg.startsWith('HS')) {
             const secret =
               configService.get<string>('SUPABASE_JWT_SECRET') ||
@@ -44,7 +51,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             return done(new Error('JWT issuer missing'), undefined);
           }
 
-          const kid = decoded.header.kid as string | undefined;
           if (!kid) {
             return done(new Error('JWT kid missing'), undefined);
           }
