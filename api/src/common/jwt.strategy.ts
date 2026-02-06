@@ -38,6 +38,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             console.log('[auth] jwt header', { alg, kid, iss });
           }
           if (alg && alg.startsWith('HS')) {
+            const allowedHsAlgs = ['HS256', 'HS384', 'HS512'] as const;
+            if (!allowedHsAlgs.includes(alg as (typeof allowedHsAlgs)[number])) {
+              return done(new Error(`Unsupported HS alg: ${alg}`), undefined);
+            }
+            const algorithm = alg as jwt.Algorithm;
             const secret =
               configService.get<string>('SUPABASE_JWT_SECRET') ||
               configService.get<string>('JWT_SECRET') ||
@@ -56,7 +61,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             let lastErr: Error | null = null;
             for (const candidate of candidates) {
               try {
-                jwt.verify(rawJwtToken, candidate, { algorithms: [alg] });
+                jwt.verify(rawJwtToken, candidate, { algorithms: [algorithm] });
                 if (process.env.JWT_DEBUG === 'true') {
                   // eslint-disable-next-line no-console
                   console.log('[auth] jwt hs verify ok', {
