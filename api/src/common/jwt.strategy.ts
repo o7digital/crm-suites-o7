@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import jwt from 'jsonwebtoken';
+import jwksRsa from 'jwks-rsa';
 
 export interface JwtPayload {
   sub: string;
@@ -18,10 +20,44 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey:
-        configService.get<string>('SUPABASE_JWT_SECRET') ||
-        configService.get<string>('JWT_SECRET') ||
-        'dev-secret',
+      secretOrKeyProvider: async (_request, rawJwtToken, done) => {
+        try {
+          const decoded = jwt.decode(rawJwtToken, { complete: true }) as
+            | { header?: Record<string, unknown>; payload?: Record<string, unknown> }
+            | null;
+          if (!decoded || !decoded.header) {
+            return done(new Error('Invalid JWT'), undefined);
+          }
+
+          const alg = decoded.header.alg as string | undefined;
+          if (alg && alg.startsWith('HS')) {
+            const secret =
+              configService.get<string>('SUPABASE_JWT_SECRET') ||
+              configService.get<string>('JWT_SECRET') ||
+              'dev-secret';
+            return done(null, secret);
+          }
+
+          const payload = decoded.payload || {};
+          const issuer = payload.iss as string | undefined;
+          if (!issuer) {
+            return done(new Error('JWT issuer missing'), undefined);
+          }
+
+          const kid = decoded.header.kid as string | undefined;
+          if (!kid) {
+            return done(new Error('JWT kid missing'), undefined);
+          }
+
+          const jwksUri = `${issuer.replace(/\/$/, '')}/.well-known/jwks.json`;
+          const client = getJwksClient(jwksUri);
+          const key = await client.getSigningKey(kid);
+          const signingKey = key.getPublicKey();
+          return done(null, signingKey);
+        } catch (err) {
+          return done(err as Error, undefined);
+        }
+      },
     });
   }
 
@@ -35,4 +71,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const tenantName = payload.user_metadata?.tenant_name;
     return { userId: payload.sub, tenantId, email: payload.email, name, tenantName };
   }
+}
+
+const jwksClients = new Map<string, jwksRsa.JwksClient>();
+
+function getJwksClient(jwksUri: string) {
+  const existing = jwksClients.get(jwksUri);
+  if (existing) return existing;
+  const client = jwksRsa({
+    jwksUri,
+    cache: true,
+    cacheMaxEntries: 5,
+    cacheMaxAge: 10 * 60 * 1000,
+    rateLimit: true,
+    jwksRequestsPerMinute: 10,
+  });
+  jwksClients.set(jwksUri, client);
+  return client;
 }
