@@ -82,7 +82,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   href={item.href}
                   className={`rounded-lg px-3 py-2 transition ${
                     active
-                      ? 'bg-gradient-to-r from-orange-500/20 to-amber-500/10 text-orange-200 ring-1 ring-orange-400/25 shadow-[0_12px_28px_rgba(249,115,22,0.12)]'
+                      ? 'bg-gradient-to-r from-orange-500/45 to-amber-500/25 text-orange-300 ring-1 ring-orange-400/45 shadow-[0_14px_34px_rgba(249,115,22,0.26)]'
                       : 'text-slate-300 hover:bg-white/5'
                   }`}
                 >
@@ -158,7 +158,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   href={item.href}
                   className={`rounded-lg px-3 py-2 transition ${
                     active
-                      ? 'bg-gradient-to-r from-orange-500/20 to-amber-500/10 text-orange-200 ring-1 ring-orange-400/25'
+                      ? 'bg-gradient-to-r from-orange-500/45 to-amber-500/25 text-orange-300 ring-1 ring-orange-400/45'
                       : 'text-slate-300 hover:bg-white/5'
                   }`}
                 >

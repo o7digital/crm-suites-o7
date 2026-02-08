@@ -142,17 +142,49 @@ export default function CrmPage() {
 
   useEffect(() => {
     if (!token || !pipelineId) return;
+    let active = true;
+    setError(null);
     setLoading(true);
-    Promise.all([
+    Promise.allSettled([
       api<Stage[]>(`/stages?pipelineId=${pipelineId}`),
       api<Deal[]>(`/deals?pipelineId=${pipelineId}`),
     ])
-      .then(([stageData, dealData]) => {
-        setStages(stageData);
-        setDeals(dealData);
+      .then(([stagesResult, dealsResult]) => {
+        if (!active) return;
+
+        if (stagesResult.status === 'fulfilled') {
+          setStages(stagesResult.value);
+        } else {
+          setStages([]);
+        }
+
+        if (dealsResult.status === 'fulfilled') {
+          setDeals(dealsResult.value);
+        } else {
+          setDeals([]);
+        }
+
+        if (stagesResult.status === 'rejected' || dealsResult.status === 'rejected') {
+          const stageMessage =
+            stagesResult.status === 'rejected' && stagesResult.reason instanceof Error
+              ? stagesResult.reason.message
+              : null;
+          const dealMessage =
+            dealsResult.status === 'rejected' && dealsResult.reason instanceof Error
+              ? dealsResult.reason.message
+              : null;
+
+          setError(stageMessage || dealMessage || 'Unable to load pipeline data');
+        }
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [api, pipelineId, token]);
 
   const sortedStages = useMemo(() => {
