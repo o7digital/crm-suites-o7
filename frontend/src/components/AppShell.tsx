@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext';
-import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const nav = [
   { href: '/', label: 'Dashboard' },
@@ -24,6 +24,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement | null>(null);
+
+  const isActiveRoute = useCallback(
+    (href: string) => {
+      if (!pathname) return false;
+      if (href === '/') return pathname === '/';
+      return pathname === href || pathname.startsWith(`${href}/`);
+    },
+    [pathname],
+  );
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
@@ -66,13 +75,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <nav className="hidden items-center gap-3 text-sm font-medium text-slate-200 md:flex">
             {nav.map((item) => {
-              const active = pathname === item.href;
+              const active = isActiveRoute(item.href);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={`rounded-lg px-3 py-2 transition ${
-                    active ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5'
+                    active
+                      ? 'bg-gradient-to-r from-orange-500/20 to-amber-500/10 text-orange-200 ring-1 ring-orange-400/25 shadow-[0_12px_28px_rgba(249,115,22,0.12)]'
+                      : 'text-slate-300 hover:bg-white/5'
                   }`}
                 >
                   {item.label}
@@ -140,13 +151,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mx-auto block max-w-7xl px-4 pb-4 md:hidden">
           <nav className="flex flex-wrap gap-2 text-sm font-medium text-slate-200">
             {nav.map((item) => {
-              const active = pathname === item.href;
+              const active = isActiveRoute(item.href);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={`rounded-lg px-3 py-2 transition ${
-                    active ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5'
+                    active
+                      ? 'bg-gradient-to-r from-orange-500/20 to-amber-500/10 text-orange-200 ring-1 ring-orange-400/25'
+                      : 'text-slate-300 hover:bg-white/5'
                   }`}
                 >
                   {item.label}
