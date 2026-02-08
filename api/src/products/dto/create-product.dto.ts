@@ -13,8 +13,9 @@ function optionalUpperCurrency(value: unknown): string | undefined {
   return trimmed.toUpperCase();
 }
 
-function optionalNumber(value: unknown): number | undefined {
-  if (value === null || value === undefined) return undefined;
+function optionalNumber(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  if (value === undefined) return undefined;
   if (typeof value === 'number') return value;
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -49,4 +50,3 @@ export class CreateProductDto {
   @IsBoolean()
   isActive?: boolean;
 }
-
