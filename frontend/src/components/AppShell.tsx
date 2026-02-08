@@ -31,7 +31,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-white/5 bg-[rgba(12,17,34,0.9)] backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-400 text-slate-900 font-semibold">
               PC
@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
           </div>
         </div>
-        <div className="mx-auto block max-w-6xl px-6 pb-4 md:hidden">
+        <div className="mx-auto block max-w-7xl px-4 pb-4 md:hidden">
           <nav className="flex flex-wrap gap-2 text-sm font-medium text-slate-200">
             {nav.map((item) => {
               const active = pathname === item.href;
