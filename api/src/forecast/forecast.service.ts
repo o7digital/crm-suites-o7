@@ -44,6 +44,8 @@ export class ForecastService {
 
     const deals = await this.prisma.deal.findMany({
       where: { tenantId: user.tenantId, pipelineId: pipeline.id },
+      // Keep this endpoint resilient during migrations (ex: when Deal.clientId doesn't exist yet).
+      select: { value: true, stageId: true },
     });
 
     const stageMap = new Map<string, (typeof stages)[number]>(
