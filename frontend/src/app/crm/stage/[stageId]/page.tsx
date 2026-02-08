@@ -17,6 +17,22 @@ type Stage = {
   pipeline?: { id: string; name: string; isDefault: boolean };
 };
 
+type Product = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  currency: string;
+  price?: string | number | null;
+};
+
+type DealItem = {
+  id: string;
+  productId: string;
+  quantity: number;
+  unitPrice?: string | number | null;
+  product?: Product;
+};
+
 type Deal = {
   id: string;
   title: string;
@@ -26,6 +42,7 @@ type Deal = {
   stageId: string;
   pipelineId: string;
   createdAt: string;
+  items?: DealItem[];
 };
 
 export default function CrmStagePage() {
@@ -122,6 +139,18 @@ export default function CrmStagePage() {
                         {(deal.currency || 'USD').toUpperCase()} {Number(deal.value).toLocaleString()}
                       </p>
                     </div>
+                    {deal.items && deal.items.length > 0 ? (
+                      <p className="mt-1 text-xs text-slate-400">
+                        {(() => {
+                          const names = deal.items
+                            .map((it) => it.product?.name)
+                            .filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+                          const shown = names.slice(0, 3);
+                          const more = names.length - shown.length;
+                          return shown.join(', ') + (more > 0 ? ` +${more}` : '');
+                        })()}
+                      </p>
+                    ) : null}
                     {deal.expectedCloseDate ? (
                       <p className="mt-1 text-xs text-slate-500">
                         Closing: {new Date(deal.expectedCloseDate).toLocaleDateString()}
@@ -138,4 +167,3 @@ export default function CrmStagePage() {
     </Guard>
   );
 }
-

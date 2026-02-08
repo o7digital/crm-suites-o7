@@ -6,6 +6,7 @@ import { Guard } from '../../components/Guard';
 
 const tiles = [
   { href: '/admin/users', title: 'Users', description: 'Manage workspace members and permissions.' },
+  { href: '/admin/parameters', title: 'Parameters', description: 'Customers fields and product catalog.' },
   { href: '/admin/subscriptions', title: 'Subscriptions', description: 'Billing and subscription foundations.' },
   { href: '/admin/mail', title: 'Mail integration', description: 'Connect O7 Workspace (Mailcow) or SMTP.' },
   { href: '/admin/benchmarking', title: 'Benchmarking', description: 'Evaluate mailing tools and workflows.' },
@@ -36,4 +37,3 @@ export default function AdminHomePage() {
     </Guard>
   );
 }
-

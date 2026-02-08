@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
 import { CreateDealDto } from './dto/create-deal.dto';
@@ -30,16 +31,56 @@ export class DealsService {
       stageId = stage.id;
     }
 
-    return this.prisma.deal.create({
-      data: {
-        title: dto.title,
-        value: dto.value,
-        currency: (dto.currency ?? 'USD').toUpperCase(),
-        expectedCloseDate: dto.expectedCloseDate ? new Date(dto.expectedCloseDate) : undefined,
-        tenantId: user.tenantId,
-        pipelineId: dto.pipelineId,
-        stageId,
-      },
+    const uniqueProductIds = Array.from(new Set((dto.productIds ?? []).map((x) => x.trim()).filter(Boolean)));
+    const productsById = new Map<string, { id: string; price: Prisma.Decimal | null }>();
+
+    if (uniqueProductIds.length > 0) {
+      const products = await this.prisma.product.findMany({
+        where: { id: { in: uniqueProductIds }, tenantId: user.tenantId, isActive: true },
+        select: { id: true, price: true },
+      });
+
+      for (const p of products) productsById.set(p.id, p);
+
+      if (products.length !== uniqueProductIds.length) {
+        throw new BadRequestException('Some products were not found (or are inactive).');
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const deal = await tx.deal.create({
+        data: {
+          title: dto.title,
+          value: dto.value,
+          currency: (dto.currency ?? 'USD').toUpperCase(),
+          expectedCloseDate: dto.expectedCloseDate ? new Date(dto.expectedCloseDate) : undefined,
+          tenantId: user.tenantId,
+          pipelineId: dto.pipelineId,
+          stageId,
+        },
+      });
+
+      if (uniqueProductIds.length > 0) {
+        await tx.dealItem.createMany({
+          data: uniqueProductIds.map((productId) => ({
+            tenantId: user.tenantId,
+            dealId: deal.id,
+            productId,
+            quantity: 1,
+            unitPrice: productsById.get(productId)?.price ?? null,
+          })),
+        });
+      }
+
+      const created = await tx.deal.findFirst({
+        where: { id: deal.id, tenantId: user.tenantId },
+        include: {
+          stage: true,
+          items: { include: { product: true } },
+        },
+      });
+      if (!created) throw new NotFoundException('Deal not found');
+      return created;
     });
   }
 
@@ -49,7 +90,10 @@ export class DealsService {
         tenantId: user.tenantId,
         ...(pipelineId ? { pipelineId } : {}),
       },
-      include: { stage: true },
+      include: {
+        stage: true,
+        items: { include: { product: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -57,7 +101,10 @@ export class DealsService {
   async findOne(id: string, user: RequestUser) {
     const deal = await this.prisma.deal.findFirst({
       where: { id, tenantId: user.tenantId },
-      include: { stage: true },
+      include: {
+        stage: true,
+        items: { include: { product: true } },
+      },
     });
     if (!deal) throw new NotFoundException('Deal not found');
     return deal;

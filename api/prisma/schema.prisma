@@ -23,6 +23,8 @@ model Tenant {
   stages Stage[]
   deals Deal[]
   dealStageHistory DealStageHistory[]
+  products Product[]
+  dealItems DealItem[]
 }
 
 enum UserRole {
@@ -144,6 +146,44 @@ model Deal {
   pipeline Pipeline @relation(fields: [pipelineId], references: [id])
   stage    Stage    @relation(fields: [stageId], references: [id])
   history  DealStageHistory[]
+  items    DealItem[]
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Decimal? @db.Decimal(12, 2)
+  currency    String   @default("USD")
+  isActive    Boolean  @default(true)
+  tenantId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  dealItems DealItem[]
+
+  @@index([tenantId])
+}
+
+model DealItem {
+  id        String   @id @default(uuid())
+  tenantId  String
+  dealId    String
+  productId String
+  quantity  Int      @default(1)
+  unitPrice Decimal? @db.Decimal(12, 2)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  deal    Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([dealId, productId])
+  @@index([tenantId])
+  @@index([dealId])
+  @@index([productId])
 }
 
 model DealStageHistory {

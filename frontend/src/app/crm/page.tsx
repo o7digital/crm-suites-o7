@@ -21,6 +21,23 @@ type Stage = {
   pipelineId: string;
 };
 
+type Product = {
+  id: string;
+  name: string;
+  description?: string | null;
+  price?: string | number | null;
+  currency: string;
+  isActive: boolean;
+};
+
+type DealItem = {
+  id: string;
+  productId: string;
+  quantity: number;
+  unitPrice?: string | number | null;
+  product?: Product;
+};
+
 type Deal = {
   id: string;
   title: string;
@@ -29,6 +46,7 @@ type Deal = {
   expectedCloseDate?: string | null;
   stageId: string;
   pipelineId: string;
+  items?: DealItem[];
 };
 
 const DEAL_CURRENCIES = ['USD', 'EUR', 'MXN', 'CAD'] as const;
@@ -42,6 +60,7 @@ export default function CrmPage() {
   const [pipelineId, setPipelineId] = useState<string>('');
   const [stages, setStages] = useState<Stage[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -50,12 +69,23 @@ export default function CrmPage() {
     value: string;
     currency: DealCurrency;
     expectedCloseDate: string;
+    productIds: string[];
   }>({
     title: '',
     value: '',
     currency: 'USD',
     expectedCloseDate: '',
+    productIds: [],
   });
+
+  useEffect(() => {
+    if (!token) return;
+    api<Product[]>('/products')
+      .then((data) => setProducts(data))
+      .catch(() => {
+        // Products are optional for CRM; ignore failures here.
+      });
+  }, [api, token]);
 
   useEffect(() => {
     if (!token) return;
@@ -113,6 +143,7 @@ export default function CrmPage() {
       expectedCloseDate: form.expectedCloseDate || undefined,
       pipelineId,
       stageId: defaultStageId,
+      productIds: form.productIds,
     };
     try {
       const created = await api<Deal>('/deals', {
@@ -121,7 +152,7 @@ export default function CrmPage() {
       });
       setDeals((prev) => [created, ...prev]);
       setShowModal(false);
-      setForm({ title: '', value: '', currency: 'USD', expectedCloseDate: '' });
+      setForm({ title: '', value: '', currency: 'USD', expectedCloseDate: '', productIds: [] });
     } catch (err: any) {
       setError(err.message || 'Unable to create deal');
     }
@@ -241,6 +272,43 @@ export default function CrmPage() {
                     ))}
                   </select>
                 </label>
+
+                <div>
+                  <p className="text-sm text-slate-300">Products</p>
+                  <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-white/10 bg-white/5 p-3">
+                    {products.filter((p) => p.isActive).length === 0 ? (
+                      <p className="text-xs text-slate-500">
+                        No products configured yet. Go to Admin → Parameters → Products.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {products
+                          .filter((p) => p.isActive)
+                          .map((p) => {
+                            const checked = form.productIds.includes(p.id);
+                            return (
+                              <label key={p.id} className="flex items-center gap-2 text-sm text-slate-200">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 accent-cyan-400"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    setForm((prev) => {
+                                      const next = e.target.checked
+                                        ? [...prev.productIds, p.id]
+                                        : prev.productIds.filter((id) => id !== p.id);
+                                      return { ...prev, productIds: next };
+                                    });
+                                  }}
+                                />
+                                <span className="truncate">{p.name}</span>
+                              </label>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="mt-6 flex items-center justify-end gap-2">
                 <button className="btn-secondary" onClick={() => setShowModal(false)}>
@@ -322,6 +390,18 @@ function StageColumn({
             className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm"
           >
             <p className="font-semibold">{deal.title}</p>
+            {deal.items && deal.items.length > 0 ? (
+              <p className="mt-1 text-[11px] text-slate-400">
+                {(() => {
+                  const names = deal.items
+                    .map((it) => it.product?.name)
+                    .filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+                  const shown = names.slice(0, 2);
+                  const more = names.length - shown.length;
+                  return shown.join(', ') + (more > 0 ? ` +${more}` : '');
+                })()}
+              </p>
+            ) : null}
             {deal.expectedCloseDate ? (
               <p className="mt-1 text-[11px] text-slate-500">
                 Closing: {new Date(deal.expectedCloseDate).toLocaleDateString()}

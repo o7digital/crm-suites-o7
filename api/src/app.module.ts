@@ -15,6 +15,7 @@ import { StagesModule } from './stages/stages.module';
 import { DealsModule } from './deals/deals.module';
 import { ForecastModule } from './forecast/forecast.module';
 import { AdminModule } from './admin/admin.module';
+import { ProductsModule } from './products/products.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { AdminModule } from './admin/admin.module';
     DealsModule,
     ForecastModule,
     AdminModule,
+    ProductsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
