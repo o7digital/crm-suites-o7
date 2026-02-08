@@ -13,12 +13,6 @@ const USD = new Intl.NumberFormat('en-US', {
 });
 const INT = new Intl.NumberFormat('en-US');
 
-function formatAmount(amount: number, currency: string) {
-  const cur = (currency || '').toUpperCase();
-  if (cur === 'USD') return USD.format(amount);
-  return INT.format(amount);
-}
-
 type DashboardPayload = {
   clients: number;
   tasks: Record<string, number>;
@@ -28,6 +22,13 @@ type DashboardPayload = {
     openUsd: number;
     amountUsd: number;
     openByCurrency: { currency: string; count: number; amount: number }[];
+    openValueUsd: number;
+    fx?: {
+      date: string | null;
+      provider: string | null;
+      missingCurrencies?: string[];
+      error?: string | null;
+    };
   };
   invoices: { total: number; amount: number; recent: InvoiceSummary[] };
 };
@@ -101,20 +102,6 @@ export default function DashboardPage() {
 
         {data && (
           <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
-            {(() => {
-              const openByCurrency = (data.leads.openByCurrency ?? [])
-                .slice()
-                .sort((a, b) => a.currency.localeCompare(b.currency))
-                .map((row) => {
-                  const cur = (row.currency || 'USD').toUpperCase();
-                  const amount = Number(row.amount ?? 0);
-                  return `${cur} ${formatAmount(amount, cur)}`;
-                });
-              const openByCurrencyLabel = openByCurrency.length ? openByCurrency.join(' | ') : '—';
-              const currencyCount = openByCurrency.length;
-
-              return (
-                <>
             <MetricCard title="Clients" value={INT.format(data.clients)} hint="Total accounts in your tenant" />
             <MetricCard
               title="Open Tasks"
@@ -132,14 +119,18 @@ export default function DashboardPage() {
               hint="All deals (open + won + lost)"
             />
             <MetricCard
-              title="Open Pipeline Value (by currency)"
-              value={openByCurrencyLabel}
-              valueClassName="mt-2 text-sm font-semibold leading-snug"
-              hint={`${INT.format(data.leads.open ?? 0)} open deals · ${INT.format(currencyCount)} currencies · USD-only: ${USD.format(data.leads.amountUsd ?? 0)} (${INT.format(data.leads.openUsd ?? 0)} deals)`}
+              title="Open Pipeline Value (USD)"
+              value={USD.format(data.leads.openValueUsd ?? data.leads.amountUsd ?? 0)}
+              hint={
+                data.leads.fx?.error
+                  ? `FX unavailable; showing USD-only: ${USD.format(data.leads.amountUsd ?? 0)}`
+                  : `${data.leads.fx?.date ? `FX ${data.leads.fx.date}` : 'FX —'}${
+                      data.leads.fx?.missingCurrencies?.length
+                        ? ` · Missing: ${data.leads.fx.missingCurrencies.join(', ')}`
+                        : ''
+                    } · USD-only: ${USD.format(data.leads.amountUsd ?? 0)}`
+              }
             />
-                </>
-              );
-            })()}
           </div>
         )}
 

@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
+import { FxService } from '../fx/fx.service';
 
 @Injectable()
 export class ForecastService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private fx: FxService,
+  ) {}
 
   async getForecast(pipelineId: string | undefined, user: RequestUser) {
     let pipeline = null as null | { id: string; name: string; isDefault: boolean };
@@ -45,7 +49,7 @@ export class ForecastService {
     const deals = await this.prisma.deal.findMany({
       where: { tenantId: user.tenantId, pipelineId: pipeline.id },
       // Keep this endpoint resilient during migrations (ex: when Deal.clientId doesn't exist yet).
-      select: { value: true, stageId: true },
+      select: { value: true, currency: true, stageId: true },
     });
 
     const stageMap = new Map<string, (typeof stages)[number]>(
@@ -77,10 +81,20 @@ export class ForecastService {
       byStage.map((row) => [row.stageId, row]),
     );
 
-    for (const deal of deals) {
-      const amount = Number(deal.value);
-      total += amount;
+    let snapshot: Awaited<ReturnType<FxService['getUsdRates']>> | null = null;
+    try {
+      snapshot = await this.fx.getUsdRates();
+    } catch {
+      snapshot = null;
+    }
 
+    for (const deal of deals) {
+      const raw = Number(deal.value);
+      if (!Number.isFinite(raw)) continue;
+      const cur = (deal.currency || 'USD').toUpperCase();
+      const amount = snapshot ? this.fx.toUsd(raw, cur, snapshot) ?? (cur === 'USD' ? raw : 0) : raw;
+
+      total += amount;
       const stage = stageMap.get(deal.stageId);
       const probability = stage?.probability ?? (stage?.status === 'WON' ? 1 : stage?.status === 'LOST' ? 0 : 0);
       weightedTotal += amount * probability;

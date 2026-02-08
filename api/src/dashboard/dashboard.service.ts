@@ -2,10 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
 import { subDays } from 'date-fns';
+import { FxService } from '../fx/fx.service';
 
 @Injectable()
 export class DashboardService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private fx: FxService,
+  ) {}
 
   async getSnapshot(user: RequestUser) {
     const tenantId = user.tenantId;
@@ -56,6 +60,33 @@ export class DashboardService {
     const openCount = openByCurrency.reduce((sum, row) => sum + row.count, 0);
     const usdRow = openByCurrency.find((row) => row.currency === 'USD');
 
+    let openValueUsd = usdRow?.amount ?? 0;
+    let fxDate: string | null = null;
+    let fxProvider: string | null = null;
+    let fxMissingCurrencies: string[] = [];
+    let fxError: string | null = null;
+
+    try {
+      const snapshot = await this.fx.getUsdRates();
+      fxDate = snapshot.date;
+      fxProvider = snapshot.provider;
+
+      const missing = new Set<string>();
+      openValueUsd = openByCurrency.reduce((sum, row) => {
+        const converted = this.fx.toUsd(row.amount, row.currency, snapshot);
+        if (converted === null) {
+          missing.add((row.currency || '').toUpperCase() || 'UNKNOWN');
+          return sum;
+        }
+        return sum + converted;
+      }, 0);
+      fxMissingCurrencies = Array.from(missing).filter((cur) => cur && cur !== 'USD').sort();
+    } catch (err) {
+      fxError = err instanceof Error ? err.message : 'Unable to load FX rates';
+      // Fall back to USD-only totals so the dashboard remains usable.
+      openValueUsd = usdRow?.amount ?? 0;
+    }
+
     return {
       clients: clientCount,
       tasks: taskByStatus,
@@ -65,6 +96,13 @@ export class DashboardService {
         openByCurrency,
         openUsd: usdRow?.count ?? 0,
         amountUsd: usdRow?.amount ?? 0,
+        openValueUsd,
+        fx: {
+          date: fxDate,
+          provider: fxProvider,
+          missingCurrencies: fxMissingCurrencies,
+          error: fxError,
+        },
       },
       invoices: {
         total: invoiceAgg._count._all,

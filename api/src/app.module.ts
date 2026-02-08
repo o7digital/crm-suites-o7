@@ -16,10 +16,12 @@ import { DealsModule } from './deals/deals.module';
 import { ForecastModule } from './forecast/forecast.module';
 import { AdminModule } from './admin/admin.module';
 import { ProductsModule } from './products/products.module';
+import { FxModule } from './fx/fx.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    FxModule,
     PrismaModule,
     AuthModule,
     ClientsModule,
