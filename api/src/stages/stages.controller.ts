@@ -22,6 +22,11 @@ export class StagesController {
     return this.stagesService.findAll(pipelineId, user);
   }
 
+  @Get(':id')
+  findOne(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.stagesService.findOne(id, user);
+  }
+
   @Patch('reorder')
   reorder(@Body() dto: ReorderStagesDto, @CurrentUser() user: RequestUser) {
     return this.stagesService.reorder(dto, user);

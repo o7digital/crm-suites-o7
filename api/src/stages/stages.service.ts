@@ -46,6 +46,17 @@ export class StagesService {
     });
   }
 
+  async findOne(id: string, user: RequestUser) {
+    const stage = await this.prisma.stage.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: {
+        pipeline: { select: { id: true, name: true, isDefault: true } },
+      },
+    });
+    if (!stage) throw new NotFoundException('Stage not found');
+    return stage;
+  }
+
   async update(id: string, dto: UpdateStageDto, user: RequestUser) {
     await this.ensureBelongs(id, user);
     return this.prisma.stage.update({

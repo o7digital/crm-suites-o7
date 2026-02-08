@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 
 type Pipeline = {
   id: string;
@@ -36,6 +37,7 @@ type DealCurrency = (typeof DEAL_CURRENCIES)[number];
 export default function CrmPage() {
   const { token } = useAuth();
   const api = useApi(token);
+  const router = useRouter();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState<string>('');
   const [stages, setStages] = useState<Stage[]>([]);
@@ -61,7 +63,16 @@ export default function CrmPage() {
     api<Pipeline[]>('/pipelines')
       .then((data) => {
         setPipelines(data);
-        const defaultPipeline = data.find((p) => p.isDefault) || data[0];
+        let requested: string | null = null;
+        if (typeof window !== 'undefined') {
+          try {
+            requested = new URLSearchParams(window.location.search).get('pipelineId');
+          } catch {
+            // ignore malformed URL
+          }
+        }
+        const match = requested ? data.find((p) => p.id === requested) : null;
+        const defaultPipeline = match || data.find((p) => p.isDefault) || data[0];
         setPipelineId(defaultPipeline?.id || '');
       })
       .catch((err) => setError(err.message))
@@ -142,7 +153,11 @@ export default function CrmPage() {
             <select
               className="btn-secondary text-sm"
               value={pipelineId}
-              onChange={(e) => setPipelineId(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setPipelineId(next);
+                router.replace(`/crm?pipelineId=${next}`);
+              }}
             >
               {pipelines.map((pipeline) => (
                 <option key={pipeline.id} value={pipeline.id}>
@@ -252,6 +267,7 @@ function StageColumn({
   deals: Deal[];
   onMoveDeal: (dealId: string, stageId: string) => void;
 }) {
+  const router = useRouter();
   const totals = deals.reduce<Record<string, number>>((acc, deal) => {
     const currency = (deal.currency || 'USD').toUpperCase();
     const value = Number(deal.value);
@@ -279,10 +295,18 @@ function StageColumn({
       }}
     >
       <div className="flex items-center justify-between">
-        <div>
+        <button
+          type="button"
+          className="text-left"
+          onClick={() => router.push(`/crm/stage/${stage.id}`)}
+          title="Open stage list"
+        >
           <p className="text-sm text-slate-400">{stage.status}</p>
-          <h3 className="text-lg font-semibold">{stage.name}</h3>
-        </div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold">{stage.name}</h3>
+            <span className="text-xs text-slate-500">→</span>
+          </div>
+        </button>
         <div className="text-right">
           <p className="text-xs text-slate-400">Deals</p>
           <p className="text-sm font-semibold">{deals.length}</p>

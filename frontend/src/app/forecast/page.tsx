@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
@@ -112,7 +113,11 @@ export default function ForecastPage() {
                   <tbody>
                     {forecast.byStage.map((row) => (
                       <tr key={row.stageId} className="border-t border-white/5">
-                        <td className="py-2 text-left font-medium">{row.stageName}</td>
+                        <td className="py-2 text-left font-medium">
+                          <Link href={`/crm/stage/${row.stageId}`} className="hover:underline">
+                            {row.stageName}
+                          </Link>
+                        </td>
                         <td className="py-2 text-left text-slate-400">{row.status}</td>
                         <td className="py-2 text-right">{row.count}</td>
                         <td className="py-2 text-right">{Math.round(row.probability * 100)}%</td>
