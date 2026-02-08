@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext';
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 const nav = [
   { href: '/', label: 'Dashboard' },
@@ -22,11 +22,34 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (!accountOpen) return;
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (accountRef.current && accountRef.current.contains(target)) return;
+      setAccountOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [accountOpen]);
 
   const handleLogout = async () => {
     await logout();
     router.replace('/login');
   };
+
+  const accountItems = useMemo(
+    () => [
+      { href: '/account', label: 'My information' },
+      { href: '/account/company', label: 'Company detail' },
+      { href: '/account/adjustments', label: 'Adjustments' },
+    ],
+    [],
+  );
 
   return (
     <div className="min-h-screen">
@@ -59,15 +82,54 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
           <div className="flex items-center gap-3">
             {user ? (
-              <>
-                <div className="text-right">
-                  <p className="text-sm font-semibold">{user.name}</p>
-                  <p className="text-xs text-slate-400">{user.email}</p>
-                </div>
-                <button className="btn-secondary text-sm" onClick={handleLogout}>
-                  Logout
+              <div className="relative" ref={accountRef}>
+                <button
+                  type="button"
+                  className="btn-secondary text-sm"
+                  onClick={() => setAccountOpen((prev) => !prev)}
+                  aria-haspopup="menu"
+                  aria-expanded={accountOpen}
+                >
+                  My Account
                 </button>
-              </>
+
+                {accountOpen ? (
+                  <div
+                    className="absolute right-0 mt-2 w-64 overflow-hidden rounded-xl border border-white/10 bg-[rgba(12,17,34,0.98)] shadow-lg shadow-black/30"
+                    role="menu"
+                  >
+                    <div className="px-4 py-3">
+                      <p className="text-sm font-semibold text-slate-100">{user.name}</p>
+                      <p className="mt-1 text-xs text-slate-400">{user.email}</p>
+                    </div>
+                    <div className="h-px bg-white/10" />
+                    <div className="py-2">
+                      {accountItems.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className="block px-4 py-2 text-sm text-slate-200 hover:bg-white/5"
+                          role="menuitem"
+                          onClick={() => setAccountOpen(false)}
+                        >
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                    <div className="h-px bg-white/10" />
+                    <div className="p-2">
+                      <button
+                        type="button"
+                        className="w-full rounded-lg border border-red-500/30 px-3 py-2 text-left text-sm text-red-200 hover:bg-red-500/10"
+                        onClick={handleLogout}
+                        role="menuitem"
+                      >
+                        Logout
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             ) : (
               <Link href="/login" className="btn-secondary text-sm">
                 Log in
