@@ -5,8 +5,8 @@
     "dockerfilePath": "./Dockerfile"
   },
   "deploy": {
-    "preDeployCommand": "npx prisma migrate resolve --rolled-back 0006_post_sales_stages || true && npx prisma migrate deploy",
-    "startCommand": "sh -lc \"npx prisma migrate resolve --rolled-back 0006_post_sales_stages || true; npx prisma migrate deploy || echo '[startup] prisma migrate deploy failed'; node dist/main.js\"",
+    "preDeployCommand": "npx prisma migrate resolve --applied 0006_post_sales_stages || true && npx prisma migrate deploy",
+    "startCommand": "sh -lc \"npx prisma migrate resolve --applied 0006_post_sales_stages || true; npx prisma migrate deploy || echo '[startup] prisma migrate deploy failed'; node dist/main.js\"",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
