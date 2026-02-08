@@ -211,8 +211,46 @@ export function useApi(token: string | null) {
         headers,
       });
       if (!res.ok) {
-        const message = await res.text();
-        throw new Error(message || 'Request failed');
+        const contentType = res.headers.get('content-type') || '';
+        let message = '';
+
+        const extractMessage = (payload: unknown): string => {
+          if (!payload) return '';
+          if (typeof payload === 'string') return payload;
+          if (typeof payload === 'object') {
+            const obj = payload as Record<string, unknown>;
+            const m = obj.message;
+            if (typeof m === 'string') return m;
+            if (Array.isArray(m)) {
+              const parts = m.filter((x) => typeof x === 'string') as string[];
+              if (parts.length) return parts.join('; ');
+            }
+            if (typeof obj.error === 'string') return obj.error;
+          }
+          try {
+            return JSON.stringify(payload);
+          } catch {
+            return '';
+          }
+        };
+
+        try {
+          if (contentType.includes('application/json')) {
+            message = extractMessage(await res.json());
+          } else {
+            const text = await res.text();
+            message = text;
+            try {
+              message = extractMessage(JSON.parse(text));
+            } catch {
+              // keep raw text
+            }
+          }
+        } catch {
+          // ignore parsing errors and fall through
+        }
+
+        throw new Error(message || `Request failed (${res.status})`);
       }
       const ct = res.headers.get('content-type');
       if (ct && ct.includes('text/csv')) {

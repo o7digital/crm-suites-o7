@@ -11,3 +11,4 @@ uploads
 /frontend/.env.local
 /frontend/.turbo
 db_data
+.npm

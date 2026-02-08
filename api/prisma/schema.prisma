@@ -43,6 +43,9 @@ model Client {
   email     String?
   phone     String?
   company   String?
+  website   String?
+  address   String?
+  taxId     String?
   notes     String?
   tenantId  String
   createdAt DateTime @default(now())
