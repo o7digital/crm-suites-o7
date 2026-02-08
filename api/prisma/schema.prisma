@@ -63,6 +63,7 @@ model Client {
   tenant  Tenant @relation(fields: [tenantId], references: [id])
   tasks   Task[]
   invoices Invoice[]
+  deals   Deal[]
 }
 
 model Task {
@@ -136,6 +137,7 @@ model Deal {
   value            Decimal  @db.Decimal(12, 2)
   currency         String   @default("USD")
   expectedCloseDate DateTime?
+  clientId         String?
   tenantId         String
   pipelineId       String
   stageId          String
@@ -143,6 +145,7 @@ model Deal {
   updatedAt        DateTime @updatedAt
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  client   Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
   pipeline Pipeline @relation(fields: [pipelineId], references: [id])
   stage    Stage    @relation(fields: [stageId], references: [id])
   history  DealStageHistory[]

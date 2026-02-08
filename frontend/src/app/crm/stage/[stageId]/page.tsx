@@ -17,6 +17,13 @@ type Stage = {
   pipeline?: { id: string; name: string; isDefault: boolean };
 };
 
+type Client = {
+  id: string;
+  name: string;
+  company?: string | null;
+  email?: string | null;
+};
+
 type Product = {
   id: string;
   name: string;
@@ -39,6 +46,8 @@ type Deal = {
   value: number;
   currency: string;
   expectedCloseDate?: string | null;
+  clientId?: string | null;
+  client?: Client | null;
   stageId: string;
   pipelineId: string;
   createdAt: string;
@@ -139,6 +148,12 @@ export default function CrmStagePage() {
                         {(deal.currency || 'USD').toUpperCase()} {Number(deal.value).toLocaleString()}
                       </p>
                     </div>
+                    {deal.client?.name ? (
+                      <p className="mt-1 text-xs text-slate-400">
+                        Client: {deal.client.name}
+                        {deal.client.company ? ` · ${deal.client.company}` : ''}
+                      </p>
+                    ) : null}
                     {deal.items && deal.items.length > 0 ? (
                       <p className="mt-1 text-xs text-slate-400">
                         {(() => {

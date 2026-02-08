@@ -1,4 +1,4 @@
-import { IsDateString, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class UpdateDealDto {
   @IsOptional()
@@ -17,4 +17,8 @@ export class UpdateDealDto {
   @IsOptional()
   @IsDateString()
   expectedCloseDate?: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  clientId?: string | null;
 }

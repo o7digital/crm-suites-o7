@@ -34,6 +34,18 @@ export class DealsService {
     const uniqueProductIds = Array.from(new Set((dto.productIds ?? []).map((x) => x.trim()).filter(Boolean)));
     const productsById = new Map<string, { id: string; price: Prisma.Decimal | null }>();
 
+    let clientId: string | undefined;
+    if (dto.clientId) {
+      const client = await this.prisma.client.findFirst({
+        where: { id: dto.clientId, tenantId: user.tenantId },
+        select: { id: true },
+      });
+      if (!client) {
+        throw new BadRequestException('Client not found.');
+      }
+      clientId = client.id;
+    }
+
     if (uniqueProductIds.length > 0) {
       const products = await this.prisma.product.findMany({
         where: { id: { in: uniqueProductIds }, tenantId: user.tenantId, isActive: true },
@@ -54,6 +66,7 @@ export class DealsService {
           value: dto.value,
           currency: (dto.currency ?? 'USD').toUpperCase(),
           expectedCloseDate: dto.expectedCloseDate ? new Date(dto.expectedCloseDate) : undefined,
+          clientId,
           tenantId: user.tenantId,
           pipelineId: dto.pipelineId,
           stageId,
@@ -75,6 +88,7 @@ export class DealsService {
       const created = await tx.deal.findFirst({
         where: { id: deal.id, tenantId: user.tenantId },
         include: {
+          client: true,
           stage: true,
           items: { include: { product: true } },
         },
@@ -91,6 +105,7 @@ export class DealsService {
         ...(pipelineId ? { pipelineId } : {}),
       },
       include: {
+        client: true,
         stage: true,
         items: { include: { product: true } },
       },
@@ -102,6 +117,7 @@ export class DealsService {
     const deal = await this.prisma.deal.findFirst({
       where: { id, tenantId: user.tenantId },
       include: {
+        client: true,
         stage: true,
         items: { include: { product: true } },
       },
@@ -112,12 +128,25 @@ export class DealsService {
 
   async update(id: string, dto: UpdateDealDto, user: RequestUser) {
     await this.ensureBelongs(id, user);
+
+    if (dto.clientId) {
+      const client = await this.prisma.client.findFirst({
+        where: { id: dto.clientId, tenantId: user.tenantId },
+        select: { id: true },
+      });
+      if (!client) {
+        throw new BadRequestException('Client not found.');
+      }
+    }
+
     return this.prisma.deal.update({
       where: { id },
       data: {
-        ...dto,
+        title: dto.title,
+        value: dto.value,
         currency: dto.currency ? dto.currency.toUpperCase() : undefined,
         expectedCloseDate: dto.expectedCloseDate ? new Date(dto.expectedCloseDate) : undefined,
+        clientId: dto.clientId,
       },
     });
   }

@@ -51,6 +51,10 @@ export class CreateDealDto {
   stageId?: string;
 
   @IsOptional()
+  @IsUUID('4')
+  clientId?: string;
+
+  @IsOptional()
   @Transform(({ value }) => coerceStringArray(value))
   @IsArray()
   @ArrayMaxSize(50)

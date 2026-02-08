@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
@@ -19,6 +20,13 @@ type Stage = {
   probability: number;
   status: 'OPEN' | 'WON' | 'LOST';
   pipelineId: string;
+};
+
+type Client = {
+  id: string;
+  name: string;
+  company?: string | null;
+  email?: string | null;
 };
 
 type Product = {
@@ -44,6 +52,8 @@ type Deal = {
   value: number;
   currency: string;
   expectedCloseDate?: string | null;
+  clientId?: string | null;
+  client?: Client | null;
   stageId: string;
   pipelineId: string;
   items?: DealItem[];
@@ -61,6 +71,8 @@ export default function CrmPage() {
   const [stages, setStages] = useState<Stage[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [clientsError, setClientsError] = useState<string | null>(null);
   const [requestedStageId, setRequestedStageId] = useState<string | null>(null);
   const [highlightStageId, setHighlightStageId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,12 +83,14 @@ export default function CrmPage() {
     value: string;
     currency: DealCurrency;
     expectedCloseDate: string;
+    clientId: string;
     productIds: string[];
   }>({
     title: '',
     value: '',
     currency: 'USD',
     expectedCloseDate: '',
+    clientId: '',
     productIds: [],
   });
 
@@ -87,6 +101,17 @@ export default function CrmPage() {
       .catch(() => {
         // Products are optional for CRM; ignore failures here.
       });
+  }, [api, token]);
+
+  useEffect(() => {
+    if (!token) return;
+    setClientsError(null);
+    api<Client[]>('/clients')
+      .then((data) => {
+        const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name));
+        setClients(sorted);
+      })
+      .catch((err: Error) => setClientsError(err.message));
   }, [api, token]);
 
   useEffect(() => {
@@ -164,6 +189,7 @@ export default function CrmPage() {
       value: Number(form.value),
       currency: form.currency,
       expectedCloseDate: form.expectedCloseDate || undefined,
+      clientId: form.clientId || undefined,
       pipelineId,
       stageId: defaultStageId,
       productIds: form.productIds,
@@ -175,7 +201,7 @@ export default function CrmPage() {
       });
       setDeals((prev) => [created, ...prev]);
       setShowModal(false);
-      setForm({ title: '', value: '', currency: 'USD', expectedCloseDate: '', productIds: [] });
+      setForm({ title: '', value: '', currency: 'USD', expectedCloseDate: '', clientId: '', productIds: [] });
     } catch (err: any) {
       setError(err.message || 'Unable to create deal');
     }
@@ -193,14 +219,6 @@ export default function CrmPage() {
     } catch (err: any) {
       setError(err.message || 'Unable to move deal');
     }
-  };
-
-  const focusStage = (stageId: string) => {
-    setRequestedStageId(stageId);
-    setHighlightStageId(stageId);
-    router.replace(
-      `/crm?pipelineId=${encodeURIComponent(pipelineId)}&stageId=${encodeURIComponent(stageId)}`,
-    );
   };
 
   return (
@@ -251,7 +269,6 @@ export default function CrmPage() {
               stage={stage}
               deals={deals.filter((deal) => deal.stageId === stage.id)}
               onMoveDeal={handleMoveDeal}
-              onFocusStage={focusStage}
               highlighted={highlightStageId === stage.id}
             />
           ))}
@@ -274,6 +291,32 @@ export default function CrmPage() {
                     value={form.title}
                     onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
                   />
+                </label>
+                <label className="block text-sm text-slate-300">
+                  Client
+                  <select
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                    value={form.clientId}
+                    onChange={(e) => setForm((prev) => ({ ...prev, clientId: e.target.value }))}
+                  >
+                    <option value="">{clients.length ? 'Select client' : 'No clients yet'}</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                        {c.company ? ` · ${c.company}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {clients.length === 0 ? (
+                    <p className="mt-2 text-xs text-slate-500">
+                      Add a client first in{' '}
+                      <Link href="/clients" className="text-cyan-200 hover:underline">
+                        Clients
+                      </Link>
+                      .
+                    </p>
+                  ) : null}
+                  {clientsError ? <p className="mt-2 text-xs text-red-200">{clientsError}</p> : null}
                 </label>
                 <label className="block text-sm text-slate-300">
                   Amount
@@ -365,15 +408,14 @@ function StageColumn({
   stage,
   deals,
   onMoveDeal,
-  onFocusStage,
   highlighted,
 }: {
   stage: Stage;
   deals: Deal[];
   onMoveDeal: (dealId: string, stageId: string) => void;
-  onFocusStage: (stageId: string) => void;
   highlighted: boolean;
 }) {
+  const router = useRouter();
   const totals = deals.reduce<Record<string, number>>((acc, deal) => {
     const currency = (deal.currency || 'USD').toUpperCase();
     const value = Number(deal.value);
@@ -405,8 +447,8 @@ function StageColumn({
         <button
           type="button"
           className="text-left"
-          onClick={() => onFocusStage(stage.id)}
-          title="Focus stage"
+          onClick={() => router.push(`/crm/stage/${stage.id}`)}
+          title="Open stage list"
         >
           <p className="text-sm text-slate-400">{stage.status}</p>
           <div className="flex items-center gap-2">
@@ -429,6 +471,12 @@ function StageColumn({
             className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm"
           >
             <p className="font-semibold">{deal.title}</p>
+            {deal.client?.name ? (
+              <p className="mt-1 text-[11px] text-slate-400">
+                Client: {deal.client.name}
+                {deal.client.company ? ` · ${deal.client.company}` : ''}
+              </p>
+            ) : null}
             {deal.items && deal.items.length > 0 ? (
               <p className="mt-1 text-[11px] text-slate-400">
                 {(() => {
