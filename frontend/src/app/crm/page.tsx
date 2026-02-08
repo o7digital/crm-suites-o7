@@ -668,9 +668,24 @@ function StageColumn({
             key={deal.id}
             draggable
             onDragStart={(event) => event.dataTransfer.setData('text/plain', deal.id)}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm"
+            role="button"
+            tabIndex={0}
+            title="Open deal"
+            onClick={() => router.push(`/crm/deal/${deal.id}`)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                router.push(`/crm/deal/${deal.id}`);
+              }
+            }}
+            className="cursor-pointer rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
           >
-            <p className="font-semibold">{deal.title}</p>
+            <div className="flex items-start justify-between gap-3">
+              <p className="font-semibold">{deal.title}</p>
+              <span className="mt-0.5 rounded-full bg-cyan-400/10 px-2 py-0.5 text-[11px] font-semibold text-cyan-100">
+                {Math.round((stage.probability ?? 0) * 100)}%
+              </span>
+            </div>
             {deal.client?.name ? (
               <p className="mt-1 text-[11px] text-slate-400">
                 Client: {deal.client.name}

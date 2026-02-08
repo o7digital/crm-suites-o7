@@ -141,7 +141,12 @@ export default function CrmStagePage() {
               </div>
               <div className="mt-4 space-y-3">
                 {sortedDeals.map((deal) => (
-                  <div key={deal.id} className="rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+                  <Link
+                    key={deal.id}
+                    href={`/crm/deal/${deal.id}`}
+                    title="Open deal"
+                    className="block rounded-xl border border-white/10 bg-white/5 px-4 py-3 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
+                  >
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-sm font-semibold">{deal.title}</p>
                       <p className="text-xs text-slate-400">
@@ -171,7 +176,7 @@ export default function CrmStagePage() {
                         Closing: {new Date(deal.expectedCloseDate).toLocaleDateString()}
                       </p>
                     ) : null}
-                  </div>
+                  </Link>
                 ))}
                 {sortedDeals.length === 0 ? <p className="text-sm text-slate-400">No deals in this stage.</p> : null}
               </div>
