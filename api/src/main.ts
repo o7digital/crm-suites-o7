@@ -29,6 +29,11 @@ async function bootstrap() {
     credentials: true,
   });
   app.setGlobalPrefix('api');
+  // Avoid stale data when routed through CDNs/proxies (Vercel/Railway).
+  app.use((_req: any, res: any, next: any) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

@@ -6,10 +6,23 @@ import { Guard } from '../components/Guard';
 import { useApi, useAuth } from '../contexts/AuthContext';
 import Link from 'next/link';
 
+const USD = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 0,
+});
+const INT = new Intl.NumberFormat('en-US');
+
 type DashboardPayload = {
   clients: number;
   tasks: Record<string, number>;
-  leads: { total: number; amountUsd: number };
+  leads: {
+    open: number;
+    total: number;
+    openUsd: number;
+    amountUsd: number;
+    openByCurrency: { currency: string; count: number; amount: number }[];
+  };
   invoices: { total: number; amount: number; recent: InvoiceSummary[] };
 };
 
@@ -30,10 +43,33 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!token) return;
-    api<DashboardPayload>('/dashboard')
-      .then(setData)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+    let active = true;
+    let inFlight = false;
+    let timer: number | null = null;
+
+    const load = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const next = await api<DashboardPayload>('/dashboard');
+        if (!active) return;
+        setData(next);
+        setError(null);
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : 'Unable to load metrics');
+      } finally {
+        inFlight = false;
+        if (active) setLoading(false);
+      }
+    };
+
+    load();
+    timer = window.setInterval(load, 15_000);
+    return () => {
+      active = false;
+      if (timer) window.clearInterval(timer);
+    };
   }, [api, token]);
 
   return (
@@ -58,17 +94,27 @@ export default function DashboardPage() {
         {error && <div className="text-red-300">Error: {error}</div>}
 
         {data && (
-          <div className="grid gap-4 md:grid-cols-3">
-            <MetricCard title="Clients" value={data.clients} hint="Total accounts in your tenant" />
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+            <MetricCard title="Clients" value={INT.format(data.clients)} hint="Total accounts in your tenant" />
             <MetricCard
               title="Open Tasks"
-              value={data.tasks['PENDING'] || 0}
+              value={INT.format(data.tasks['PENDING'] || 0)}
               hint="Pending items across clients"
             />
             <MetricCard
-              title="Leads Volume USD"
-              value={`$${(data.leads.amountUsd ?? 0).toLocaleString()}`}
-              hint={`${data.leads.total} open deals (USD)`}
+              title="Open Leads"
+              value={INT.format(data.leads.open ?? 0)}
+              hint="Deals in progress (all currencies)"
+            />
+            <MetricCard
+              title="Total Leads"
+              value={INT.format(data.leads.total ?? 0)}
+              hint="All deals (open + won + lost)"
+            />
+            <MetricCard
+              title="Open Pipeline Value (USD)"
+              value={USD.format(data.leads.amountUsd ?? 0)}
+              hint={`${data.leads.openUsd ?? 0} open USD deals (out of ${data.leads.open ?? 0} open)`}
             />
           </div>
         )}

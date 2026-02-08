@@ -231,6 +231,16 @@ export default function CrmPage() {
     return [...stages].sort((a, b) => a.position - b.position);
   }, [stages]);
 
+  const stageStatusById = useMemo(() => {
+    const map: Record<string, Stage['status']> = {};
+    for (const stage of sortedStages) map[stage.id] = stage.status;
+    return map;
+  }, [sortedStages]);
+
+  const openLeadsCount = useMemo(() => {
+    return deals.reduce((sum, deal) => (stageStatusById[deal.stageId] === 'OPEN' ? sum + 1 : sum), 0);
+  }, [deals, stageStatusById]);
+
   useEffect(() => {
     if (!requestedStageId) return;
     if (sortedStages.length === 0) return;
@@ -340,6 +350,9 @@ export default function CrmPage() {
           <div>
             <p className="text-sm uppercase tracking-[0.15em] text-slate-400">CRM</p>
             <h1 className="text-3xl font-semibold">Pipeline</h1>
+            <p className="mt-1 text-sm text-slate-400">
+              Open leads: {openLeadsCount} | Total leads: {deals.length}
+            </p>
           </div>
           <div className="flex gap-3">
             <select

@@ -206,9 +206,12 @@ export function useApi(token: string | null) {
       }
       Object.assign(headers, init?.headers);
 
+      // Avoid stale metrics when proxies/browsers cache API responses.
+      const cache = init?.cache ?? 'no-store';
       const res = await fetch(`${API_URL}${path}`, {
         ...init,
         headers,
+        cache,
       });
       if (!res.ok) {
         const contentType = res.headers.get('content-type') || '';

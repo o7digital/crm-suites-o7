@@ -9,45 +9,62 @@ export class DashboardService {
 
   async getSnapshot(user: RequestUser) {
     const tenantId = user.tenantId;
-    const [clientCount, taskCounts, leadsAgg, invoiceAgg, recentInvoices] = await Promise.all([
-      this.prisma.client.count({ where: { tenantId } }),
-      this.prisma.task.groupBy({
-        by: ['status'],
-        where: { tenantId },
-        _count: true,
-      }),
-      this.prisma.deal.aggregate({
-        where: {
-          tenantId,
-          currency: 'USD',
-          stage: { status: 'OPEN' },
-        },
-        _sum: { value: true },
-        _count: { _all: true },
-      }),
-      this.prisma.invoice.aggregate({
-        where: { tenantId },
-        _sum: { amount: true },
-        _count: { _all: true },
-      }),
-      this.prisma.invoice.findMany({
-        where: { tenantId, createdAt: { gte: subDays(new Date(), 30) } },
-        orderBy: { createdAt: 'desc' },
-        take: 5,
-      }),
-    ]);
+    const [clientCount, taskCounts, openLeadsByCurrency, leadTotalCount, invoiceAgg, recentInvoices] =
+      await Promise.all([
+        this.prisma.client.count({ where: { tenantId } }),
+        this.prisma.task.groupBy({
+          by: ['status'],
+          where: { tenantId },
+          _count: true,
+        }),
+        // Pipeline value is not directly summable across currencies, so we provide
+        // a per-currency breakdown for open deals.
+        this.prisma.deal.groupBy({
+          by: ['currency'],
+          where: {
+            tenantId,
+            stage: { status: 'OPEN' },
+          },
+          _sum: { value: true },
+          _count: { _all: true },
+        }),
+        this.prisma.deal.count({
+          where: { tenantId },
+        }),
+        this.prisma.invoice.aggregate({
+          where: { tenantId },
+          _sum: { amount: true },
+          _count: { _all: true },
+        }),
+        this.prisma.invoice.findMany({
+          where: { tenantId, createdAt: { gte: subDays(new Date(), 30) } },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        }),
+      ]);
 
     const taskByStatus: Record<string, number> = {};
     for (const { status, _count } of taskCounts) {
       taskByStatus[status] = _count;
     }
 
+    const openByCurrency = openLeadsByCurrency.map((row) => ({
+      currency: row.currency,
+      count: row._count._all,
+      amount: row._sum.value ? Number(row._sum.value) : 0,
+    }));
+    const openCount = openByCurrency.reduce((sum, row) => sum + row.count, 0);
+    const usdRow = openByCurrency.find((row) => row.currency === 'USD');
+
     return {
       clients: clientCount,
       tasks: taskByStatus,
       leads: {
-        total: leadsAgg._count._all,
-        amountUsd: leadsAgg._sum.value ? Number(leadsAgg._sum.value) : 0,
+        open: openCount,
+        total: leadTotalCount,
+        openByCurrency,
+        openUsd: usdRow?.count ?? 0,
+        amountUsd: usdRow?.amount ?? 0,
       },
       invoices: {
         total: invoiceAgg._count._all,

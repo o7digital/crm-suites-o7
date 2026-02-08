@@ -6,6 +6,13 @@ import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
 
+const USD = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 0,
+});
+const INT = new Intl.NumberFormat('en-US');
+
 type Pipeline = {
   id: string;
   name: string;
@@ -50,10 +57,33 @@ export default function ForecastPage() {
   useEffect(() => {
     if (!token || !pipelineId) return;
     setLoading(true);
-    api<ForecastPayload>(`/forecast?pipelineId=${pipelineId}`)
-      .then((data) => setForecast(data))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+    let active = true;
+    let inFlight = false;
+    let timer: number | null = null;
+
+    const load = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const data = await api<ForecastPayload>(`/forecast?pipelineId=${pipelineId}`);
+        if (!active) return;
+        setForecast(data);
+        setError(null);
+      } catch (err) {
+        if (!active) return;
+        setError(err instanceof Error ? err.message : 'Unable to load forecast');
+      } finally {
+        inFlight = false;
+        if (active) setLoading(false);
+      }
+    };
+
+    load();
+    timer = window.setInterval(load, 15_000);
+    return () => {
+      active = false;
+      if (timer) window.clearInterval(timer);
+    };
   }, [api, pipelineId, token]);
 
   return (
@@ -85,18 +115,18 @@ export default function ForecastPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="card p-5">
                 <p className="text-sm text-slate-400">Pipeline total</p>
-                <p className="mt-2 text-3xl font-semibold">${forecast.total.toLocaleString()}</p>
+                <p className="mt-2 text-3xl font-semibold">{USD.format(forecast.total)}</p>
               </div>
               <div className="card p-5">
                 <p className="text-sm text-slate-400">Weighted total</p>
-                <p className="mt-2 text-3xl font-semibold">${forecast.weightedTotal.toLocaleString()}</p>
+                <p className="mt-2 text-3xl font-semibold">{USD.format(forecast.weightedTotal)}</p>
               </div>
             </div>
 
             <div className="card p-5">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-slate-400">By stage</p>
-                <p className="text-xs text-slate-500">{forecast.byStage.length} stages</p>
+                <p className="text-xs text-slate-500">{INT.format(forecast.byStage.length)} stages</p>
               </div>
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-sm">
@@ -124,10 +154,10 @@ export default function ForecastPage() {
                           </Link>
                         </td>
                         <td className="py-2 text-left text-slate-400">{row.status}</td>
-                        <td className="py-2 text-right">{row.count}</td>
+                        <td className="py-2 text-right">{INT.format(row.count)}</td>
                         <td className="py-2 text-right">{Math.round(row.probability * 100)}%</td>
-                        <td className="py-2 text-right">${row.total.toLocaleString()}</td>
-                        <td className="py-2 text-right">${row.weightedTotal.toLocaleString()}</td>
+                        <td className="py-2 text-right">{USD.format(row.total)}</td>
+                        <td className="py-2 text-right">{USD.format(row.weightedTotal)}</td>
                       </tr>
                     ))}
                   </tbody>
