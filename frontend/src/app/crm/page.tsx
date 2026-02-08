@@ -371,7 +371,7 @@ export default function CrmPage() {
       }
       setShowModal(false);
     } catch (err: any) {
-      setError(err.message || 'Unable to create deal');
+      setError(err.message || 'Unable to save deal');
     }
   };
 
