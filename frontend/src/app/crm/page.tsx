@@ -25,6 +25,7 @@ type Deal = {
   title: string;
   value: number;
   currency: string;
+  expectedCloseDate?: string | null;
   stageId: string;
   pipelineId: string;
 };
@@ -42,10 +43,16 @@ export default function CrmPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState<{ title: string; value: string; currency: DealCurrency }>({
+  const [form, setForm] = useState<{
+    title: string;
+    value: string;
+    currency: DealCurrency;
+    expectedCloseDate: string;
+  }>({
     title: '',
     value: '',
     currency: 'USD',
+    expectedCloseDate: '',
   });
 
   useEffect(() => {
@@ -92,6 +99,7 @@ export default function CrmPage() {
       title: form.title,
       value: Number(form.value),
       currency: form.currency,
+      expectedCloseDate: form.expectedCloseDate || undefined,
       pipelineId,
       stageId: defaultStageId,
     };
@@ -102,7 +110,7 @@ export default function CrmPage() {
       });
       setDeals((prev) => [created, ...prev]);
       setShowModal(false);
-      setForm({ title: '', value: '', currency: 'USD' });
+      setForm({ title: '', value: '', currency: 'USD', expectedCloseDate: '' });
     } catch (err: any) {
       setError(err.message || 'Unable to create deal');
     }
@@ -196,6 +204,15 @@ export default function CrmPage() {
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
+                  Closing date
+                  <input
+                    type="date"
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                    value={form.expectedCloseDate}
+                    onChange={(e) => setForm((prev) => ({ ...prev, expectedCloseDate: e.target.value }))}
+                  />
+                </label>
+                <label className="block text-sm text-slate-300">
                   Currency
                   <select
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
@@ -281,6 +298,11 @@ function StageColumn({
             className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm"
           >
             <p className="font-semibold">{deal.title}</p>
+            {deal.expectedCloseDate ? (
+              <p className="mt-1 text-[11px] text-slate-500">
+                Closing: {new Date(deal.expectedCloseDate).toLocaleDateString()}
+              </p>
+            ) : null}
             <p className="text-xs text-slate-400">
               {deal.currency} {Number(deal.value).toLocaleString()}
             </p>

@@ -76,7 +76,9 @@ export class BootstrapService {
       { name: 'Negotiation', position: 4, probability: 0.7, status: 'OPEN' as const },
       { name: 'Verbal yes', position: 5, probability: 0.9, status: 'OPEN' as const },
       { name: 'Won', position: 6, probability: 1.0, status: 'WON' as const },
-      { name: 'Lost', position: 7, probability: 0.0, status: 'LOST' as const },
+      { name: 'INVOICE Customer', position: 7, probability: 1.0, status: 'WON' as const },
+      { name: 'TRANSFER PAYMENT', position: 8, probability: 1.0, status: 'WON' as const },
+      { name: 'Lost', position: 9, probability: 0.0, status: 'LOST' as const },
     ];
 
     await this.prisma.stage.createMany({
