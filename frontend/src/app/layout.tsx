@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PulseCRM Dashboard",
+  title: "o7 PulseCRM Dashboard",
   description: "Lightweight SaaS-ready CRM dashboard MVP",
 };
 

@@ -39,7 +39,7 @@ export default function RegisterPage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="card w-full max-w-md p-8">
-        <p className="text-sm uppercase tracking-[0.2em] text-slate-400">PulseCRM</p>
+        <p className="text-sm uppercase tracking-[0.2em] text-slate-400">o7 PulseCRM</p>
         <h1 className="mt-2 text-2xl font-semibold">Create your tenant</h1>
         <p className="text-sm text-slate-400">Multi-tenant ready from day one</p>
 
