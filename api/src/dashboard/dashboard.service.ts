@@ -9,17 +9,26 @@ export class DashboardService {
 
   async getSnapshot(user: RequestUser) {
     const tenantId = user.tenantId;
-    const [clientCount, taskCounts, invoiceAgg, recentInvoices] = await Promise.all([
+    const [clientCount, taskCounts, leadsAgg, invoiceAgg, recentInvoices] = await Promise.all([
       this.prisma.client.count({ where: { tenantId } }),
       this.prisma.task.groupBy({
         by: ['status'],
         where: { tenantId },
         _count: true,
       }),
+      this.prisma.deal.aggregate({
+        where: {
+          tenantId,
+          currency: 'USD',
+          stage: { status: 'OPEN' },
+        },
+        _sum: { value: true },
+        _count: { _all: true },
+      }),
       this.prisma.invoice.aggregate({
         where: { tenantId },
         _sum: { amount: true },
-        _count: true,
+        _count: { _all: true },
       }),
       this.prisma.invoice.findMany({
         where: { tenantId, createdAt: { gte: subDays(new Date(), 30) } },
@@ -36,8 +45,12 @@ export class DashboardService {
     return {
       clients: clientCount,
       tasks: taskByStatus,
+      leads: {
+        total: leadsAgg._count._all,
+        amountUsd: leadsAgg._sum.value ? Number(leadsAgg._sum.value) : 0,
+      },
       invoices: {
-        total: invoiceAgg._count,
+        total: invoiceAgg._count._all,
         amount: invoiceAgg._sum.amount ? Number(invoiceAgg._sum.amount) : 0,
         recent: recentInvoices,
       },

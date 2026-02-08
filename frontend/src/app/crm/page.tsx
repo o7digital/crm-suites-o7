@@ -27,6 +27,7 @@ type Client = {
   name: string;
   company?: string | null;
   email?: string | null;
+  phone?: string | null;
 };
 
 type Product = {
@@ -62,6 +63,27 @@ type Deal = {
 const DEAL_CURRENCIES = ['USD', 'EUR', 'MXN', 'CAD'] as const;
 type DealCurrency = (typeof DEAL_CURRENCIES)[number];
 
+function parseContactLine(input: string): { name?: string; email?: string } {
+  const raw = (input || '').trim();
+  if (!raw) return {};
+
+  // `Full Name <email@domain>` (common email header format)
+  const angle = raw.match(/^\s*"?([^"<]+?)"?\s*<\s*([^>]+)\s*>\s*$/);
+  if (angle) {
+    const name = angle[1]?.trim();
+    const email = angle[2]?.trim();
+    return { name: name || undefined, email: email || undefined };
+  }
+
+  // Fall back to extracting the first email-like token from the string.
+  const emailMatch = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  if (emailMatch) {
+    return { email: emailMatch[0] };
+  }
+
+  return {};
+}
+
 export default function CrmPage() {
   const { token } = useAuth();
   const api = useApi(token);
@@ -78,6 +100,15 @@ export default function CrmPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showClientCreate, setShowClientCreate] = useState(false);
+  const [clientDraft, setClientDraft] = useState<{ name: string; email: string; company: string; phone: string }>({
+    name: '',
+    email: '',
+    company: '',
+    phone: '',
+  });
+  const [clientDraftError, setClientDraftError] = useState<string | null>(null);
+  const [clientDraftSaving, setClientDraftSaving] = useState(false);
   const [form, setForm] = useState<{
     title: string;
     value: string;
@@ -93,6 +124,15 @@ export default function CrmPage() {
     clientId: '',
     productIds: [],
   });
+
+  useEffect(() => {
+    if (!showModal) {
+      setShowClientCreate(false);
+      setClientDraft({ name: '', email: '', company: '', phone: '' });
+      setClientDraftError(null);
+      setClientDraftSaving(false);
+    }
+  }, [showModal]);
 
   useEffect(() => {
     if (!token) return;
@@ -239,6 +279,46 @@ export default function CrmPage() {
     }
   };
 
+  const handleCreateClientFromCrm = async () => {
+    const name = clientDraft.name.trim();
+    if (!name) {
+      setClientDraftError('Name is required');
+      return;
+    }
+
+    const optional = (value: string) => {
+      const trimmed = value.trim();
+      return trimmed ? trimmed : undefined;
+    };
+
+    setClientDraftSaving(true);
+    setClientDraftError(null);
+    try {
+      const created = await api<Client>('/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          email: optional(clientDraft.email),
+          company: optional(clientDraft.company),
+          phone: optional(clientDraft.phone),
+        }),
+      });
+
+      setClients((prev) => {
+        const next = [...prev, created].sort((a, b) => a.name.localeCompare(b.name));
+        return next;
+      });
+      setForm((prev) => ({ ...prev, clientId: created.id }));
+      setShowClientCreate(false);
+      setClientDraft({ name: '', email: '', company: '', phone: '' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to save client';
+      setClientDraftError(message);
+    } finally {
+      setClientDraftSaving(false);
+    }
+  };
+
   const handleMoveDeal = async (dealId: string, stageId: string) => {
     try {
       await api(`/deals/${dealId}/move-stage`, {
@@ -339,15 +419,90 @@ export default function CrmPage() {
                       </option>
                     ))}
                   </select>
-                  {clients.length === 0 ? (
-                    <p className="mt-2 text-xs text-slate-500">
-                      Add a client first in{' '}
-                      <Link href="/clients" className="text-cyan-200 hover:underline">
-                        Clients
+                  {showClientCreate ? (
+                    <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                      <p className="text-xs text-slate-400">New client</p>
+                      <div className="mt-2 grid gap-2">
+                        <input
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                          placeholder="Name"
+                          value={clientDraft.name}
+                          onChange={(e) => setClientDraft((prev) => ({ ...prev, name: e.target.value }))}
+                        />
+                        <input
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                          placeholder="Email"
+                          type="email"
+                          value={clientDraft.email}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw.includes('<') || raw.includes('>')) {
+                              const parsed = parseContactLine(raw);
+                              setClientDraft((prev) => ({
+                                ...prev,
+                                email: parsed.email ?? raw,
+                                name: prev.name.trim() ? prev.name : parsed.name ?? prev.name,
+                              }));
+                              return;
+                            }
+                            setClientDraft((prev) => ({ ...prev, email: raw }));
+                          }}
+                        />
+                        <input
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                          placeholder="Company"
+                          value={clientDraft.company}
+                          onChange={(e) => setClientDraft((prev) => ({ ...prev, company: e.target.value }))}
+                        />
+                        <input
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                          placeholder="Phone"
+                          value={clientDraft.phone}
+                          onChange={(e) => setClientDraft((prev) => ({ ...prev, phone: e.target.value }))}
+                        />
+                      </div>
+                      <p className="mt-2 text-[11px] text-slate-500">
+                        Tip: you can paste <span className="font-mono">Name {'<'}email@domain{'>'}</span> in Email.
+                      </p>
+                      {clientDraftError ? <p className="mt-2 text-xs text-red-200">{clientDraftError}</p> : null}
+                      <div className="mt-3 flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={() => {
+                            setShowClientCreate(false);
+                            setClientDraftError(null);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          disabled={clientDraftSaving}
+                          onClick={handleCreateClientFromCrm}
+                        >
+                          {clientDraftSaving ? 'Saving…' : 'Add client'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 flex items-center gap-4 text-xs">
+                      <button
+                        type="button"
+                        className="text-cyan-200 hover:underline"
+                        onClick={() => {
+                          setShowClientCreate(true);
+                          setClientDraftError(null);
+                        }}
+                      >
+                        + Add client
+                      </button>
+                      <Link href="/clients" className="text-slate-400 hover:underline">
+                        Manage clients
                       </Link>
-                      .
-                    </p>
-                  ) : null}
+                    </div>
+                  )}
                   {clientsError ? <p className="mt-2 text-xs text-red-200">{clientsError}</p> : null}
                 </label>
                 <label className="block text-sm text-slate-300">

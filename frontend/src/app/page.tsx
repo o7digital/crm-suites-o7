@@ -9,6 +9,7 @@ import Link from 'next/link';
 type DashboardPayload = {
   clients: number;
   tasks: Record<string, number>;
+  leads: { total: number; amountUsd: number };
   invoices: { total: number; amount: number; recent: InvoiceSummary[] };
 };
 
@@ -65,9 +66,9 @@ export default function DashboardPage() {
               hint="Pending items across clients"
             />
             <MetricCard
-              title="Invoice Volume"
-              value={`$${(data.invoices.amount ?? 0).toLocaleString()}`}
-              hint={`${data.invoices.total} invoices`}
+              title="Leads Volume USD"
+              value={`$${(data.leads.amountUsd ?? 0).toLocaleString()}`}
+              hint={`${data.leads.total} open deals (USD)`}
             />
           </div>
         )}
