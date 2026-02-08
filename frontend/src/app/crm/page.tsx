@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
@@ -84,10 +84,17 @@ function parseContactLine(input: string): { name?: string; email?: string } {
   return {};
 }
 
+function toDateInputValue(value?: string | null) {
+  if (!value) return '';
+  if (typeof value === 'string' && value.length >= 10) return value.slice(0, 10);
+  return '';
+}
+
 export default function CrmPage() {
   const { token } = useAuth();
   const api = useApi(token);
   const router = useRouter();
+  const lastDragAtRef = useRef<number>(0);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState<string>('');
   const [stages, setStages] = useState<Stage[]>([]);
@@ -100,6 +107,7 @@ export default function CrmPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [showClientCreate, setShowClientCreate] = useState(false);
   const [clientDraft, setClientDraft] = useState<{ name: string; email: string; company: string; phone: string }>({
     name: '',
@@ -116,6 +124,7 @@ export default function CrmPage() {
     expectedCloseDate: string;
     clientId: string;
     productIds: string[];
+    stageId: string;
   }>({
     title: '',
     value: '',
@@ -123,6 +132,7 @@ export default function CrmPage() {
     expectedCloseDate: '',
     clientId: '',
     productIds: [],
+    stageId: '',
   });
 
   useEffect(() => {
@@ -131,6 +141,8 @@ export default function CrmPage() {
       setClientDraft({ name: '', email: '', company: '', phone: '' });
       setClientDraftError(null);
       setClientDraftSaving(false);
+      setEditingDeal(null);
+      setForm({ title: '', value: '', currency: 'USD', expectedCloseDate: '', clientId: '', productIds: [], stageId: '' });
     }
   }, [showModal]);
 
@@ -263,29 +275,116 @@ export default function CrmPage() {
     return openStage?.id || sortedStages[0]?.id || '';
   }, [sortedStages]);
 
-  const handleCreateDeal = async () => {
+  const selectedStage = useMemo(() => {
+    return sortedStages.find((stage) => stage.id === form.stageId) || null;
+  }, [form.stageId, sortedStages]);
+
+  const stageProbabilityPct = Math.round(((selectedStage?.probability ?? 0) as number) * 100);
+
+  const openCreateModal = () => {
+    setError(null);
+    setEditingDeal(null);
+    setForm({
+      title: '',
+      value: '',
+      currency: 'USD',
+      expectedCloseDate: '',
+      clientId: '',
+      productIds: [],
+      stageId: defaultStageId,
+    });
+    setShowModal(true);
+  };
+
+  const openEditModal = (deal: Deal) => {
+    setError(null);
+    setEditingDeal(deal);
+    setForm({
+      title: deal.title ?? '',
+      value: deal.value === null || deal.value === undefined ? '' : String(deal.value),
+      currency: (String(deal.currency || 'USD').toUpperCase() as DealCurrency) || 'USD',
+      expectedCloseDate: toDateInputValue(deal.expectedCloseDate),
+      clientId: deal.clientId ?? '',
+      productIds: (deal.items ?? []).map((it) => it.productId).filter(Boolean),
+      stageId: deal.stageId,
+    });
+    setShowModal(true);
+  };
+
+  const openDealFromCard = (deal: Deal) => {
+    // Avoid opening the modal right after a drag & drop interaction.
+    if (Date.now() - lastDragAtRef.current < 250) return;
+    openEditModal(deal);
+  };
+
+  const handleSaveDeal = async () => {
     if (!form.title || !form.value || !pipelineId) return;
     setError(null);
-    const payload = {
-      title: form.title,
-      value: Number(form.value),
-      currency: form.currency,
-      expectedCloseDate: form.expectedCloseDate || undefined,
-      clientId: form.clientId || undefined,
-      pipelineId,
-      stageId: defaultStageId,
-      productIds: form.productIds,
-    };
     try {
-      const created = await api<Deal>('/deals', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      setDeals((prev) => [created, ...prev]);
+      const title = form.title.trim();
+      const value = Number(form.value);
+      if (!title) throw new Error('Deal name is required');
+      if (!Number.isFinite(value)) throw new Error('Amount must be a number');
+
+      const stageId = form.stageId || defaultStageId;
+      if (!stageId) throw new Error('Stage is required');
+
+      if (editingDeal) {
+        const updated = await api<Deal>(`/deals/${editingDeal.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            title,
+            value,
+            currency: form.currency,
+            expectedCloseDate: form.expectedCloseDate || undefined,
+            clientId: form.clientId ? form.clientId : null,
+          }),
+        });
+
+        if (stageId !== editingDeal.stageId) {
+          await api(`/deals/${editingDeal.id}/move-stage`, {
+            method: 'POST',
+            body: JSON.stringify({ stageId }),
+          });
+        }
+
+        setDeals((prev) =>
+          prev.map((deal) =>
+            deal.id === editingDeal.id ? { ...deal, ...updated, stageId } : deal,
+          ),
+        );
+      } else {
+        const created = await api<Deal>('/deals', {
+          method: 'POST',
+          body: JSON.stringify({
+            title,
+            value,
+            currency: form.currency,
+            expectedCloseDate: form.expectedCloseDate || undefined,
+            clientId: form.clientId || undefined,
+            pipelineId,
+            stageId,
+            productIds: form.productIds,
+          }),
+        });
+        setDeals((prev) => [created, ...prev]);
+      }
       setShowModal(false);
-      setForm({ title: '', value: '', currency: 'USD', expectedCloseDate: '', clientId: '', productIds: [] });
     } catch (err: any) {
       setError(err.message || 'Unable to create deal');
+    }
+  };
+
+  const handleDeleteDeal = async () => {
+    if (!editingDeal) return;
+    setError(null);
+    try {
+      await api(`/deals/${editingDeal.id}`, { method: 'DELETE' });
+      setDeals((prev) => prev.filter((d) => d.id !== editingDeal.id));
+      setShowModal(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to delete deal';
+      setError(message);
     }
   };
 
@@ -372,7 +471,7 @@ export default function CrmPage() {
                 </option>
               ))}
             </select>
-            <button className="btn-primary" onClick={() => setShowModal(true)}>
+            <button className="btn-primary" onClick={openCreateModal}>
               New deal
             </button>
           </div>
@@ -394,6 +493,10 @@ export default function CrmPage() {
               stage={stage}
               deals={deals.filter((deal) => deal.stageId === stage.id)}
               onMoveDeal={handleMoveDeal}
+              onOpenDeal={openDealFromCard}
+              onDealDragStart={() => {
+                lastDragAtRef.current = Date.now();
+              }}
               highlighted={highlightStageId === stage.id}
             />
           ))}
@@ -403,7 +506,7 @@ export default function CrmPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
             <div className="card w-full max-w-md p-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">New deal</h2>
+                <h2 className="text-xl font-semibold">{editingDeal ? 'Edit deal' : 'New deal'}</h2>
                 <button className="text-slate-400" onClick={() => setShowModal(false)}>
                   ✕
                 </button>
@@ -519,6 +622,32 @@ export default function CrmPage() {
                   {clientsError ? <p className="mt-2 text-xs text-red-200">{clientsError}</p> : null}
                 </label>
                 <label className="block text-sm text-slate-300">
+                  Stage
+                  <select
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                    value={form.stageId}
+                    onChange={(e) => setForm((prev) => ({ ...prev, stageId: e.target.value }))}
+                  >
+                    <option value="">{sortedStages.length ? 'Select stage' : 'No stages yet'}</option>
+                    {sortedStages.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} · {s.status} · {Math.round((s.probability ?? 0) * 100)}%
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block text-sm text-slate-300">
+                  Probability
+                  <input
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200"
+                    value={`${stageProbabilityPct}%`}
+                    readOnly
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">Probability comes from the selected stage.</p>
+                </label>
+
+                <label className="block text-sm text-slate-300">
                   Amount
                   <input
                     type="number"
@@ -589,11 +718,16 @@ export default function CrmPage() {
                 </div>
               </div>
               <div className="mt-6 flex items-center justify-end gap-2">
+                {editingDeal ? (
+                  <button className="btn-secondary" onClick={handleDeleteDeal}>
+                    Delete
+                  </button>
+                ) : null}
                 <button className="btn-secondary" onClick={() => setShowModal(false)}>
                   Cancel
                 </button>
-                <button className="btn-primary" onClick={handleCreateDeal}>
-                  Create deal
+                <button className="btn-primary" onClick={handleSaveDeal}>
+                  {editingDeal ? 'Save' : 'Create deal'}
                 </button>
               </div>
             </div>
@@ -608,14 +742,17 @@ function StageColumn({
   stage,
   deals,
   onMoveDeal,
+  onOpenDeal,
+  onDealDragStart,
   highlighted,
 }: {
   stage: Stage;
   deals: Deal[];
   onMoveDeal: (dealId: string, stageId: string) => void;
+  onOpenDeal: (deal: Deal) => void;
+  onDealDragStart: () => void;
   highlighted: boolean;
 }) {
-  const router = useRouter();
   const totals = deals.reduce<Record<string, number>>((acc, deal) => {
     const currency = (deal.currency || 'USD').toUpperCase();
     const value = Number(deal.value);
@@ -644,18 +781,13 @@ function StageColumn({
       }}
     >
       <div className="flex items-center justify-between">
-        <button
-          type="button"
-          className="text-left"
-          onClick={() => router.push(`/crm/stage/${stage.id}`)}
-          title="Open stage list"
-        >
+        <div className="text-left">
           <p className="text-sm text-slate-400">{stage.status}</p>
           <div className="flex items-center gap-2">
             <h3 className="text-lg font-semibold">{stage.name}</h3>
-            <span className="text-xs text-slate-500">→</span>
+            <span className="text-xs text-slate-500">{Math.round((stage.probability ?? 0) * 100)}%</span>
           </div>
-        </button>
+        </div>
         <div className="text-right">
           <p className="text-xs text-slate-400">Deals</p>
           <p className="text-sm font-semibold">{deals.length}</p>
@@ -667,15 +799,18 @@ function StageColumn({
           <div
             key={deal.id}
             draggable
-            onDragStart={(event) => event.dataTransfer.setData('text/plain', deal.id)}
+            onDragStart={(event) => {
+              event.dataTransfer.setData('text/plain', deal.id);
+              onDealDragStart();
+            }}
             role="button"
             tabIndex={0}
-            title="Open deal"
-            onClick={() => router.push(`/crm/deal/${deal.id}`)}
+            title="Edit deal"
+            onClick={() => onOpenDeal(deal)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                router.push(`/crm/deal/${deal.id}`);
+                onOpenDeal(deal);
               }
             }}
             className="cursor-pointer rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
