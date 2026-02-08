@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { AppService } from './app.service';
 import { PrismaService } from './prisma/prisma.service';
+import { readdir } from 'node:fs/promises';
 
 @Controller()
 export class AppController {
@@ -50,6 +51,17 @@ export class AppController {
         // _prisma_migrations may not exist if DB was created outside Prisma
       }
 
+      let migrationsOnDisk: string[] = [];
+      try {
+        const entries = await readdir('prisma/migrations', { withFileTypes: true });
+        migrationsOnDisk = entries
+          .filter((e) => e.isDirectory())
+          .map((e) => e.name)
+          .sort();
+      } catch {
+        // ignore fs errors (ex: missing folder)
+      }
+
       return {
         ok: true,
         db: true,
@@ -61,6 +73,7 @@ export class AppController {
           hasProductTables: hasTable('Product') && hasTable('DealItem'),
         },
         migrations,
+        migrationsOnDisk,
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
