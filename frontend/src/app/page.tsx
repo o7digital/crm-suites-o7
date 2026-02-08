@@ -13,6 +13,12 @@ const USD = new Intl.NumberFormat('en-US', {
 });
 const INT = new Intl.NumberFormat('en-US');
 
+function formatAmount(amount: number, currency: string) {
+  const cur = (currency || '').toUpperCase();
+  if (cur === 'USD') return USD.format(amount);
+  return INT.format(amount);
+}
+
 type DashboardPayload = {
   clients: number;
   tasks: Record<string, number>;
@@ -95,6 +101,20 @@ export default function DashboardPage() {
 
         {data && (
           <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+            {(() => {
+              const openByCurrency = (data.leads.openByCurrency ?? [])
+                .slice()
+                .sort((a, b) => a.currency.localeCompare(b.currency))
+                .map((row) => {
+                  const cur = (row.currency || 'USD').toUpperCase();
+                  const amount = Number(row.amount ?? 0);
+                  return `${cur} ${formatAmount(amount, cur)}`;
+                });
+              const openByCurrencyLabel = openByCurrency.length ? openByCurrency.join(' | ') : '—';
+              const currencyCount = openByCurrency.length;
+
+              return (
+                <>
             <MetricCard title="Clients" value={INT.format(data.clients)} hint="Total accounts in your tenant" />
             <MetricCard
               title="Open Tasks"
@@ -112,10 +132,14 @@ export default function DashboardPage() {
               hint="All deals (open + won + lost)"
             />
             <MetricCard
-              title="Open Pipeline Value (USD)"
-              value={USD.format(data.leads.amountUsd ?? 0)}
-              hint={`${data.leads.openUsd ?? 0} open USD deals (out of ${data.leads.open ?? 0} open)`}
+              title="Open Pipeline Value (by currency)"
+              value={openByCurrencyLabel}
+              valueClassName="mt-2 text-sm font-semibold leading-snug"
+              hint={`${INT.format(data.leads.open ?? 0)} open deals · ${INT.format(currencyCount)} currencies · USD-only: ${USD.format(data.leads.amountUsd ?? 0)} (${INT.format(data.leads.openUsd ?? 0)} deals)`}
             />
+                </>
+              );
+            })()}
           </div>
         )}
 
@@ -168,11 +192,21 @@ export default function DashboardPage() {
   );
 }
 
-function MetricCard({ title, value, hint }: { title: string; value: string | number; hint: string }) {
+function MetricCard({
+  title,
+  value,
+  hint,
+  valueClassName,
+}: {
+  title: string;
+  value: string | number;
+  hint: string;
+  valueClassName?: string;
+}) {
   return (
     <div className="card p-5">
       <p className="text-sm text-slate-400">{title}</p>
-      <p className="mt-2 text-3xl font-semibold">{value}</p>
+      <p className={valueClassName ?? 'mt-2 text-3xl font-semibold'}>{value}</p>
       <p className="text-xs text-slate-500">{hint}</p>
     </div>
   );
