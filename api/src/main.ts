@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { SchemaUpgraderService } from './prisma/schema-upgrader.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -35,6 +36,15 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  try {
+    await app.get(SchemaUpgraderService).run();
+    // eslint-disable-next-line no-console
+    console.log('[db] schema upgrade ok');
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.log('[db] schema upgrade skipped', err instanceof Error ? err.message : err);
+  }
 
   const port = process.env.PORT ?? 4000;
   await app.listen(port);
