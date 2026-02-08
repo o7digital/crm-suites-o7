@@ -46,6 +46,12 @@ export class BootstrapService {
       },
     });
 
+    // If this tenant has no OWNER (ex: legacy data before roles), promote the current user.
+    const ownerCount = await this.prisma.user.count({ where: { tenantId: user.tenantId, role: 'OWNER' } });
+    if (ownerCount === 0) {
+      await this.prisma.user.update({ where: { id: user.userId }, data: { role: 'OWNER' } });
+    }
+
     await this.ensureDefaultPipeline(user.tenantId);
   }
 
