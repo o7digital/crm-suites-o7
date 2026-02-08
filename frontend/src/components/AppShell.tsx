@@ -13,6 +13,7 @@ const nav = [
   { href: '/crm', label: 'CRM' },
   { href: '/forecast', label: 'Forecast' },
   { href: '/export', label: 'Export' },
+  { href: '/admin', label: 'Admin' },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

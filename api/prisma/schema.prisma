@@ -25,11 +25,18 @@ model Tenant {
   dealStageHistory DealStageHistory[]
 }
 
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
   password  String
   name      String
+  role      UserRole @default(MEMBER)
   tenantId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

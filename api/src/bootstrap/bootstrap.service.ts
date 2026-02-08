@@ -19,6 +19,17 @@ export class BootstrapService {
       create: { id: user.tenantId, name: meta.tenantName || 'Workspace' },
     });
 
+    // Assign OWNER to the first user of a tenant. Future users default to MEMBER.
+    const existingUser = await this.prisma.user.findFirst({
+      where: { id: user.userId, tenantId: user.tenantId },
+      select: { id: true },
+    });
+    let role: 'OWNER' | 'MEMBER' = 'MEMBER';
+    if (!existingUser) {
+      const count = await this.prisma.user.count({ where: { tenantId: user.tenantId } });
+      if (count === 0) role = 'OWNER';
+    }
+
     await this.prisma.user.upsert({
       where: { id: user.userId },
       update: {
@@ -30,6 +41,7 @@ export class BootstrapService {
         email: user.email,
         name: meta.name || user.email || 'User',
         password: '',
+        role,
         tenantId: user.tenantId,
       },
     });
