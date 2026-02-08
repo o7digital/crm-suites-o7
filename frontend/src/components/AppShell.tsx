@@ -11,7 +11,7 @@ const nav = [
   { href: '/tasks', label: 'Tasks' },
   { href: '/invoices', label: 'Invoices' },
   { href: '/crm', label: 'CRM' },
-  { href: '/post-sales', label: 'POST-SALES' },
+  { href: '/post-sales', label: 'Post-Sales' },
   { href: '/ia-pulse', label: 'o7 IA Pulse' },
   { href: '/forecast', label: 'Forecast' },
   { href: '/export', label: 'Export' },
