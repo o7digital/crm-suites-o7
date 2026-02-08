@@ -15,6 +15,8 @@ export class TasksService {
         title: dto.title,
         status: dto.status,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        amount: dto.amount,
+        currency: (dto.currency ?? 'USD').toUpperCase(),
         clientId: dto.clientId,
         tenantId: user.tenantId,
       },
@@ -38,6 +40,7 @@ export class TasksService {
       where: { id },
       data: {
         ...dto,
+        currency: dto.currency ? dto.currency.toUpperCase() : undefined,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       },
     });

@@ -10,11 +10,13 @@ type Task = {
   title: string;
   status: string;
   dueDate?: string;
+  amount?: number | string | null;
+  currency?: string;
   client?: { id: string; name: string };
 };
 
 type Client = { id: string; name: string };
-type TaskInput = { title: string; clientId: string; dueDate?: string };
+type TaskInput = { title: string; clientId: string; dueDate?: string; amount?: number; currency?: string };
 
 export default function TasksPage() {
   const { token } = useAuth();
@@ -73,6 +75,12 @@ export default function TasksPage() {
                 <p className="text-sm text-slate-400">
                   {task.client?.name ? `Client: ${task.client.name}` : 'No client'} ·{' '}
                   {task.dueDate ? `Due ${new Date(task.dueDate).toLocaleDateString()}` : 'No due date'}
+                  {task.amount !== null && task.amount !== undefined && task.amount !== '' ? (
+                    <>
+                      {' '}
+                      · {(task.currency || 'USD').toUpperCase()} {Number(task.amount).toLocaleString()}
+                    </>
+                  ) : null}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -105,21 +113,31 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
   const [title, setTitle] = useState('');
   const [clientId, setClientId] = useState('');
   const [dueDate, setDueDate] = useState('');
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState<'USD' | 'EUR' | 'MXN'>('USD');
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    await onSubmit({ title, clientId, dueDate: dueDate || undefined });
+    await onSubmit({
+      title,
+      clientId,
+      dueDate: dueDate || undefined,
+      amount: amount.trim() ? Number(amount) : undefined,
+      currency,
+    });
     setSaving(false);
     setTitle('');
     setClientId('');
     setDueDate('');
+    setAmount('');
+    setCurrency('USD');
   };
 
   return (
-    <form onSubmit={handleSubmit} className="card grid gap-3 p-4 md:grid-cols-3">
-      <div className="md:col-span-2">
+    <form onSubmit={handleSubmit} className="card grid gap-3 p-4 md:grid-cols-6">
+      <div className="md:col-span-3">
         <label className="text-sm text-slate-300">Task title</label>
         <input
           required
@@ -128,7 +146,7 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
           className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
         />
       </div>
-      <div>
+      <div className="md:col-span-3">
         <label className="text-sm text-slate-300">Client</label>
         <select
           required
@@ -144,7 +162,7 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
           ))}
         </select>
       </div>
-      <div>
+      <div className="md:col-span-2">
         <label className="text-sm text-slate-300">Due date</label>
         <input
           type="date"
@@ -153,7 +171,31 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
           className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
         />
       </div>
-      <div className="md:col-span-3 flex justify-end">
+      <div className="md:col-span-2">
+        <label className="text-sm text-slate-300">Amount</label>
+        <input
+          type="number"
+          inputMode="decimal"
+          step="0.01"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+          placeholder="0.00"
+        />
+      </div>
+      <div className="md:col-span-2">
+        <label className="text-sm text-slate-300">Currency</label>
+        <select
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value as 'USD' | 'EUR' | 'MXN')}
+          className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+        >
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="MXN">MXN</option>
+        </select>
+      </div>
+      <div className="md:col-span-6 flex justify-end">
         <button type="submit" className="btn-primary" disabled={saving}>
           {saving ? 'Adding…' : 'Add task'}
         </button>

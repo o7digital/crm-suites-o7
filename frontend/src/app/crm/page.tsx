@@ -29,6 +29,9 @@ type Deal = {
   pipelineId: string;
 };
 
+const DEAL_CURRENCIES = ['USD', 'EUR', 'MXN', 'CAD'] as const;
+type DealCurrency = (typeof DEAL_CURRENCIES)[number];
+
 export default function CrmPage() {
   const { token } = useAuth();
   const api = useApi(token);
@@ -39,7 +42,11 @@ export default function CrmPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ title: '', value: '', currency: 'USD' });
+  const [form, setForm] = useState<{ title: string; value: string; currency: DealCurrency }>({
+    title: '',
+    value: '',
+    currency: 'USD',
+  });
 
   useEffect(() => {
     if (!token) return;
@@ -190,11 +197,17 @@ export default function CrmPage() {
                 </label>
                 <label className="block text-sm text-slate-300">
                   Currency
-                  <input
+                  <select
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.currency}
-                    onChange={(e) => setForm((prev) => ({ ...prev, currency: e.target.value }))}
-                  />
+                    onChange={(e) => setForm((prev) => ({ ...prev, currency: e.target.value as DealCurrency }))}
+                  >
+                    {DEAL_CURRENCIES.map((cur) => (
+                      <option key={cur} value={cur}>
+                        {cur}
+                      </option>
+                    ))}
+                  </select>
                 </label>
               </div>
               <div className="mt-6 flex items-center justify-end gap-2">
@@ -222,7 +235,19 @@ function StageColumn({
   deals: Deal[];
   onMoveDeal: (dealId: string, stageId: string) => void;
 }) {
-  const total = deals.reduce((sum, deal) => sum + Number(deal.value), 0);
+  const totals = deals.reduce<Record<string, number>>((acc, deal) => {
+    const currency = (deal.currency || 'USD').toUpperCase();
+    const value = Number(deal.value);
+    if (!Number.isFinite(value)) return acc;
+    acc[currency] = (acc[currency] || 0) + value;
+    return acc;
+  }, {});
+
+  const totalLabel = (() => {
+    const entries = Object.entries(totals).sort(([a], [b]) => a.localeCompare(b));
+    if (entries.length === 0) return '—';
+    return entries.map(([currency, value]) => `${currency} ${value.toLocaleString()}`).join(' | ');
+  })();
 
   return (
     <div
@@ -246,7 +271,7 @@ function StageColumn({
           <p className="text-sm font-semibold">{deals.length}</p>
         </div>
       </div>
-      <p className="mt-2 text-xs text-slate-400">Total: ${total.toLocaleString()}</p>
+      <p className="mt-2 text-xs text-slate-400">Total: {totalLabel}</p>
       <div className="mt-4 space-y-3">
         {deals.map((deal) => (
           <div
