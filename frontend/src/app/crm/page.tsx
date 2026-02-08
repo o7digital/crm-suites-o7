@@ -61,6 +61,8 @@ export default function CrmPage() {
   const [stages, setStages] = useState<Stage[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [requestedStageId, setRequestedStageId] = useState<string | null>(null);
+  const [highlightStageId, setHighlightStageId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -94,13 +96,17 @@ export default function CrmPage() {
       .then((data) => {
         setPipelines(data);
         let requested: string | null = null;
+        let requestedStage: string | null = null;
         if (typeof window !== 'undefined') {
           try {
-            requested = new URLSearchParams(window.location.search).get('pipelineId');
+            const params = new URLSearchParams(window.location.search);
+            requested = params.get('pipelineId');
+            requestedStage = params.get('stageId');
           } catch {
             // ignore malformed URL
           }
         }
+        setRequestedStageId(requestedStage || null);
         const match = requested ? data.find((p) => p.id === requested) : null;
         const defaultPipeline = match || data.find((p) => p.isDefault) || data[0];
         setPipelineId(defaultPipeline?.id || '');
@@ -127,6 +133,23 @@ export default function CrmPage() {
   const sortedStages = useMemo(() => {
     return [...stages].sort((a, b) => a.position - b.position);
   }, [stages]);
+
+  useEffect(() => {
+    if (!requestedStageId) return;
+    if (sortedStages.length === 0) return;
+
+    const exists = sortedStages.some((stage) => stage.id === requestedStageId);
+    if (!exists) return;
+
+    const el = document.getElementById(`stage-${requestedStageId}`);
+    if (!el) return;
+
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setHighlightStageId(requestedStageId);
+
+    const timer = window.setTimeout(() => setHighlightStageId(null), 2500);
+    return () => window.clearTimeout(timer);
+  }, [requestedStageId, sortedStages]);
 
   const defaultStageId = useMemo(() => {
     const openStage = sortedStages.find((stage) => stage.status === 'OPEN');
@@ -172,6 +195,14 @@ export default function CrmPage() {
     }
   };
 
+  const focusStage = (stageId: string) => {
+    setRequestedStageId(stageId);
+    setHighlightStageId(stageId);
+    router.replace(
+      `/crm?pipelineId=${encodeURIComponent(pipelineId)}&stageId=${encodeURIComponent(stageId)}`,
+    );
+  };
+
   return (
     <Guard>
       <AppShell>
@@ -187,6 +218,8 @@ export default function CrmPage() {
               onChange={(e) => {
                 const next = e.target.value;
                 setPipelineId(next);
+                setRequestedStageId(null);
+                setHighlightStageId(null);
                 router.replace(`/crm?pipelineId=${next}`);
               }}
             >
@@ -218,6 +251,8 @@ export default function CrmPage() {
               stage={stage}
               deals={deals.filter((deal) => deal.stageId === stage.id)}
               onMoveDeal={handleMoveDeal}
+              onFocusStage={focusStage}
+              highlighted={highlightStageId === stage.id}
             />
           ))}
         </div>
@@ -330,12 +365,15 @@ function StageColumn({
   stage,
   deals,
   onMoveDeal,
+  onFocusStage,
+  highlighted,
 }: {
   stage: Stage;
   deals: Deal[];
   onMoveDeal: (dealId: string, stageId: string) => void;
+  onFocusStage: (stageId: string) => void;
+  highlighted: boolean;
 }) {
-  const router = useRouter();
   const totals = deals.reduce<Record<string, number>>((acc, deal) => {
     const currency = (deal.currency || 'USD').toUpperCase();
     const value = Number(deal.value);
@@ -352,7 +390,8 @@ function StageColumn({
 
   return (
     <div
-      className="card p-4"
+      id={`stage-${stage.id}`}
+      className={`card p-4 ${highlighted ? 'ring-2 ring-cyan-400/40 shadow-lg shadow-cyan-500/10' : ''}`}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
@@ -366,8 +405,8 @@ function StageColumn({
         <button
           type="button"
           className="text-left"
-          onClick={() => router.push(`/crm/stage/${stage.id}`)}
-          title="Open stage list"
+          onClick={() => onFocusStage(stage.id)}
+          title="Focus stage"
         >
           <p className="text-sm text-slate-400">{stage.status}</p>
           <div className="flex items-center gap-2">

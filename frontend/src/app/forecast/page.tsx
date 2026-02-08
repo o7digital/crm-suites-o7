@@ -114,7 +114,12 @@ export default function ForecastPage() {
                     {forecast.byStage.map((row) => (
                       <tr key={row.stageId} className="border-t border-white/5">
                         <td className="py-2 text-left font-medium">
-                          <Link href={`/crm/stage/${row.stageId}`} className="hover:underline">
+                          <Link
+                            href={`/crm?pipelineId=${encodeURIComponent(pipelineId)}&stageId=${encodeURIComponent(
+                              row.stageId,
+                            )}`}
+                            className="hover:underline"
+                          >
                             {row.stageName}
                           </Link>
                         </td>
