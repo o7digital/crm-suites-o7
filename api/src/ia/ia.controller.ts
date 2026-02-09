@@ -1,4 +1,10 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  InternalServerErrorException,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
 import { HfClientService } from './hf-client.service';
 import { SentimentDto } from './dto/sentiment.dto';
@@ -17,29 +23,37 @@ export class IaController {
 
   @Post('sentiment')
   async sentiment(@Body() body: SentimentDto) {
-    const output: any = await this.hf.callHuggingFace(SENTIMENT_MODEL, {
-      inputs: body.text,
-      options: { wait_for_model: true },
-    });
+    try {
+      const output: unknown = await this.hf.callHuggingFace(SENTIMENT_MODEL, {
+        inputs: body.text,
+        options: { wait_for_model: true },
+      });
 
-    const { label, score } = pickBestLabelScore(output);
+      const { label, score } = pickBestLabelScore(output);
 
-    return {
-      sentiment: label ?? 'UNKNOWN',
-      confidence: score ?? 0,
-    };
+      return {
+        sentiment: label ?? 'UNKNOWN',
+        confidence: score ?? 0,
+      };
+    } catch (err) {
+      throw new InternalServerErrorException(toErrorMessage(err));
+    }
   }
 
   @Post('summary')
   async summary(@Body() body: SummaryDto) {
-    const output: any = await this.hf.callHuggingFace(SUMMARY_MODEL, {
-      inputs: body.text,
-      parameters: { max_length: 150, min_length: 60 },
-      options: { wait_for_model: true },
-    });
+    try {
+      const output: unknown = await this.hf.callHuggingFace(SUMMARY_MODEL, {
+        inputs: body.text,
+        parameters: { max_length: 150, min_length: 60 },
+        options: { wait_for_model: true },
+      });
 
-    const summaryText = extractSummaryText(output);
-    return { summary: summaryText };
+      const summaryText = extractSummaryText(output);
+      return { summary: summaryText };
+    } catch (err) {
+      throw new InternalServerErrorException(toErrorMessage(err));
+    }
   }
 
   @Post('draft-email')
@@ -57,16 +71,20 @@ export class IaController {
       '',
     ].join('\n');
 
-    const output: any = await this.hf.callHuggingFace(INSTRUCT_MODEL, {
-      inputs: prompt,
-      parameters: { max_new_tokens: 250, return_full_text: false },
-      options: { wait_for_model: true },
-    });
+    try {
+      const output: unknown = await this.hf.callHuggingFace(INSTRUCT_MODEL, {
+        inputs: prompt,
+        parameters: { max_new_tokens: 250, return_full_text: false },
+        options: { wait_for_model: true },
+      });
 
-    const textOut = extractGeneratedText(output);
-    const { subject, body: emailBody } = parseEmailSubjectBody(textOut);
+      const textOut = extractGeneratedText(output);
+      const { subject, body: emailBody } = parseEmailSubjectBody(textOut);
 
-    return { subject, body: emailBody };
+      return { subject, body: emailBody };
+    } catch (err) {
+      throw new InternalServerErrorException(toErrorMessage(err));
+    }
   }
 
   @Post('improve-proposal')
@@ -81,37 +99,64 @@ export class IaController {
       '',
     ].join('\n');
 
-    const output: any = await this.hf.callHuggingFace(INSTRUCT_MODEL, {
-      inputs: prompt,
-      parameters: { max_new_tokens: 350, return_full_text: false },
-      options: { wait_for_model: true },
-    });
+    try {
+      const output: unknown = await this.hf.callHuggingFace(INSTRUCT_MODEL, {
+        inputs: prompt,
+        parameters: { max_new_tokens: 350, return_full_text: false },
+        options: { wait_for_model: true },
+      });
 
-    const improved = extractGeneratedText(output).trim();
-    return { improvedProposal: improved };
+      const improved = extractGeneratedText(output).trim();
+      return { improvedProposal: improved };
+    } catch (err) {
+      throw new InternalServerErrorException(toErrorMessage(err));
+    }
   }
 }
 
-function pickBestLabelScore(output: any): {
+function toErrorMessage(err: unknown): string {
+  if (!err) return 'Unknown error';
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return String(err);
+  }
+}
+
+function scoreOrNull(obj: unknown): number | null {
+  if (!obj || typeof obj !== 'object') return null;
+  const rec = obj as Record<string, unknown>;
+  return typeof rec.score === 'number' ? rec.score : null;
+}
+
+function pickBestLabelScore(output: unknown): {
   label: string | null;
   score: number | null;
 } {
-  const pick = (obj: any) => ({
-    label: typeof obj?.label === 'string' ? obj.label : null,
-    score: typeof obj?.score === 'number' ? obj.score : null,
-  });
+  const pick = (obj: unknown) => {
+    if (!obj || typeof obj !== 'object') return { label: null, score: null };
+    const rec = obj as Record<string, unknown>;
+    return {
+      label: typeof rec.label === 'string' ? rec.label : null,
+      score: typeof rec.score === 'number' ? rec.score : null,
+    };
+  };
 
   if (Array.isArray(output)) {
     if (output.length === 0) return { label: null, score: null };
     const first = output[0];
     if (Array.isArray(first)) {
       // When `return_all_scores` is enabled, HF returns a list of labels; pick the max score.
-      const best = first.reduce((acc: any, cur: any) => {
-        if (!cur || typeof cur.score !== 'number') return acc;
-        if (!acc || typeof acc.score !== 'number') return cur;
-        return cur.score > acc.score ? cur : acc;
+      const best = first.reduce<unknown>((acc, cur) => {
+        const curScore = scoreOrNull(cur);
+        if (curScore === null) return acc;
+        const accScore = scoreOrNull(acc);
+        if (accScore === null) return cur;
+        return curScore > accScore ? cur : acc;
       }, null);
-      return pick(best ?? first[0]);
+      return pick(best ?? (first.length ? first[0] : null));
     }
     return pick(first);
   }
@@ -119,25 +164,33 @@ function pickBestLabelScore(output: any): {
   return pick(output);
 }
 
-function extractSummaryText(output: any): string {
+function extractSummaryText(output: unknown): string {
   if (Array.isArray(output)) {
     const first = output[0];
-    if (first && typeof first.summary_text === 'string')
-      return first.summary_text;
+    if (first && typeof first === 'object') {
+      const rec = first as Record<string, unknown>;
+      if (typeof rec.summary_text === 'string') return rec.summary_text;
+    }
   }
-  if (output && typeof output.summary_text === 'string')
-    return output.summary_text;
+  if (output && typeof output === 'object') {
+    const rec = output as Record<string, unknown>;
+    if (typeof rec.summary_text === 'string') return rec.summary_text;
+  }
   return '';
 }
 
-function extractGeneratedText(output: any): string {
+function extractGeneratedText(output: unknown): string {
   if (Array.isArray(output)) {
     const first = output[0];
-    if (first && typeof first.generated_text === 'string')
-      return first.generated_text;
+    if (first && typeof first === 'object') {
+      const rec = first as Record<string, unknown>;
+      if (typeof rec.generated_text === 'string') return rec.generated_text;
+    }
   }
-  if (output && typeof output.generated_text === 'string')
-    return output.generated_text;
+  if (output && typeof output === 'object') {
+    const rec = output as Record<string, unknown>;
+    if (typeof rec.generated_text === 'string') return rec.generated_text;
+  }
   if (typeof output === 'string') return output;
   try {
     return JSON.stringify(output);
