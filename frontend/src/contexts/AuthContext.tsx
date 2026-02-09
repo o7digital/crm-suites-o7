@@ -23,7 +23,10 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const API_URL =
+  process.env.NEXT_PUBLIC_API_ROOT ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:4000/api';
 
 function generateTenantId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
