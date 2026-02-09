@@ -4,7 +4,20 @@ import { useMemo, useState } from 'react';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useIA } from '@/hooks/useIA';
-import { IAResultSection } from '@/components/IAResultSection';
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  Heading,
+  Input,
+  Separator,
+  SimpleGrid,
+  Spinner,
+  Stack,
+  Text,
+  Textarea,
+} from '@chakra-ui/react';
 
 export default function IaPulsePage() {
   const [text, setText] = useState('');
@@ -42,170 +55,154 @@ export default function IaPulsePage() {
     reset();
   };
 
+  const errors = useMemo(
+    () =>
+      [errorSentiment, errorSummary, errorEmail, errorImprove].filter(
+        (x): x is string => Boolean(x),
+      ),
+    [errorEmail, errorImprove, errorSentiment, errorSummary],
+  );
+
   return (
     <Guard>
       <AppShell>
-        <div className="mx-auto max-w-3xl">
-          <div className="mb-6">
-            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">o7 IA Pulse</p>
-            <h1 className="text-3xl font-semibold">Assistant commercial intelligent</h1>
-            <p className="mt-2 text-sm text-slate-400">
-              Collez un texte (notes, lead, email, proposition) puis lancez une action IA. Les traitements tournent
-              côté backend.
-            </p>
-          </div>
+        <Box maxW="900px" mx="auto" p={{ base: 0, md: 2 }} color="whiteAlpha.900">
+          <Heading mb={2} size="lg">
+            o7 IA Pulse
+          </Heading>
+          <Text color="whiteAlpha.700" mb={6}>
+            Assistant commercial intelligent (sentiment, emails, devis, resumes)
+          </Text>
 
-          <div className="card p-6">
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-slate-300">Texte</label>
-                <textarea
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="Collez ici le texte du lead / notes / email / proposition"
-                  rows={5}
-                  className="mt-1 w-full resize-y rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
-                />
-                <p className="mt-1 text-xs text-slate-400">{text.trim().length} characters</p>
-              </div>
+          <Stack gap={4}>
+            <Textarea
+              placeholder="Collez ici le texte du lead, notes, email ou devis..."
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={6}
+              bg="whiteAlpha.50"
+              borderColor="whiteAlpha.200"
+              _focusVisible={{ borderColor: 'cyan.300' }}
+            />
 
-              <div>
-                <label className="text-sm text-slate-300">Nom du lead</label>
-                <input
-                  value={leadName}
-                  onChange={(e) => setLeadName(e.target.value)}
-                  placeholder="Nom du lead (pour l'email)"
-                  className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
-                />
-              </div>
+            <Input
+              placeholder="Nom du lead (pour les emails)"
+              value={leadName}
+              onChange={(e) => setLeadName(e.target.value)}
+              bg="whiteAlpha.50"
+              borderColor="whiteAlpha.200"
+              _focusVisible={{ borderColor: 'cyan.300' }}
+            />
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="btn-primary disabled:opacity-50"
-                  disabled={!canUseText || loadingSentiment}
-                  onClick={() => analyzeLead(text.trim())}
-                >
-                  {loadingSentiment ? 'Chargement...' : 'Analyser lead'}
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary disabled:opacity-50"
-                  disabled={!canUseText || loadingSummary}
-                  onClick={() => summarize(text.trim())}
-                >
-                  {loadingSummary ? 'Chargement...' : 'Résumé'}
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary disabled:opacity-50"
-                  disabled={!canGenerateEmail || loadingEmail}
-                  onClick={() => generateEmail(leadName.trim(), text.trim())}
-                >
-                  {loadingEmail ? 'Chargement...' : 'Générer Email'}
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary disabled:opacity-50"
-                  disabled={!canUseText || loadingImprove}
-                  onClick={() => improveProposal(text.trim())}
-                >
-                  {loadingImprove ? 'Chargement...' : 'Améliorer devis'}
-                </button>
-                <div className="flex-1" />
-                <button type="button" className="btn-secondary" onClick={clearAll}>
-                  Effacer tout
-                </button>
-              </div>
+            <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} gap={3}>
+              <Button
+                colorScheme="blue"
+                disabled={!canUseText || loadingSentiment}
+                onClick={() => void analyzeLead(text.trim())}
+              >
+                {loadingSentiment ? <Spinner size="sm" /> : 'Analyser lead'}
+              </Button>
 
-              {!canUseText ? <p className="text-xs text-slate-400">Ajoutez du texte pour activer les actions IA.</p> : null}
-              {canUseText && !leadName.trim() ? (
-                <p className="text-xs text-slate-400">Le champ “Nom du lead” est requis uniquement pour “Générer Email”.</p>
-              ) : null}
-            </div>
-          </div>
+              <Button
+                colorScheme="teal"
+                disabled={!canUseText || loadingSummary}
+                onClick={() => void summarize(text.trim())}
+              >
+                {loadingSummary ? <Spinner size="sm" /> : 'Resumer'}
+              </Button>
 
-          <div className="mt-6 space-y-4">
-            <IAResultSection
-              title="Analyse de sentiment"
-              subtitle="Sentiment + niveau de confiance"
-              loading={loadingSentiment}
-              error={errorSentiment}
-              copyText={sentiment ? JSON.stringify(sentiment, null, 2) : ''}
-            >
-              {sentiment ? (
-                <div className="space-y-2 text-sm text-slate-200">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-slate-400">Sentiment</span>
-                    <span className="font-semibold">{sentiment.sentiment}</span>
-                  </div>
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-slate-400">Confidence</span>
-                    <span className="font-semibold">{Math.round(sentiment.confidence * 100)}%</span>
-                  </div>
-                  <pre className="mt-3 overflow-auto rounded-lg bg-black/20 p-3 text-xs ring-1 ring-white/10">
+              <Button
+                colorScheme="purple"
+                disabled={!canGenerateEmail || loadingEmail}
+                onClick={() => void generateEmail(leadName.trim(), text.trim())}
+              >
+                {loadingEmail ? <Spinner size="sm" /> : 'Generer email'}
+              </Button>
+
+              <Button
+                colorScheme="orange"
+                disabled={!canUseText || loadingImprove}
+                onClick={() => void improveProposal(text.trim())}
+              >
+                {loadingImprove ? <Spinner size="sm" /> : 'Ameliorer devis'}
+              </Button>
+            </SimpleGrid>
+
+            <Box display="flex" justifyContent="flex-end">
+              <Button variant="outline" borderColor="whiteAlpha.300" onClick={clearAll}>
+                Effacer tout
+              </Button>
+            </Box>
+          </Stack>
+
+          {errors.length ? (
+            <Alert.Root status="error" mt={6} borderRadius="md">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>Erreur</Alert.Title>
+                <Alert.Description>
+                  <Box mt={1}>
+                    {errors.map((message, idx) => (
+                      <Text key={`${message}-${idx}`}>{message}</Text>
+                    ))}
+                  </Box>
+                </Alert.Description>
+              </Alert.Content>
+            </Alert.Root>
+          ) : null}
+
+          <Separator my={8} borderColor="whiteAlpha.200" />
+
+          <Stack gap={6}>
+            {sentiment ? (
+              <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
+                <Card.Body>
+                  <Heading size="sm" mb={2}>
+                    Analyse de sentiment
+                  </Heading>
+                  <Box as="pre" fontSize="sm" whiteSpace="pre-wrap">
                     {JSON.stringify(sentiment, null, 2)}
-                  </pre>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400">Aucun résultat pour le moment.</p>
-              )}
-            </IAResultSection>
+                  </Box>
+                </Card.Body>
+              </Card.Root>
+            ) : null}
 
-            <IAResultSection
-              title="Résumé"
-              subtitle="Résumé automatique du texte"
-              loading={loadingSummary}
-              error={errorSummary}
-              copyText={summary?.summary || ''}
-            >
-              {summary?.summary ? (
-                <p className="whitespace-pre-wrap text-sm text-slate-200">{summary.summary}</p>
-              ) : (
-                <p className="text-sm text-slate-400">Aucun résumé pour le moment.</p>
-              )}
-            </IAResultSection>
+            {summary?.summary ? (
+              <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
+                <Card.Body>
+                  <Heading size="sm" mb={2}>
+                    Resume
+                  </Heading>
+                  <Text whiteSpace="pre-wrap">{summary.summary}</Text>
+                </Card.Body>
+              </Card.Root>
+            ) : null}
 
-            <IAResultSection
-              title="Email généré"
-              subtitle="Objet + corps d'email de suivi"
-              loading={loadingEmail}
-              error={errorEmail}
-              copyText={
-                draftEmail ? `Subject: ${draftEmail.subject}\n\n${draftEmail.body}` : ''
-              }
-            >
-              {draftEmail ? (
-                <div className="space-y-3 text-sm text-slate-200">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Objet</p>
-                    <p className="mt-1 font-semibold">{draftEmail.subject || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Body</p>
-                    <p className="mt-1 whitespace-pre-wrap">{draftEmail.body || '—'}</p>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400">Aucun email généré pour le moment.</p>
-              )}
-            </IAResultSection>
+            {draftEmail ? (
+              <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
+                <Card.Body>
+                  <Heading size="sm" mb={2}>
+                    Email genere
+                  </Heading>
+                  <Text fontWeight="bold">Objet :</Text>
+                  <Text mb={3}>{draftEmail.subject || '—'}</Text>
+                  <Text whiteSpace="pre-wrap">{draftEmail.body || '—'}</Text>
+                </Card.Body>
+              </Card.Root>
+            ) : null}
 
-            <IAResultSection
-              title="Proposition améliorée"
-              subtitle="Reformulation plus claire et convaincante"
-              loading={loadingImprove}
-              error={errorImprove}
-              copyText={improvedProposal?.improvedProposal || ''}
-            >
-              {improvedProposal?.improvedProposal ? (
-                <p className="whitespace-pre-wrap text-sm text-slate-200">{improvedProposal.improvedProposal}</p>
-              ) : (
-                <p className="text-sm text-slate-400">Aucun texte amélioré pour le moment.</p>
-              )}
-            </IAResultSection>
-          </div>
-        </div>
+            {improvedProposal?.improvedProposal ? (
+              <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
+                <Card.Body>
+                  <Heading size="sm" mb={2}>
+                    Proposition amelioree
+                  </Heading>
+                  <Text whiteSpace="pre-wrap">{improvedProposal.improvedProposal}</Text>
+                </Card.Body>
+              </Card.Root>
+            ) : null}
+          </Stack>
+        </Box>
       </AppShell>
     </Guard>
   );

@@ -23,9 +23,21 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function normalizeApiBase(raw?: string): string {
+  const value = (raw || '').trim();
+  if (!value) return '';
+  const trimmed = value.replace(/\/+$/, '');
+  if (trimmed.endsWith('/api')) return trimmed;
+  return `${trimmed}/api`;
+}
+
+// Supports:
+// - NEXT_PUBLIC_API_ROOT = https://my-backend (origin)
+// - NEXT_PUBLIC_API_ROOT = https://my-backend/api (full prefix)
+// - NEXT_PUBLIC_API_URL  = http://localhost:4000/api (legacy)
 const API_URL =
-  process.env.NEXT_PUBLIC_API_ROOT ||
-  process.env.NEXT_PUBLIC_API_URL ||
+  normalizeApiBase(process.env.NEXT_PUBLIC_API_ROOT) ||
+  normalizeApiBase(process.env.NEXT_PUBLIC_API_URL) ||
   'http://localhost:4000/api';
 
 function generateTenantId() {
