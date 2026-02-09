@@ -1,7 +1,7 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
@@ -24,6 +24,23 @@ type Client = {
   createdAt: string;
 };
 
+type ClientDetails = {
+  id: string;
+  firstName?: string | null;
+  name: string;
+  function?: string | null;
+  companySector?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  website?: string | null;
+  address?: string | null;
+  taxId?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type ClientCreatePayload = {
   firstName?: string;
   name: string;
@@ -39,6 +56,11 @@ type ClientCreatePayload = {
 };
 
 type ClientImportItem = { row: number; payload: ClientCreatePayload };
+
+function toOptionalTrimmed(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
 
 function parseContactLine(input: string): { name?: string; email?: string } {
   const raw = (input || '').trim();
@@ -62,13 +84,58 @@ function parseContactLine(input: string): { name?: string; email?: string } {
 }
 
 export default function ClientsPage() {
+  return (
+    <Guard>
+      <AppShell>
+        <Suspense fallback={<div className="mt-6 text-slate-300">Loading clients…</div>}>
+          <ClientsPageContent />
+        </Suspense>
+      </AppShell>
+    </Guard>
+  );
+}
+
+function ClientsPageContent() {
   const { token } = useAuth();
   const api = useApi(token);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const detailsClientId = searchParams.get('clientId');
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+
+  const [detailsClient, setDetailsClient] = useState<ClientDetails | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsSaving, setDetailsSaving] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [detailsSuccess, setDetailsSuccess] = useState<string | null>(null);
+  const [detailsForm, setDetailsForm] = useState<{
+    firstName: string;
+    name: string;
+    clientFunction: string;
+    companySector: string;
+    email: string;
+    company: string;
+    phone: string;
+    website: string;
+    taxId: string;
+    address: string;
+    notes: string;
+  }>({
+    firstName: '',
+    name: '',
+    clientFunction: '',
+    companySector: '',
+    email: '',
+    company: '',
+    phone: '',
+    website: '',
+    taxId: '',
+    address: '',
+    notes: '',
+  });
 
   const [importOpen, setImportOpen] = useState(false);
   const [importFileName, setImportFileName] = useState<string>('No file chosen');
@@ -138,6 +205,113 @@ export default function ClientsPage() {
       setError(message);
     }
   };
+
+  const detailsDisplayName = useMemo(() => {
+    return detailsClient ? getClientDisplayName(detailsClient) : 'Client';
+  }, [detailsClient]);
+
+  const closeDetails = useCallback(() => {
+    if (detailsSaving) return;
+    router.push('/clients');
+  }, [detailsSaving, router]);
+
+  const loadClientDetails = useCallback(
+    async (clientId: string) => {
+      setDetailsLoading(true);
+      setDetailsError(null);
+      setDetailsSuccess(null);
+      try {
+        const data = await api<ClientDetails>(`/clients/${clientId}`);
+        setDetailsClient(data);
+        setDetailsForm({
+          firstName: data.firstName ?? '',
+          name: data.name ?? '',
+          clientFunction: data.function ?? '',
+          companySector: data.companySector ?? '',
+          email: data.email ?? '',
+          company: data.company ?? '',
+          phone: data.phone ?? '',
+          website: data.website ?? '',
+          taxId: data.taxId ?? '',
+          address: data.address ?? '',
+          notes: data.notes ?? '',
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to load client';
+        setDetailsError(message);
+        setDetailsClient(null);
+      } finally {
+        setDetailsLoading(false);
+      }
+    },
+    [api],
+  );
+
+  useEffect(() => {
+    if (!token) return;
+    if (!detailsClientId) {
+      setDetailsClient(null);
+      setDetailsError(null);
+      setDetailsSuccess(null);
+      return;
+    }
+    loadClientDetails(detailsClientId);
+  }, [detailsClientId, loadClientDetails, token]);
+
+  const handleSaveDetails = useCallback(async () => {
+    if (!detailsClientId) return;
+    setDetailsSaving(true);
+    setDetailsError(null);
+    setDetailsSuccess(null);
+    try {
+      const nextName = detailsForm.name.trim();
+      if (!nextName) throw new Error('Name is required');
+
+      const updated = await api<ClientDetails>(`/clients/${detailsClientId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          firstName: toOptionalTrimmed(detailsForm.firstName),
+          name: nextName,
+          function: toOptionalTrimmed(detailsForm.clientFunction),
+          companySector: toOptionalTrimmed(detailsForm.companySector),
+          email: toOptionalTrimmed(detailsForm.email),
+          company: toOptionalTrimmed(detailsForm.company),
+          phone: toOptionalTrimmed(detailsForm.phone),
+          website: toOptionalTrimmed(detailsForm.website),
+          taxId: toOptionalTrimmed(detailsForm.taxId),
+          address: toOptionalTrimmed(detailsForm.address),
+          notes: toOptionalTrimmed(detailsForm.notes),
+        }),
+      });
+      setDetailsClient(updated);
+      setDetailsSuccess('Saved');
+      fetchClients();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to save client';
+      setDetailsError(message);
+    } finally {
+      setDetailsSaving(false);
+    }
+  }, [api, detailsClientId, detailsForm, fetchClients]);
+
+  const handleDeleteDetails = useCallback(async () => {
+    if (!detailsClientId) return;
+    const ok = confirm('Delete this client? This will also delete related tasks and invoices.');
+    if (!ok) return;
+    setDetailsSaving(true);
+    setDetailsError(null);
+    setDetailsSuccess(null);
+    try {
+      await api(`/clients/${detailsClientId}`, { method: 'DELETE' });
+      setClients((prev) => prev.filter((c) => c.id !== detailsClientId));
+      closeDetails();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to delete client';
+      setDetailsError(message);
+    } finally {
+      setDetailsSaving(false);
+    }
+  }, [api, closeDetails, detailsClientId]);
 
   const resetImportState = () => {
     setImportFileName('No file chosen');
@@ -313,230 +487,423 @@ export default function ClientsPage() {
   };
 
   return (
-    <Guard>
-      <AppShell>
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Accounts</p>
-            <h1 className="text-3xl font-semibold">Clients</h1>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button className="btn-secondary text-sm" onClick={handleExportCsv}>
-              Export CSV
-            </button>
-            <button
-              className="btn-secondary text-sm"
-              onClick={() => {
-                setImportOpen(true);
-                resetImportState();
-              }}
-            >
-              Import CSV
-            </button>
-          </div>
+    <>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Accounts</p>
+          <h1 className="text-3xl font-semibold">Clients</h1>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <button className="btn-secondary text-sm" onClick={handleExportCsv}>
+            Export CSV
+          </button>
+          <button
+            className="btn-secondary text-sm"
+            onClick={() => {
+              setImportOpen(true);
+              resetImportState();
+            }}
+          >
+            Import CSV
+          </button>
+        </div>
+      </div>
 
-        <ClientForm onSubmit={handleCreate} />
+      <ClientForm onSubmit={handleCreate} />
 
-        {loading && <div className="mt-6 text-slate-300">Loading clients...</div>}
-        {error && <div className="mt-4 rounded-lg bg-red-500/15 px-3 py-2 text-red-200">{error}</div>}
-        {actionMessage && <div className="mt-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-emerald-200">{actionMessage}</div>}
+      {loading && <div className="mt-6 text-slate-300">Loading clients...</div>}
+      {error && <div className="mt-4 rounded-lg bg-red-500/15 px-3 py-2 text-red-200">{error}</div>}
+      {actionMessage && (
+        <div className="mt-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-emerald-200">{actionMessage}</div>
+      )}
 
-        <div className="mt-6 space-y-3">
-          {clients.map((client) => (
-            <div
-              key={client.id}
-              className="card flex cursor-pointer flex-col gap-2 p-4 transition hover:bg-white/5 sm:flex-row sm:items-center sm:justify-between"
-              role="button"
-              tabIndex={0}
-              onClick={() => router.push(`/clients/${client.id}`)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  router.push(`/clients/${client.id}`);
-                }
-              }}
-            >
-              <div>
-                <p className="text-lg font-semibold">{getClientDisplayName(client)}</p>
-                <p className="text-sm text-slate-400">
-                  {client.email || '—'} · {client.company || 'No company'}
-                  {client.companySector ? ` · ${client.companySector}` : ''}
-                  {client.function ? ` · ${client.function}` : ''}
-                  {client.taxId ? ` · Tax ID: ${client.taxId}` : ''}
-                </p>
-                {client.website ? <p className="text-xs text-slate-500">{client.website}</p> : null}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(client.id);
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
+      <div className="mt-6 space-y-3">
+        {clients.map((client) => (
+          <div
+            key={client.id}
+            className="card flex cursor-pointer flex-col gap-2 p-4 transition hover:bg-white/5 sm:flex-row sm:items-center sm:justify-between"
+            role="button"
+            tabIndex={0}
+            onClick={() => router.push(`/clients?clientId=${encodeURIComponent(client.id)}`)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                router.push(`/clients?clientId=${encodeURIComponent(client.id)}`);
+              }
+            }}
+          >
+            <div>
+              <p className="text-lg font-semibold">{getClientDisplayName(client)}</p>
+              <p className="text-sm text-slate-400">
+                {client.email || '—'} · {client.company || 'No company'}
+                {client.companySector ? ` · ${client.companySector}` : ''}
+                {client.function ? ` · ${client.function}` : ''}
+                {client.taxId ? ` · Tax ID: ${client.taxId}` : ''}
+              </p>
+              {client.website ? <p className="text-xs text-slate-500">{client.website}</p> : null}
             </div>
-          ))}
-          {clients.length === 0 && !loading && (
-            <p className="text-sm text-slate-400">No clients yet. Add your first customer above.</p>
-          )}
-        </div>
+            <div className="flex gap-2">
+              <button
+                className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(client.id);
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+        {clients.length === 0 && !loading && (
+          <p className="text-sm text-slate-400">No clients yet. Add your first customer above.</p>
+        )}
+      </div>
 
-        {importOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-            <div className="card w-full max-w-xl p-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">Import clients (CSV)</h2>
+      {importOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="card w-full max-w-xl p-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Import clients (CSV)</h2>
+              <button
+                className="text-slate-400"
+                onClick={() => {
+                  if (importing) return;
+                  setImportOpen(false);
+                }}
+                title={importing ? 'Import in progress' : 'Close'}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  handleImportFileSelected(file);
+                }}
+              />
+
+              <div className="rounded-lg border border-dashed border-white/15 bg-white/5 p-4">
+                <p className="text-sm text-slate-300">Choose a CSV file</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Supported headers: First Name, Name, Email, Company, Phone, Website, Address, RFC/Tax ID, Notes,
+                  Function, Company Sector. Delimiters supported: comma, semicolon, tab, pipe.
+                </p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-slate-300">{importFileName}</p>
+                  <button
+                    type="button"
+                    className="btn-secondary text-sm"
+                    onClick={handleChooseImportFile}
+                    disabled={importing}
+                  >
+                    Select file
+                  </button>
+                </div>
+              </div>
+
+              {importParseError ? (
+                <div className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-200">{importParseError}</div>
+              ) : null}
+
+              {importItems.length > 0 ? (
+                <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-slate-300">
+                      Ready to import <span className="font-semibold text-slate-100">{importItems.length}</span> clients
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {importSkipped.length ? `${importSkipped.length} skipped` : 'No skipped rows'}
+                    </p>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {importItems.slice(0, 5).map((it, idx) => {
+                      const p = it.payload;
+                      return (
+                        <div
+                          key={`${it.row}-${idx}`}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        >
+                          <div>
+                            <p className="font-semibold">
+                              {getClientDisplayName({ firstName: p.firstName, name: p.name })}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {p.email || '—'}
+                              {p.company ? ` · ${p.company}` : ''}
+                              {p.companySector ? ` · ${p.companySector}` : ''}
+                              {p.function ? ` · ${p.function}` : ''}
+                            </p>
+                          </div>
+                          <p className="text-[11px] text-slate-500">Row {it.row}</p>
+                        </div>
+                      );
+                    })}
+                    {importItems.length > 5 ? (
+                      <p className="text-xs text-slate-500">Showing first 5 records…</p>
+                    ) : null}
+                  </div>
+
+                  {importProgress ? (
+                    <p className="mt-3 text-xs text-slate-400">
+                      Importing: {importProgress.done}/{importProgress.total}
+                    </p>
+                  ) : null}
+
+                  {importResult ? (
+                    <div className="mt-3 space-y-2">
+                      <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+                        Imported {importResult.created}, failed {importResult.failed}.
+                      </div>
+                      {importResult.errors.length ? (
+                        <details className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">
+                          <summary className="cursor-pointer text-slate-200">See errors</summary>
+                          <ul className="mt-2 list-disc pl-5 text-xs text-slate-400">
+                            {importResult.errors.slice(0, 50).map((e, i) => (
+                              <li key={i}>{e}</li>
+                            ))}
+                          </ul>
+                          {importResult.errors.length > 50 ? (
+                            <p className="mt-2 text-xs text-slate-500">Showing first 50 errors…</p>
+                          ) : null}
+                        </details>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {importSkipped.length ? (
+                <details className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">
+                  <summary className="cursor-pointer text-slate-200">Skipped rows</summary>
+                  <ul className="mt-2 list-disc pl-5 text-xs text-slate-400">
+                    {importSkipped.slice(0, 50).map((s, i) => (
+                      <li key={i}>
+                        Row {s.row}: {s.reason}
+                      </li>
+                    ))}
+                  </ul>
+                  {importSkipped.length > 50 ? (
+                    <p className="mt-2 text-xs text-slate-500">Showing first 50…</p>
+                  ) : null}
+                </details>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-2">
                 <button
-                  className="text-slate-400"
+                  type="button"
+                  className="btn-secondary"
                   onClick={() => {
                     if (importing) return;
                     setImportOpen(false);
                   }}
-                  title={importing ? 'Import in progress' : 'Close'}
+                  disabled={importing}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleImport}
+                  disabled={importing || importItems.length === 0}
+                >
+                  {importing ? 'Importing…' : 'Import'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailsClientId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="card w-full max-w-3xl p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Client</p>
+                <h2 className="text-xl font-semibold">{detailsDisplayName}</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary text-sm"
+                  onClick={() => loadClientDetails(detailsClientId)}
+                  disabled={detailsLoading || detailsSaving}
+                >
+                  Refresh
+                </button>
+                <button
+                  className="text-slate-400"
+                  onClick={closeDetails}
+                  title={detailsSaving ? 'Saving in progress' : 'Close'}
                 >
                   ✕
                 </button>
               </div>
+            </div>
 
-              <div className="mt-4 space-y-4">
-                <input
-                  ref={importInputRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    handleImportFileSelected(file);
-                  }}
-                />
+            <div className="mt-4 space-y-4">
+              {detailsLoading && <p className="text-slate-300">Loading client…</p>}
+              {detailsError && (
+                <div className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-200">{detailsError}</div>
+              )}
+              {detailsSuccess && (
+                <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{detailsSuccess}</div>
+              )}
 
-                <div className="rounded-lg border border-dashed border-white/15 bg-white/5 p-4">
-                  <p className="text-sm text-slate-300">Choose a CSV file</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Supported headers: First Name, Name, Email, Company, Phone, Website, Address, RFC/Tax ID, Notes, Function, Company Sector.
-                    Delimiters supported: comma, semicolon, tab, pipe.
-                  </p>
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-slate-300">{importFileName}</p>
-                    <button type="button" className="btn-secondary text-sm" onClick={handleChooseImportFile} disabled={importing}>
-                      Select file
-                    </button>
+              {!detailsLoading && detailsClient && (
+                <div className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="block text-sm text-slate-300">
+                      First name
+                      <input
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={detailsForm.firstName}
+                        onChange={(e) => setDetailsForm((prev) => ({ ...prev, firstName: e.target.value }))}
+                        autoComplete="given-name"
+                      />
+                    </label>
+                    <label className="block text-sm text-slate-300">
+                      Name
+                      <input
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={detailsForm.name}
+                        onChange={(e) => setDetailsForm((prev) => ({ ...prev, name: e.target.value }))}
+                        required
+                        autoComplete="family-name"
+                      />
+                    </label>
+                    <label className="block text-sm text-slate-300">
+                      Function
+                      <select
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={detailsForm.clientFunction}
+                        onChange={(e) => setDetailsForm((prev) => ({ ...prev, clientFunction: e.target.value }))}
+                      >
+                        <option value="">Select function</option>
+                        {CLIENT_FUNCTION_OPTIONS.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block text-sm text-slate-300">
+                      Company sector
+                      <input
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={detailsForm.companySector}
+                        onChange={(e) => setDetailsForm((prev) => ({ ...prev, companySector: e.target.value }))}
+                        placeholder="e.g. Technology, Finance, Healthcare"
+                      />
+                    </label>
+                    <label className="block text-sm text-slate-300">
+                      Email
+                      <input
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={detailsForm.email}
+                        onChange={(e) => setDetailsForm((prev) => ({ ...prev, email: e.target.value }))}
+                        type="email"
+                        autoComplete="email"
+                      />
+                    </label>
+                    <label className="block text-sm text-slate-300">
+                      Company
+                      <input
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={detailsForm.company}
+                        onChange={(e) => setDetailsForm((prev) => ({ ...prev, company: e.target.value }))}
+                        autoComplete="organization"
+                      />
+                    </label>
+                    <label className="block text-sm text-slate-300">
+                      Phone
+                      <input
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={detailsForm.phone}
+                        onChange={(e) => setDetailsForm((prev) => ({ ...prev, phone: e.target.value }))}
+                        autoComplete="tel"
+                      />
+                    </label>
+                    <label className="block text-sm text-slate-300">
+                      Website
+                      <input
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={detailsForm.website}
+                        onChange={(e) => setDetailsForm((prev) => ({ ...prev, website: e.target.value }))}
+                        placeholder="https://example.com"
+                        autoComplete="url"
+                      />
+                    </label>
+                    <label className="block text-sm text-slate-300">
+                      RFC / Tax ID
+                      <input
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={detailsForm.taxId}
+                        onChange={(e) => setDetailsForm((prev) => ({ ...prev, taxId: e.target.value }))}
+                      />
+                    </label>
+                    <div />
+                    <label className="block text-sm text-slate-300 md:col-span-2">
+                      Address
+                      <textarea
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={detailsForm.address}
+                        onChange={(e) => setDetailsForm((prev) => ({ ...prev, address: e.target.value }))}
+                        rows={3}
+                        placeholder="Street, number, city, state, ZIP, country"
+                      />
+                    </label>
+                    <label className="block text-sm text-slate-300 md:col-span-2">
+                      Notes
+                      <textarea
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={detailsForm.notes}
+                        onChange={(e) => setDetailsForm((prev) => ({ ...prev, notes: e.target.value }))}
+                        rows={4}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs text-slate-500">
+                      <p>Created: {new Date(detailsClient.createdAt).toLocaleString()}</p>
+                      <p>Updated: {new Date(detailsClient.updatedAt).toLocaleString()}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
+                        onClick={handleDeleteDetails}
+                        disabled={detailsSaving}
+                      >
+                        Delete
+                      </button>
+                      <button className="btn-primary" onClick={handleSaveDetails} disabled={detailsSaving}>
+                        {detailsSaving ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                {importParseError ? (
-                  <div className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-200">{importParseError}</div>
-                ) : null}
-
-                {importItems.length > 0 ? (
-                  <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-sm text-slate-300">
-                        Ready to import <span className="font-semibold text-slate-100">{importItems.length}</span> clients
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {importSkipped.length ? `${importSkipped.length} skipped` : 'No skipped rows'}
-                      </p>
-	                    </div>
-
-	                    <div className="mt-3 space-y-2">
-	                      {importItems.slice(0, 5).map((it, idx) => {
-	                        const p = it.payload;
-	                        return (
-	                          <div
-	                            key={`${it.row}-${idx}`}
-	                            className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-	                          >
-	                            <div>
-	                              <p className="font-semibold">
-	                                {getClientDisplayName({ firstName: p.firstName, name: p.name })}
-	                              </p>
-	                              <p className="text-xs text-slate-400">
-	                                {p.email || '—'}
-	                                {p.company ? ` · ${p.company}` : ''}
-	                                {p.companySector ? ` · ${p.companySector}` : ''}
-	                                {p.function ? ` · ${p.function}` : ''}
-	                              </p>
-	                            </div>
-	                            <p className="text-[11px] text-slate-500">Row {it.row}</p>
-	                          </div>
-	                        );
-	                      })}
-	                      {importItems.length > 5 ? (
-	                        <p className="text-xs text-slate-500">Showing first 5 records…</p>
-	                      ) : null}
-	                    </div>
-
-                    {importProgress ? (
-                      <p className="mt-3 text-xs text-slate-400">
-                        Importing: {importProgress.done}/{importProgress.total}
-                      </p>
-                    ) : null}
-
-                    {importResult ? (
-                      <div className="mt-3 space-y-2">
-                        <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-                          Imported {importResult.created}, failed {importResult.failed}.
-                        </div>
-                        {importResult.errors.length ? (
-                          <details className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">
-                            <summary className="cursor-pointer text-slate-200">See errors</summary>
-                            <ul className="mt-2 list-disc pl-5 text-xs text-slate-400">
-                              {importResult.errors.slice(0, 50).map((e, i) => (
-                                <li key={i}>{e}</li>
-                              ))}
-                            </ul>
-                            {importResult.errors.length > 50 ? (
-                              <p className="mt-2 text-xs text-slate-500">Showing first 50 errors…</p>
-                            ) : null}
-                          </details>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {importSkipped.length ? (
-                  <details className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">
-                    <summary className="cursor-pointer text-slate-200">Skipped rows</summary>
-                    <ul className="mt-2 list-disc pl-5 text-xs text-slate-400">
-                      {importSkipped.slice(0, 50).map((s, i) => (
-                        <li key={i}>
-                          Row {s.row}: {s.reason}
-                        </li>
-                      ))}
-                    </ul>
-                    {importSkipped.length > 50 ? <p className="mt-2 text-xs text-slate-500">Showing first 50…</p> : null}
-                  </details>
-                ) : null}
-
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => {
-                      if (importing) return;
-                      setImportOpen(false);
-                    }}
-                    disabled={importing}
-                  >
-                    Close
-                  </button>
-                  <button type="button" className="btn-primary" onClick={handleImport} disabled={importing || importItems.length === 0}>
-                    {importing ? 'Importing…' : 'Import'}
-                  </button>
-                </div>
+              <div className="flex justify-end">
+                <button type="button" className="btn-secondary" onClick={closeDetails} disabled={detailsSaving}>
+                  Close
+                </button>
               </div>
             </div>
           </div>
-        )}
-      </AppShell>
-    </Guard>
+        </div>
+      )}
+    </>
   );
 }
 
