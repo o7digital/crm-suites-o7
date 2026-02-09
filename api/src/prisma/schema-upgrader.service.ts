@@ -10,6 +10,7 @@ export class SchemaUpgraderService {
   async run() {
     await this.ensureDealClientId();
     await this.ensureProductsSchema();
+    await this.ensureClientProfileFields();
   }
 
   private async tableExists(table: string) {
@@ -151,5 +152,24 @@ export class SchemaUpgraderService {
       }
     }
   }
-}
 
+  private async ensureClientProfileFields() {
+    // New optional client profile fields added in 2026-02 (firstName/function/companySector).
+    // Keep the API resilient even if Prisma Migrate hasn't been executed yet.
+    const columns: Array<{ name: string; type: string }> = [
+      { name: 'firstName', type: 'TEXT' },
+      { name: 'function', type: 'TEXT' },
+      { name: 'companySector', type: 'TEXT' },
+    ];
+
+    for (const col of columns) {
+      const exists = await this.columnExists('Client', col.name);
+      if (exists) continue;
+      try {
+        await this.prisma.$executeRawUnsafe(`ALTER TABLE "Client" ADD COLUMN "${col.name}" ${col.type};`);
+      } catch {
+        // Ignore permissions / already-added races.
+      }
+    }
+  }
+}
