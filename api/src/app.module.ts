@@ -17,11 +17,13 @@ import { ForecastModule } from './forecast/forecast.module';
 import { AdminModule } from './admin/admin.module';
 import { ProductsModule } from './products/products.module';
 import { FxModule } from './fx/fx.module';
+import { IaModule } from './ia/ia.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     FxModule,
+    IaModule,
     PrismaModule,
     AuthModule,
     ClientsModule,
