@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../../../../components/AppShell';
 import { Guard } from '../../../../components/Guard';
 import { useApi, useAuth } from '../../../../contexts/AuthContext';
+import { getClientDisplayName } from '@/lib/clients';
+import { formatUsdTotal, toUsd, type FxRatesSnapshot } from '@/lib/fx';
 
 type Stage = {
   id: string;
@@ -19,6 +21,7 @@ type Stage = {
 
 type Client = {
   id: string;
+  firstName?: string | null;
   name: string;
   company?: string | null;
   email?: string | null;
@@ -62,6 +65,8 @@ export default function CrmStagePage() {
 
   const [stage, setStage] = useState<Stage | null>(null);
   const [deals, setDeals] = useState<Deal[]>([]);
+  const [fx, setFx] = useState<FxRatesSnapshot | null>(null);
+  const [fxLoading, setFxLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,6 +92,28 @@ export default function CrmStagePage() {
     load();
   }, [token, load]);
 
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    setFxLoading(true);
+    api<FxRatesSnapshot>('/fx/usd')
+      .then((data) => {
+        if (!active) return;
+        setFx(data);
+      })
+      .catch(() => {
+        if (!active) return;
+        setFx(null);
+      })
+      .finally(() => {
+        if (!active) return;
+        setFxLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, token]);
+
   const sortedDeals = useMemo(() => {
     return [...deals].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
   }, [deals]);
@@ -101,8 +128,29 @@ export default function CrmStagePage() {
     }, {});
     const entries = Object.entries(totals).sort(([a], [b]) => a.localeCompare(b));
     if (entries.length === 0) return '—';
-    return entries.map(([cur, val]) => `${cur} ${val.toLocaleString()}`).join(' | ');
-  }, [sortedDeals]);
+
+    const hasNonUsd = entries.some(([currency]) => currency !== 'USD');
+    if (!hasNonUsd) {
+      const usd = totals.USD ?? 0;
+      return formatUsdTotal(usd);
+    }
+
+    if (!fx) return fxLoading ? 'USD …' : 'USD —';
+
+    const missing = entries
+      .map(([currency]) => currency)
+      .filter((currency) => currency !== 'USD')
+      .filter((currency) => toUsd(1, currency, fx) === null);
+    if (missing.length > 0) return 'USD —';
+
+    const usdTotal = entries.reduce((sum, [currency, value]) => {
+      if (currency === 'USD') return sum + value;
+      const converted = toUsd(value, currency, fx);
+      return converted === null ? sum : sum + converted;
+    }, 0);
+
+    return formatUsdTotal(usdTotal);
+  }, [fx, fxLoading, sortedDeals]);
 
   return (
     <Guard>
@@ -153,9 +201,9 @@ export default function CrmStagePage() {
                         {(deal.currency || 'USD').toUpperCase()} {Number(deal.value).toLocaleString()}
                       </p>
                     </div>
-                    {deal.client?.name ? (
+                    {deal.client ? (
                       <p className="mt-1 text-xs text-slate-400">
-                        Client: {deal.client.name}
+                        Client: {getClientDisplayName(deal.client)}
                         {deal.client.company ? ` · ${deal.client.company}` : ''}
                       </p>
                     ) : null}

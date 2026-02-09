@@ -6,6 +6,8 @@ import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
+import { CLIENT_FUNCTION_OPTIONS, getClientDisplayName } from '@/lib/clients';
+import { formatUsdTotal, toUsd, type FxRatesSnapshot } from '@/lib/fx';
 
 type Pipeline = {
   id: string;
@@ -24,7 +26,10 @@ type Stage = {
 
 type Client = {
   id: string;
+  firstName?: string | null;
   name: string;
+  function?: string | null;
+  companySector?: string | null;
   company?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -102,6 +107,8 @@ export default function CrmPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [clientsError, setClientsError] = useState<string | null>(null);
+  const [fx, setFx] = useState<FxRatesSnapshot | null>(null);
+  const [fxLoading, setFxLoading] = useState(false);
   const [requestedStageId, setRequestedStageId] = useState<string | null>(null);
   const [highlightStageId, setHighlightStageId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,8 +116,19 @@ export default function CrmPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [showClientCreate, setShowClientCreate] = useState(false);
-  const [clientDraft, setClientDraft] = useState<{ name: string; email: string; company: string; phone: string }>({
+  const [clientDraft, setClientDraft] = useState<{
+    firstName: string;
+    name: string;
+    clientFunction: string;
+    companySector: string;
+    email: string;
+    company: string;
+    phone: string;
+  }>({
+    firstName: '',
     name: '',
+    clientFunction: '',
+    companySector: '',
     email: '',
     company: '',
     phone: '',
@@ -138,7 +156,15 @@ export default function CrmPage() {
   useEffect(() => {
     if (!showModal) {
       setShowClientCreate(false);
-      setClientDraft({ name: '', email: '', company: '', phone: '' });
+      setClientDraft({
+        firstName: '',
+        name: '',
+        clientFunction: '',
+        companySector: '',
+        email: '',
+        company: '',
+        phone: '',
+      });
       setClientDraftError(null);
       setClientDraftSaving(false);
       setEditingDeal(null);
@@ -157,10 +183,34 @@ export default function CrmPage() {
 
   useEffect(() => {
     if (!token) return;
+    let active = true;
+    setFxLoading(true);
+    api<FxRatesSnapshot>('/fx/usd')
+      .then((data) => {
+        if (!active) return;
+        setFx(data);
+      })
+      .catch(() => {
+        if (!active) return;
+        setFx(null);
+      })
+      .finally(() => {
+        if (!active) return;
+        setFxLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [api, token]);
+
+  useEffect(() => {
+    if (!token) return;
     setClientsError(null);
     api<Client[]>('/clients')
       .then((data) => {
-        const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name));
+        const sorted = [...data].sort((a, b) =>
+          getClientDisplayName(a).localeCompare(getClientDisplayName(b)),
+        );
         setClients(sorted);
       })
       .catch((err: Error) => setClientsError(err.message));
@@ -370,8 +420,9 @@ export default function CrmPage() {
         setDeals((prev) => [created, ...prev]);
       }
       setShowModal(false);
-    } catch (err: any) {
-      setError(err.message || 'Unable to save deal');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to save deal';
+      setError(message);
     }
   };
 
@@ -406,7 +457,10 @@ export default function CrmPage() {
       const created = await api<Client>('/clients', {
         method: 'POST',
         body: JSON.stringify({
+          firstName: optional(clientDraft.firstName),
           name,
+          function: optional(clientDraft.clientFunction),
+          companySector: optional(clientDraft.companySector),
           email: optional(clientDraft.email),
           company: optional(clientDraft.company),
           phone: optional(clientDraft.phone),
@@ -414,12 +468,22 @@ export default function CrmPage() {
       });
 
       setClients((prev) => {
-        const next = [...prev, created].sort((a, b) => a.name.localeCompare(b.name));
+        const next = [...prev, created].sort((a, b) =>
+          getClientDisplayName(a).localeCompare(getClientDisplayName(b)),
+        );
         return next;
       });
       setForm((prev) => ({ ...prev, clientId: created.id }));
       setShowClientCreate(false);
-      setClientDraft({ name: '', email: '', company: '', phone: '' });
+      setClientDraft({
+        firstName: '',
+        name: '',
+        clientFunction: '',
+        companySector: '',
+        email: '',
+        company: '',
+        phone: '',
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to save client';
       setClientDraftError(message);
@@ -437,8 +501,9 @@ export default function CrmPage() {
       setDeals((prev) =>
         prev.map((deal) => (deal.id === dealId ? { ...deal, stageId } : deal)),
       );
-    } catch (err: any) {
-      setError(err.message || 'Unable to move deal');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to move deal';
+      setError(message);
     }
   };
 
@@ -492,6 +557,8 @@ export default function CrmPage() {
               key={stage.id}
               stage={stage}
               deals={deals.filter((deal) => deal.stageId === stage.id)}
+              fx={fx}
+              fxLoading={fxLoading}
               onMoveDeal={handleMoveDeal}
               onOpenDeal={openDealFromCard}
               onDealDragStart={() => {
@@ -530,7 +597,7 @@ export default function CrmPage() {
                     <option value="">{clients.length ? 'Select client' : 'No clients yet'}</option>
                     {clients.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name}
+                        {getClientDisplayName(c)}
                         {c.company ? ` · ${c.company}` : ''}
                       </option>
                     ))}
@@ -541,9 +608,37 @@ export default function CrmPage() {
                       <div className="mt-2 grid gap-2">
                         <input
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                          placeholder="First name"
+                          value={clientDraft.firstName}
+                          onChange={(e) => setClientDraft((prev) => ({ ...prev, firstName: e.target.value }))}
+                          autoComplete="given-name"
+                        />
+                        <input
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                           placeholder="Name"
                           value={clientDraft.name}
                           onChange={(e) => setClientDraft((prev) => ({ ...prev, name: e.target.value }))}
+                          autoComplete="family-name"
+                        />
+                        <select
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                          value={clientDraft.clientFunction}
+                          onChange={(e) =>
+                            setClientDraft((prev) => ({ ...prev, clientFunction: e.target.value }))
+                          }
+                        >
+                          <option value="">Function</option>
+                          {CLIENT_FUNCTION_OPTIONS.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                          placeholder="Company sector"
+                          value={clientDraft.companySector}
+                          onChange={(e) => setClientDraft((prev) => ({ ...prev, companySector: e.target.value }))}
                         />
                         <input
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
@@ -554,11 +649,29 @@ export default function CrmPage() {
                             const raw = e.target.value;
                             if (raw.includes('<') || raw.includes('>')) {
                               const parsed = parseContactLine(raw);
-                              setClientDraft((prev) => ({
-                                ...prev,
-                                email: parsed.email ?? raw,
-                                name: prev.name.trim() ? prev.name : parsed.name ?? prev.name,
-                              }));
+                              setClientDraft((prev) => {
+                                let nextFirstName = prev.firstName;
+                                let nextName = prev.name;
+
+                                if (parsed.name && !nextFirstName.trim() && !nextName.trim()) {
+                                  const parts = parsed.name.split(/\s+/).filter(Boolean);
+                                  if (parts.length >= 2) {
+                                    nextFirstName = parts[0];
+                                    nextName = parts.slice(1).join(' ');
+                                  } else {
+                                    nextName = parsed.name;
+                                  }
+                                } else if (parsed.name && !nextName.trim()) {
+                                  nextName = parsed.name;
+                                }
+
+                                return {
+                                  ...prev,
+                                  email: parsed.email ?? raw,
+                                  firstName: nextFirstName,
+                                  name: nextName,
+                                };
+                              });
                               return;
                             }
                             setClientDraft((prev) => ({ ...prev, email: raw }));
@@ -569,12 +682,14 @@ export default function CrmPage() {
                           placeholder="Company"
                           value={clientDraft.company}
                           onChange={(e) => setClientDraft((prev) => ({ ...prev, company: e.target.value }))}
+                          autoComplete="organization"
                         />
                         <input
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                           placeholder="Phone"
                           value={clientDraft.phone}
                           onChange={(e) => setClientDraft((prev) => ({ ...prev, phone: e.target.value }))}
+                          autoComplete="tel"
                         />
                       </div>
                       <p className="mt-2 text-[11px] text-slate-500">
@@ -741,6 +856,8 @@ export default function CrmPage() {
 function StageColumn({
   stage,
   deals,
+  fx,
+  fxLoading,
   onMoveDeal,
   onOpenDeal,
   onDealDragStart,
@@ -748,6 +865,8 @@ function StageColumn({
 }: {
   stage: Stage;
   deals: Deal[];
+  fx: FxRatesSnapshot | null;
+  fxLoading: boolean;
   onMoveDeal: (dealId: string, stageId: string) => void;
   onOpenDeal: (deal: Deal) => void;
   onDealDragStart: () => void;
@@ -764,7 +883,29 @@ function StageColumn({
   const totalLabel = (() => {
     const entries = Object.entries(totals).sort(([a], [b]) => a.localeCompare(b));
     if (entries.length === 0) return '—';
-    return entries.map(([currency, value]) => `${currency} ${value.toLocaleString()}`).join(' | ');
+
+    const hasNonUsd = entries.some(([currency]) => currency !== 'USD');
+    if (!hasNonUsd) {
+      const usd = totals.USD ?? 0;
+      return formatUsdTotal(usd);
+    }
+
+    if (!fx) {
+      return fxLoading ? 'USD …' : 'USD —';
+    }
+
+    const missing = entries
+      .map(([currency]) => currency)
+      .filter((currency) => currency !== 'USD')
+      .filter((currency) => toUsd(1, currency, fx) === null);
+    if (missing.length > 0) return 'USD —';
+
+    const usdTotal = entries.reduce((sum, [currency, value]) => {
+      if (currency === 'USD') return sum + value;
+      const converted = toUsd(value, currency, fx);
+      return converted === null ? sum : sum + converted;
+    }, 0);
+    return formatUsdTotal(usdTotal);
   })();
 
   return (
@@ -793,7 +934,9 @@ function StageColumn({
           <p className="text-sm font-semibold">{deals.length}</p>
         </div>
       </div>
-      <p className="mt-2 text-xs text-slate-400">Total: {totalLabel}</p>
+      <p className="mt-2 text-xs text-slate-400" title={fx?.date ? `Converted to USD (FX ${fx.date})` : undefined}>
+        Total: {totalLabel}
+      </p>
       <div className="mt-4 space-y-3">
         {deals.map((deal) => (
           <div
@@ -821,9 +964,9 @@ function StageColumn({
                 {Math.round((stage.probability ?? 0) * 100)}%
               </span>
             </div>
-            {deal.client?.name ? (
+            {deal.client ? (
               <p className="mt-1 text-[11px] text-slate-400">
-                Client: {deal.client.name}
+                Client: {getClientDisplayName(deal.client)}
                 {deal.client.company ? ` · ${deal.client.company}` : ''}
               </p>
             ) : null}

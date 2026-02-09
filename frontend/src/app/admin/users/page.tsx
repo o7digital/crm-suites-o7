@@ -27,10 +27,11 @@ export default function AdminUsersPage() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    setError(null);
-    setLoading(true);
     api<User[]>('/admin/users')
-      .then(setUsers)
+      .then((data) => {
+        setUsers(data);
+        setError(null);
+      })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
   }, [api]);
@@ -111,4 +112,3 @@ export default function AdminUsersPage() {
     </Guard>
   );
 }
-

@@ -48,7 +48,10 @@ model User {
 
 model Client {
   id        String   @id @default(uuid())
+  firstName String?
   name      String
+  function  String?
+  companySector String?
   email     String?
   phone     String?
   company   String?

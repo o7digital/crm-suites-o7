@@ -27,10 +27,28 @@ function normalizeEmail(value: unknown): string | undefined {
 }
 
 export class CreateClientDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  @Transform(({ value }) => optionalTrimmedString(value))
+  firstName?: string;
+
   @IsString()
   @MaxLength(120)
   @Transform(({ value }) => optionalTrimmedString(value))
   name: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  @Transform(({ value }) => optionalTrimmedString(value))
+  function?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  @Transform(({ value }) => optionalTrimmedString(value))
+  companySector?: string;
 
   @IsOptional()
   @Transform(({ value }) => normalizeEmail(value))

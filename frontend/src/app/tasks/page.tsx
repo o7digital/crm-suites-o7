@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
+import { getClientDisplayName } from '@/lib/clients';
 
 type Task = {
   id: string;
@@ -12,10 +13,10 @@ type Task = {
   dueDate?: string;
   amount?: number | string | null;
   currency?: string;
-  client?: { id: string; name: string };
+  client?: { id: string; firstName?: string | null; name: string };
 };
 
-type Client = { id: string; name: string };
+type Client = { id: string; firstName?: string | null; name: string };
 type TaskInput = { title: string; clientId: string; dueDate?: string; amount?: number; currency?: string };
 
 export default function TasksPage() {
@@ -73,7 +74,7 @@ export default function TasksPage() {
               <div>
                 <p className="text-lg font-semibold">{task.title}</p>
                 <p className="text-sm text-slate-400">
-                  {task.client?.name ? `Client: ${task.client.name}` : 'No client'} ·{' '}
+                  {task.client ? `Client: ${getClientDisplayName(task.client)}` : 'No client'} ·{' '}
                   {task.dueDate ? `Due ${new Date(task.dueDate).toLocaleDateString()}` : 'No due date'}
                   {task.amount !== null && task.amount !== undefined && task.amount !== '' ? (
                     <>
@@ -157,7 +158,7 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
           <option value="">Select client</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {getClientDisplayName(c)}
             </option>
           ))}
         </select>

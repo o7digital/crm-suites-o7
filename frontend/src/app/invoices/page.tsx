@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
+import { getClientDisplayName } from '@/lib/clients';
 
 type Invoice = {
   id: string;
@@ -11,11 +12,11 @@ type Invoice = {
   currency: string;
   status: string;
   createdAt: string;
-  client?: { id: string; name: string };
+  client?: { id: string; firstName?: string | null; name: string };
   extractedRaw?: { notes?: string };
 };
 
-type Client = { id: string; name: string };
+type Client = { id: string; firstName?: string | null; name: string };
 
 export default function InvoicesPage() {
   const { token } = useAuth();
@@ -69,7 +70,8 @@ export default function InvoicesPage() {
                     {inv.currency} {Number(inv.amount).toFixed(2)}
                   </p>
                   <p className="text-sm text-slate-400">
-                    {inv.client?.name || 'Unassigned'} · {new Date(inv.createdAt).toLocaleDateString()}
+                    {inv.client ? getClientDisplayName(inv.client) : 'Unassigned'} ·{' '}
+                    {new Date(inv.createdAt).toLocaleDateString()}
                   </p>
                 </div>
                 <span className="self-start rounded-full bg-emerald-400/15 px-3 py-1 text-xs text-emerald-200">
@@ -126,7 +128,7 @@ function UploadForm({ clients, onUpload }: { clients: Client[]; onUpload: (form:
           <option value="">Unassigned</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {getClientDisplayName(c)}
             </option>
           ))}
         </select>

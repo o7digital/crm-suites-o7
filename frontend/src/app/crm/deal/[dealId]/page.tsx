@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../../../../components/AppShell';
 import { Guard } from '../../../../components/Guard';
 import { useApi, useAuth } from '../../../../contexts/AuthContext';
+import { getClientDisplayName } from '@/lib/clients';
 
 type Stage = {
   id: string;
@@ -18,6 +19,7 @@ type Stage = {
 
 type Client = {
   id: string;
+  firstName?: string | null;
   name: string;
   company?: string | null;
 };
@@ -103,7 +105,7 @@ export default function DealPage() {
         setStages([]);
       }
       if (clientData.status === 'fulfilled') {
-        setClients([...clientData.value].sort((a, b) => a.name.localeCompare(b.name)));
+        setClients([...clientData.value].sort((a, b) => getClientDisplayName(a).localeCompare(getClientDisplayName(b))));
       } else {
         setClients([]);
       }
@@ -250,7 +252,7 @@ export default function DealPage() {
                     <option value="">No client</option>
                     {clients.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name}
+                        {getClientDisplayName(c)}
                         {c.company ? ` · ${c.company}` : ''}
                       </option>
                     ))}
