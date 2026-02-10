@@ -85,6 +85,9 @@ export class AdminService {
           contactFirstName: true,
           contactLastName: true,
           contactEmail: true,
+          plan: true,
+          seats: true,
+          trialEndsAt: true,
           status: true,
           createdAt: true,
           updatedAt: true,
@@ -113,6 +116,39 @@ export class AdminService {
           return v ? v : null;
         };
 
+        const plan =
+          dto.plan === 'TRIAL' ||
+          dto.plan === 'PULSE_BASIC' ||
+          dto.plan === 'PULSE_STANDARD' ||
+          dto.plan === 'PULSE_ADVANCED' ||
+          dto.plan === 'PULSE_ADVANCED_PLUS' ||
+          dto.plan === 'PULSE_TEAM'
+            ? dto.plan
+            : 'TRIAL';
+
+        const deriveSeats = () => {
+          switch (plan) {
+            case 'PULSE_BASIC':
+              return 1;
+            case 'PULSE_STANDARD':
+              return 3;
+            case 'PULSE_ADVANCED':
+              return 5;
+            case 'PULSE_ADVANCED_PLUS':
+              return 10;
+            case 'PULSE_TEAM': {
+              const requested = typeof dto.seats === 'number' ? dto.seats : 20;
+              return Math.min(30, Math.max(11, requested));
+            }
+            case 'TRIAL':
+            default:
+              return 1;
+          }
+        };
+
+        const seats = deriveSeats();
+        const trialEndsAt = plan === 'TRIAL' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null;
+
         // Provision the tenant so it exists before the customer signs up.
         await tx.tenant.upsert({
           where: { id: customerTenantId },
@@ -137,6 +173,9 @@ export class AdminService {
             contactFirstName: normalize(dto.contactFirstName),
             contactLastName: normalize(dto.contactLastName),
             contactEmail: normalize(dto.contactEmail),
+            plan,
+            seats,
+            trialEndsAt,
           },
           select: {
             id: true,
@@ -145,6 +184,9 @@ export class AdminService {
             contactFirstName: true,
             contactLastName: true,
             contactEmail: true,
+            plan: true,
+            seats: true,
+            trialEndsAt: true,
             status: true,
             createdAt: true,
             updatedAt: true,

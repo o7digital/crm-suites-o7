@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class CreateSubscriptionDto {
   @IsString()
@@ -20,6 +20,18 @@ export class CreateSubscriptionDto {
   @IsEmail()
   @MaxLength(160)
   contactEmail?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['TRIAL', 'PULSE_BASIC', 'PULSE_STANDARD', 'PULSE_ADVANCED', 'PULSE_ADVANCED_PLUS', 'PULSE_TEAM'])
+  plan?: 'TRIAL' | 'PULSE_BASIC' | 'PULSE_STANDARD' | 'PULSE_ADVANCED' | 'PULSE_ADVANCED_PLUS' | 'PULSE_TEAM';
+
+  // Used only for PULSE_TEAM (11..30). Other plans ignore it.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  seats?: number;
 
   @IsOptional()
   @IsString()

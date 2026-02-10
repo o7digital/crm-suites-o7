@@ -247,6 +247,12 @@ export class SchemaUpgraderService {
           "tenantId" TEXT NOT NULL,
           "customerTenantId" TEXT NOT NULL,
           "customerName" TEXT NOT NULL,
+          "contactFirstName" TEXT,
+          "contactLastName" TEXT,
+          "contactEmail" TEXT,
+          "plan" TEXT NOT NULL DEFAULT 'TRIAL',
+          "seats" INTEGER NOT NULL DEFAULT 1,
+          "trialEndsAt" TIMESTAMP(3),
           "status" "SubscriptionStatus" NOT NULL DEFAULT 'ACTIVE',
           "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
           "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -260,6 +266,9 @@ export class SchemaUpgraderService {
       { name: 'contactFirstName', type: 'TEXT' },
       { name: 'contactLastName', type: 'TEXT' },
       { name: 'contactEmail', type: 'TEXT' },
+      { name: 'plan', type: `TEXT NOT NULL DEFAULT 'TRIAL'` },
+      { name: 'seats', type: `INTEGER NOT NULL DEFAULT 1` },
+      { name: 'trialEndsAt', type: 'TIMESTAMP(3)' },
     ];
     for (const col of columns) {
       const exists = await this.columnExists('Subscription', col.name);

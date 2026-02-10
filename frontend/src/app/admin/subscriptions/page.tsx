@@ -20,6 +20,9 @@ export default function AdminSubscriptionsPage() {
       contactFirstName?: string | null;
       contactLastName?: string | null;
       contactEmail?: string | null;
+      plan?: string | null;
+      seats?: number | null;
+      trialEndsAt?: string | null;
       status: 'ACTIVE' | 'PAUSED' | 'CANCELED';
       createdAt: string;
       updatedAt: string;
@@ -34,6 +37,10 @@ export default function AdminSubscriptionsPage() {
   const [crmMode, setCrmMode] = useState<'B2B' | 'B2C'>('B2B');
   const [crmModeLocked, setCrmModeLocked] = useState(false);
   const [industry, setIndustry] = useState('');
+  const [plan, setPlan] = useState<
+    'TRIAL' | 'PULSE_BASIC' | 'PULSE_STANDARD' | 'PULSE_ADVANCED' | 'PULSE_ADVANCED_PLUS' | 'PULSE_TEAM'
+  >('TRIAL');
+  const [teamSeats, setTeamSeats] = useState(20);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -77,7 +84,10 @@ export default function AdminSubscriptionsPage() {
     setInfo(null);
     setError(null);
     const name = customerName.trim();
-    if (!name) return;
+    const first = contactFirstName.trim();
+    const last = contactLastName.trim();
+    const email = contactEmail.trim();
+    if (!name || !first || !last || !email) return;
 
     setCreating(true);
     try {
@@ -85,11 +95,13 @@ export default function AdminSubscriptionsPage() {
         method: 'POST',
         body: JSON.stringify({
           customerName: name,
-          contactFirstName: contactFirstName.trim() ? contactFirstName.trim() : null,
-          contactLastName: contactLastName.trim() ? contactLastName.trim() : null,
-          contactEmail: contactEmail.trim() ? contactEmail.trim() : null,
+          contactFirstName: first,
+          contactLastName: last,
+          contactEmail: email,
           crmMode,
           industry: industry.trim() ? industry.trim() : null,
+          plan,
+          seats: plan === 'PULSE_TEAM' ? teamSeats : undefined,
         }),
       });
       setItems((prev) => [created, ...prev]);
@@ -100,6 +112,8 @@ export default function AdminSubscriptionsPage() {
       setIndustry('');
       setCrmMode('B2B');
       setCrmModeLocked(false);
+      setPlan('TRIAL');
+      setTeamSeats(20);
 
       const contactName = [created.contactFirstName, created.contactLastName].filter(Boolean).join(' ').trim();
       const url = buildInviteUrl({
@@ -189,6 +203,7 @@ export default function AdminSubscriptionsPage() {
                   value={contactFirstName}
                   onChange={(e) => setContactFirstName(e.target.value)}
                   placeholder={t('adminSubscriptions.contactFirstNamePlaceholder')}
+                  required
                 />
               </div>
               <div>
@@ -198,6 +213,7 @@ export default function AdminSubscriptionsPage() {
                   value={contactLastName}
                   onChange={(e) => setContactLastName(e.target.value)}
                   placeholder={t('adminSubscriptions.contactLastNamePlaceholder')}
+                  required
                 />
               </div>
               <div className="md:col-span-2">
@@ -208,11 +224,50 @@ export default function AdminSubscriptionsPage() {
                   value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
                   placeholder={t('adminSubscriptions.contactEmailPlaceholder')}
+                  required
                 />
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-[220px_1fr_auto] sm:items-end">
+            <div className="grid gap-3 lg:grid-cols-[1.4fr_220px_1fr_auto] lg:items-end">
+              <div>
+                <label className="text-sm text-slate-300">{t('adminSubscriptions.plan')}</label>
+                <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                  <select
+                    className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                    value={plan}
+                    onChange={(e) =>
+                      setPlan(
+                        e.target.value as typeof plan,
+                      )
+                    }
+                  >
+                    <option value="TRIAL">{t('adminSubscriptions.planTrial')}</option>
+                    <option value="PULSE_BASIC">{t('adminSubscriptions.planBasic')}</option>
+                    <option value="PULSE_STANDARD">{t('adminSubscriptions.planStandard')}</option>
+                    <option value="PULSE_ADVANCED">{t('adminSubscriptions.planAdvanced')}</option>
+                    <option value="PULSE_ADVANCED_PLUS">{t('adminSubscriptions.planAdvancedPlus')}</option>
+                    <option value="PULSE_TEAM">{t('adminSubscriptions.planTeam')}</option>
+                  </select>
+
+                  {plan === 'PULSE_TEAM' ? (
+                    <select
+                      className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                      value={teamSeats}
+                      onChange={(e) => setTeamSeats(Number(e.target.value))}
+                      aria-label={t('adminSubscriptions.seats')}
+                    >
+                      {Array.from({ length: 20 }, (_, i) => 11 + i).map((n) => (
+                        <option key={n} value={n}>
+                          {n} {t('adminSubscriptions.users')}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="hidden sm:block" />
+                  )}
+                </div>
+              </div>
               <div>
                 <label className="text-sm text-slate-300">{t('adminSubscriptions.crmMode')}</label>
                 <select
@@ -254,7 +309,13 @@ export default function AdminSubscriptionsPage() {
               <button
                 type="submit"
                 className="btn-primary justify-center"
-                disabled={creating || !customerName.trim()}
+                disabled={
+                  creating ||
+                  !customerName.trim() ||
+                  !contactFirstName.trim() ||
+                  !contactLastName.trim() ||
+                  !contactEmail.trim()
+                }
               >
                 {creating ? t('adminSubscriptions.creating') : t('adminSubscriptions.createButton')}
               </button>
@@ -275,6 +336,7 @@ export default function AdminSubscriptionsPage() {
                   <tr>
                     <th className="pb-2 text-left">{t('adminSubscriptions.table.customer')}</th>
                     <th className="pb-2 text-left">{t('adminSubscriptions.table.status')}</th>
+                    <th className="pb-2 text-left">{t('adminSubscriptions.table.plan')}</th>
                     <th className="pb-2 text-left">{t('adminSubscriptions.table.link')}</th>
                     <th className="pb-2 text-left">{t('adminSubscriptions.table.created')}</th>
                   </tr>
@@ -295,6 +357,29 @@ export default function AdminSubscriptionsPage() {
                         <span className="inline-flex items-center rounded-full bg-white/5 px-2 py-0.5 text-xs text-slate-200 ring-1 ring-white/10">
                           {sub.status}
                         </span>
+                      </td>
+                      <td className="py-3 text-slate-300">
+                        <p className="text-xs text-slate-200">
+                          {sub.plan === 'PULSE_BASIC'
+                            ? t('adminSubscriptions.planBasic')
+                            : sub.plan === 'PULSE_STANDARD'
+                              ? t('adminSubscriptions.planStandard')
+                              : sub.plan === 'PULSE_ADVANCED'
+                                ? t('adminSubscriptions.planAdvanced')
+                                : sub.plan === 'PULSE_ADVANCED_PLUS'
+                                  ? t('adminSubscriptions.planAdvancedPlus')
+                                  : sub.plan === 'PULSE_TEAM'
+                                    ? t('adminSubscriptions.planTeam')
+                                    : t('adminSubscriptions.planTrial')}
+                          {sub.plan === 'PULSE_TEAM' && sub.seats ? ` · ${sub.seats} ${t('adminSubscriptions.users')}` : ''}
+                        </p>
+                        {sub.plan === 'TRIAL' && sub.trialEndsAt ? (
+                          <p className="mt-1 text-xs text-slate-400">
+                            {t('adminSubscriptions.trialUntil', {
+                              date: new Date(sub.trialEndsAt).toLocaleDateString(),
+                            })}
+                          </p>
+                        ) : null}
                       </td>
                       <td className="py-3">
                         <button

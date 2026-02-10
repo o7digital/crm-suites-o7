@@ -67,6 +67,9 @@ model Subscription {
   contactFirstName  String?
   contactLastName   String?
   contactEmail      String?
+  plan              String             @default("TRIAL")
+  seats             Int                @default(1)
+  trialEndsAt       DateTime?
   status            SubscriptionStatus @default(ACTIVE)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
