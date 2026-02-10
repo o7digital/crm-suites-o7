@@ -99,6 +99,8 @@ export class BootstrapService {
         { name: 'INVOICE Customer', position: 7, probability: 1.0, status: 'WON' as const },
         { name: 'TRANSFER PAYMENT', position: 8, probability: 1.0, status: 'WON' as const },
         { name: 'Lost', position: 9, probability: 0.0, status: 'LOST' as const },
+        { name: 'Transfer Scheduled', position: 10, probability: 1.0, status: 'WON' as const },
+        { name: 'Paid', position: 11, probability: 1.0, status: 'WON' as const },
       ];
 
       await this.prisma.stage.createMany({
@@ -136,6 +138,11 @@ export class BootstrapService {
       });
     }
 
+    // Keep New Sales stages up-to-date for existing tenants (idempotent).
+    if (newSales) {
+      await this.ensureNewSalesExtraStages(tenantId, newSales.id);
+    }
+
     // Safety: ensure at least one default pipeline exists.
     if (newSales) {
       const defaultCount = await this.prisma.pipeline.count({ where: { tenantId, isDefault: true } });
@@ -143,5 +150,81 @@ export class BootstrapService {
         await this.prisma.pipeline.update({ where: { id: newSales.id }, data: { isDefault: true } });
       }
     }
+  }
+
+  private async ensureNewSalesExtraStages(tenantId: string, pipelineId: string) {
+    const stages = await this.prisma.stage.findMany({
+      where: { tenantId, pipelineId },
+      select: { id: true, name: true, position: true, status: true, probability: true },
+      orderBy: { position: 'asc' },
+    });
+    if (stages.length === 0) return;
+
+    const byName = new Map(stages.map((s) => [s.name, s]));
+    const maxPos = stages.reduce((m, s) => Math.max(m, s.position), 0);
+    const lostPos = byName.get('Lost')?.position ?? maxPos;
+
+    // We want these stages after "Lost" and kept in order (Transfer Scheduled -> Paid).
+    let nextPos = maxPos + 1;
+
+    const ensureStage = async (opts: {
+      name: string;
+      status: 'OPEN' | 'WON' | 'LOST';
+      probability: number;
+      minPosition: number;
+    }) => {
+      const existing = byName.get(opts.name);
+      if (!existing) {
+        const position = Math.max(nextPos, opts.minPosition);
+        nextPos = position + 1;
+        const created = await this.prisma.stage.create({
+          data: {
+            tenantId,
+            pipelineId,
+            name: opts.name,
+            status: opts.status,
+            probability: opts.probability,
+            position,
+          },
+          select: { id: true, name: true, position: true, status: true, probability: true },
+        });
+        byName.set(opts.name, created);
+        return created;
+      }
+
+      const patch: Partial<{ position: number; status: 'OPEN' | 'WON' | 'LOST'; probability: number }> = {};
+      if (existing.position < opts.minPosition) {
+        patch.position = Math.max(nextPos, opts.minPosition);
+        nextPos = patch.position + 1;
+      }
+      if (existing.status !== opts.status) patch.status = opts.status;
+      if (existing.probability !== opts.probability) patch.probability = opts.probability;
+
+      if (Object.keys(patch).length > 0) {
+        const updated = await this.prisma.stage.update({
+          where: { id: existing.id },
+          data: patch,
+          select: { id: true, name: true, position: true, status: true, probability: true },
+        });
+        byName.set(opts.name, updated);
+        return updated;
+      }
+
+      return existing;
+    };
+
+    const transfer = await ensureStage({
+      name: 'Transfer Scheduled',
+      status: 'WON',
+      probability: 1.0,
+      minPosition: lostPos + 1,
+    });
+
+    await ensureStage({
+      name: 'Paid',
+      status: 'WON',
+      probability: 1.0,
+      minPosition: transfer.position + 1,
+    });
   }
 }
