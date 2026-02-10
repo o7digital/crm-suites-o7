@@ -9,8 +9,11 @@ export class SchemaUpgraderService {
   // This keeps the API functional even if Prisma Migrate is blocked.
   async run() {
     await this.ensureDealClientId();
+    await this.ensureDealOwnerId();
     await this.ensureProductsSchema();
     await this.ensureClientProfileFields();
+    await this.ensureSubscriptionsSchema();
+    await this.ensureTenantBrandingFields();
   }
 
   private async tableExists(table: string) {
@@ -69,6 +72,52 @@ export class SchemaUpgraderService {
           ALTER TABLE "Deal"
           ADD CONSTRAINT "${fkName}"
           FOREIGN KEY ("clientId") REFERENCES "Client"("id")
+          ON DELETE SET NULL
+          ON UPDATE CASCADE;
+        `);
+      } catch {
+        // Ignore if the constraint already exists under a different name.
+      }
+    }
+  }
+
+  private async ensureDealOwnerId() {
+    const hasOwnerId = await this.columnExists('Deal', 'ownerId');
+    if (!hasOwnerId) {
+      await this.prisma.$executeRawUnsafe(`ALTER TABLE "Deal" ADD COLUMN "ownerId" TEXT;`);
+    }
+
+    // Backfill existing deals to the tenant OWNER (or first user if no owner exists).
+    const hasUserRole = await this.columnExists('User', 'role');
+    if (hasUserRole) {
+      await this.prisma.$executeRawUnsafe(`
+        UPDATE "Deal" d
+        SET "ownerId" = COALESCE(
+          (SELECT u.id FROM "User" u WHERE u."tenantId" = d."tenantId" AND u.role = 'OWNER'::"UserRole" ORDER BY u."createdAt" ASC LIMIT 1),
+          (SELECT u.id FROM "User" u WHERE u."tenantId" = d."tenantId" ORDER BY u."createdAt" ASC LIMIT 1)
+        )
+        WHERE d."ownerId" IS NULL;
+      `);
+    } else {
+      await this.prisma.$executeRawUnsafe(`
+        UPDATE "Deal" d
+        SET "ownerId" = (
+          SELECT u.id FROM "User" u WHERE u."tenantId" = d."tenantId" ORDER BY u."createdAt" ASC LIMIT 1
+        )
+        WHERE d."ownerId" IS NULL;
+      `);
+    }
+
+    await this.prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Deal_ownerId_idx" ON "Deal"("ownerId");`);
+
+    const fkName = 'Deal_ownerId_fkey';
+    const fkExists = await this.constraintExists(fkName);
+    if (!fkExists) {
+      try {
+        await this.prisma.$executeRawUnsafe(`
+          ALTER TABLE "Deal"
+          ADD CONSTRAINT "${fkName}"
+          FOREIGN KEY ("ownerId") REFERENCES "User"("id")
           ON DELETE SET NULL
           ON UPDATE CASCADE;
         `);
@@ -167,6 +216,80 @@ export class SchemaUpgraderService {
       if (exists) continue;
       try {
         await this.prisma.$executeRawUnsafe(`ALTER TABLE "Client" ADD COLUMN "${col.name}" ${col.type};`);
+      } catch {
+        // Ignore permissions / already-added races.
+      }
+    }
+  }
+
+  private async ensureSubscriptionsSchema() {
+    const hasSubscription = await this.tableExists('Subscription');
+    if (!hasSubscription) {
+      // Create enum if missing (no IF NOT EXISTS for CREATE TYPE in Postgres).
+      await this.prisma.$executeRawUnsafe(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE t.typname = 'SubscriptionStatus' AND n.nspname = 'public'
+          ) THEN
+            CREATE TYPE "SubscriptionStatus" AS ENUM ('ACTIVE', 'PAUSED', 'CANCELED');
+          END IF;
+        END $$;
+      `);
+
+      await this.prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "Subscription" (
+          "id" TEXT NOT NULL,
+          "tenantId" TEXT NOT NULL,
+          "customerTenantId" TEXT NOT NULL,
+          "customerName" TEXT NOT NULL,
+          "status" "SubscriptionStatus" NOT NULL DEFAULT 'ACTIVE',
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL,
+          CONSTRAINT "Subscription_pkey" PRIMARY KEY ("id")
+        );
+      `);
+    }
+
+    await this.prisma.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Subscription_customerTenantId_key" ON "Subscription"("customerTenantId");`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "Subscription_tenantId_idx" ON "Subscription"("tenantId");`,
+    );
+
+    const fkName = 'Subscription_tenantId_fkey';
+    const fkExists = await this.constraintExists(fkName);
+    if (!fkExists) {
+      try {
+        await this.prisma.$executeRawUnsafe(`
+          ALTER TABLE "Subscription"
+          ADD CONSTRAINT "${fkName}"
+          FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id")
+          ON DELETE CASCADE
+          ON UPDATE CASCADE;
+        `);
+      } catch {
+        // Ignore if the constraint already exists under a different name.
+      }
+    }
+  }
+
+  private async ensureTenantBrandingFields() {
+    const columns: Array<{ name: string; type: string }> = [
+      { name: 'logoDataUrl', type: 'TEXT' },
+      { name: 'accentColor', type: 'TEXT' },
+      { name: 'accentColor2', type: 'TEXT' },
+    ];
+
+    for (const col of columns) {
+      const exists = await this.columnExists('Tenant', col.name);
+      if (exists) continue;
+      try {
+        await this.prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN "${col.name}" ${col.type};`);
       } catch {
         // Ignore permissions / already-added races.
       }
