@@ -313,7 +313,8 @@ export default function CrmPage() {
     const el = document.getElementById(`stage-${requestedStageId}`);
     if (!el) return;
 
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Horizontal scroll (kanban-style): ensure the column is visible.
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
     setHighlightStageId(requestedStageId);
 
     const timer = window.setTimeout(() => setHighlightStageId(null), 2500);
@@ -551,22 +552,25 @@ export default function CrmPage() {
           </div>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-4">
-          {sortedStages.map((stage) => (
-            <StageColumn
-              key={stage.id}
-              stage={stage}
-              deals={deals.filter((deal) => deal.stageId === stage.id)}
-              fx={fx}
-              fxLoading={fxLoading}
-              onMoveDeal={handleMoveDeal}
-              onOpenDeal={openDealFromCard}
-              onDealDragStart={() => {
-                lastDragAtRef.current = Date.now();
-              }}
-              highlighted={highlightStageId === stage.id}
-            />
-          ))}
+        {/* Keep all stages on one line (no wrap). Horizontal scroll if needed. */}
+        <div className="overflow-x-auto pb-4 2xl:-ml-48 2xl:w-[calc(100%+12rem)]">
+          <div className="flex w-max gap-4 pr-6">
+            {sortedStages.map((stage) => (
+              <StageColumn
+                key={stage.id}
+                stage={stage}
+                deals={deals.filter((deal) => deal.stageId === stage.id)}
+                fx={fx}
+                fxLoading={fxLoading}
+                onMoveDeal={handleMoveDeal}
+                onOpenDeal={openDealFromCard}
+                onDealDragStart={() => {
+                  lastDragAtRef.current = Date.now();
+                }}
+                highlighted={highlightStageId === stage.id}
+              />
+            ))}
+          </div>
         </div>
 
         {showModal && (
@@ -911,7 +915,9 @@ function StageColumn({
   return (
     <div
       id={`stage-${stage.id}`}
-      className={`card p-4 ${highlighted ? 'ring-2 ring-cyan-400/40 shadow-lg shadow-cyan-500/10' : ''}`}
+      className={`card w-[260px] shrink-0 p-4 ${
+        highlighted ? 'ring-2 ring-cyan-400/40 shadow-lg shadow-cyan-500/10' : ''
+      }`}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
