@@ -1,15 +1,34 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { FormEvent, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 
 export default function RegisterPage() {
+  const { t } = useI18n();
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center px-4 text-slate-300">{t('common.loading')}</div>
+      }
+    >
+      <RegisterPageContent />
+    </Suspense>
+  );
+}
+
+function RegisterPageContent() {
   const { register } = useAuth();
   const router = useRouter();
   const { t } = useI18n();
+  const searchParams = useSearchParams();
+
+  const inviteTenantId = (searchParams.get('tenantId') || '').trim();
+  const inviteTenantName = (searchParams.get('tenantName') || '').trim();
+  const isInvite = Boolean(inviteTenantId);
+
   const [tenantName, setTenantName] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -18,13 +37,21 @@ export default function RegisterPage() {
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    if (!isInvite) return;
+    setTenantName(inviteTenantName || tenantName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inviteTenantId, inviteTenantName, isInvite]);
+
+  const tenantNameDisabled = useMemo(() => isInvite && Boolean(inviteTenantName), [inviteTenantName, isInvite]);
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setInfo(null);
     setLoading(true);
     try {
-      const result = await register({ tenantName, name, email, password });
+      const result = await register({ tenantId: inviteTenantId || undefined, tenantName, name, email, password });
       if (result === 'confirm') {
         setInfo(t('register.checkEmail'));
         return;
@@ -53,7 +80,13 @@ export default function RegisterPage() {
               value={tenantName}
               onChange={(e) => setTenantName(e.target.value)}
               required
+              disabled={tenantNameDisabled}
             />
+            {isInvite ? (
+              <p className="mt-1 text-xs text-slate-500">
+                {t('register.joiningWorkspace')}
+              </p>
+            ) : null}
           </div>
           <div>
             <label className="text-sm text-slate-300">{t('register.yourName')}</label>

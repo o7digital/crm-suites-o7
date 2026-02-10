@@ -17,7 +17,13 @@ type AuthContextValue = {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (payload: { tenantName: string; name: string; email: string; password: string }) => Promise<'signed-in' | 'confirm'>;
+  register: (payload: {
+    tenantId?: string;
+    tenantName: string;
+    name: string;
+    email: string;
+    password: string;
+  }) => Promise<'signed-in' | 'confirm'>;
   logout: () => Promise<void>;
 };
 
@@ -137,8 +143,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const register = useCallback(
-    async (payload: { tenantName: string; name: string; email: string; password: string }) => {
-      const tenantId = generateTenantId();
+    async (payload: { tenantId?: string; tenantName: string; name: string; email: string; password: string }) => {
+      const tenantId = payload.tenantId || generateTenantId();
       const supabase = mustSupabase();
       const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined;
       const { data, error } = await supabase.auth.signUp({

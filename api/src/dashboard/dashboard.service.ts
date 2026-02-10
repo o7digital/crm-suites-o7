@@ -11,8 +11,39 @@ export class DashboardService {
     private fx: FxService,
   ) {}
 
+  private schemaCache: { checkedAt: number; hasOwnerId: boolean } | null = null;
+
+  private async hasDealOwnerId(): Promise<boolean> {
+    const now = Date.now();
+    if (this.schemaCache && now - this.schemaCache.checkedAt < 60_000) {
+      return this.schemaCache.hasOwnerId;
+    }
+    const cols = await this.prisma.$queryRaw<Array<{ column_name: string }>>`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'Deal'
+        AND column_name IN ('ownerId')
+    `;
+    const hasOwnerId = cols.some((c) => c.column_name === 'ownerId');
+    this.schemaCache = { checkedAt: now, hasOwnerId };
+    return hasOwnerId;
+  }
+
+  private async getUserRole(user: RequestUser): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
+    const dbUser = await this.prisma.user.findFirst({
+      where: { id: user.userId, tenantId: user.tenantId },
+      select: { role: true },
+    });
+    return (dbUser?.role as 'OWNER' | 'ADMIN' | 'MEMBER' | undefined) ?? 'MEMBER';
+  }
+
   async getSnapshot(user: RequestUser) {
     const tenantId = user.tenantId;
+    const role = await this.getUserRole(user);
+    const hasOwnerId = await this.hasDealOwnerId();
+    const dealVisibilityWhere = hasOwnerId && role === 'MEMBER' ? { ownerId: user.userId } : {};
+
     const [clientCount, taskCounts, openLeadsByCurrency, leadTotalCount, invoiceAgg, recentInvoices] =
       await Promise.all([
         this.prisma.client.count({ where: { tenantId } }),
@@ -28,12 +59,13 @@ export class DashboardService {
           where: {
             tenantId,
             stage: { status: 'OPEN' },
+            ...dealVisibilityWhere,
           },
           _sum: { value: true },
           _count: { _all: true },
         }),
         this.prisma.deal.count({
-          where: { tenantId },
+          where: { tenantId, ...dealVisibilityWhere },
         }),
         this.prisma.invoice.aggregate({
           where: { tenantId },

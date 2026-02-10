@@ -44,6 +44,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
+  deals  Deal[] @relation("DealOwner")
 }
 
 model Client {
@@ -141,6 +142,7 @@ model Deal {
   currency         String   @default("USD")
   expectedCloseDate DateTime?
   clientId         String?
+  ownerId          String?
   tenantId         String
   pipelineId       String
   stageId          String
@@ -149,10 +151,13 @@ model Deal {
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id])
   client   Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  owner    User?    @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   pipeline Pipeline @relation(fields: [pipelineId], references: [id])
   stage    Stage    @relation(fields: [stageId], references: [id])
   history  DealStageHistory[]
   items    DealItem[]
+
+  @@index([ownerId])
 }
 
 model Product {

@@ -10,6 +10,33 @@ export class ForecastService {
     private fx: FxService,
   ) {}
 
+  private schemaCache: { checkedAt: number; hasOwnerId: boolean } | null = null;
+
+  private async hasDealOwnerId(): Promise<boolean> {
+    const now = Date.now();
+    if (this.schemaCache && now - this.schemaCache.checkedAt < 60_000) {
+      return this.schemaCache.hasOwnerId;
+    }
+    const cols = await this.prisma.$queryRaw<Array<{ column_name: string }>>`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'Deal'
+        AND column_name IN ('ownerId')
+    `;
+    const hasOwnerId = cols.some((c) => c.column_name === 'ownerId');
+    this.schemaCache = { checkedAt: now, hasOwnerId };
+    return hasOwnerId;
+  }
+
+  private async getUserRole(user: RequestUser): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
+    const dbUser = await this.prisma.user.findFirst({
+      where: { id: user.userId, tenantId: user.tenantId },
+      select: { role: true },
+    });
+    return (dbUser?.role as 'OWNER' | 'ADMIN' | 'MEMBER' | undefined) ?? 'MEMBER';
+  }
+
   async getForecast(pipelineId: string | undefined, user: RequestUser) {
     let pipeline = null as null | { id: string; name: string; isDefault: boolean };
 
@@ -46,8 +73,15 @@ export class ForecastService {
       orderBy: { position: 'asc' },
     });
 
+    const role = await this.getUserRole(user);
+    const hasOwnerId = await this.hasDealOwnerId();
+
     const deals = await this.prisma.deal.findMany({
-      where: { tenantId: user.tenantId, pipelineId: pipeline.id },
+      where: {
+        tenantId: user.tenantId,
+        pipelineId: pipeline.id,
+        ...(hasOwnerId && role === 'MEMBER' ? { ownerId: user.userId } : {}),
+      },
       // Keep this endpoint resilient during migrations (ex: when Deal.clientId doesn't exist yet).
       select: { value: true, currency: true, stageId: true },
     });
