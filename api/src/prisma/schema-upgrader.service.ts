@@ -14,6 +14,7 @@ export class SchemaUpgraderService {
     await this.ensureClientProfileFields();
     await this.ensureSubscriptionsSchema();
     await this.ensureTenantBrandingFields();
+    await this.ensureTenantCrmSettingsFields();
   }
 
   private async tableExists(table: string) {
@@ -283,6 +284,23 @@ export class SchemaUpgraderService {
       { name: 'logoDataUrl', type: 'TEXT' },
       { name: 'accentColor', type: 'TEXT' },
       { name: 'accentColor2', type: 'TEXT' },
+    ];
+
+    for (const col of columns) {
+      const exists = await this.columnExists('Tenant', col.name);
+      if (exists) continue;
+      try {
+        await this.prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN "${col.name}" ${col.type};`);
+      } catch {
+        // Ignore permissions / already-added races.
+      }
+    }
+  }
+
+  private async ensureTenantCrmSettingsFields() {
+    const columns: Array<{ name: string; type: string }> = [
+      { name: 'crmMode', type: `TEXT NOT NULL DEFAULT 'B2B'` },
+      { name: 'industry', type: 'TEXT' },
     ];
 
     for (const col of columns) {

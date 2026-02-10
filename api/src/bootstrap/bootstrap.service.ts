@@ -56,6 +56,16 @@ export class BootstrapService {
   }
 
   private async ensureDefaultPipeline(tenantId: string) {
+    // Tenant-level CRM mode (B2B vs B2C) decides which pipeline should be default.
+    let crmMode: 'B2B' | 'B2C' = 'B2B';
+    try {
+      const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { crmMode: true } });
+      if (tenant?.crmMode === 'B2C') crmMode = 'B2C';
+    } catch {
+      // If the column doesn't exist yet (migrations pending), keep the legacy default.
+      crmMode = 'B2B';
+    }
+
     const pipelines = await this.prisma.pipeline.findMany({
       where: { tenantId },
       select: { id: true, name: true, isDefault: true },
@@ -174,7 +184,11 @@ export class BootstrapService {
     }
 
     // Safety: ensure at least one default pipeline exists.
-    if (newSales) {
+    const desired = crmMode === 'B2C' ? b2c : newSales;
+    if (desired) {
+      await this.prisma.pipeline.updateMany({ where: { tenantId }, data: { isDefault: false } });
+      await this.prisma.pipeline.update({ where: { id: desired.id }, data: { isDefault: true } });
+    } else if (newSales) {
       const defaultCount = await this.prisma.pipeline.count({ where: { tenantId, isDefault: true } });
       if (defaultCount === 0) {
         await this.prisma.pipeline.update({ where: { id: newSales.id }, data: { isDefault: true } });

@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
 import { Prisma } from '@prisma/client';
+import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 
 @Injectable()
 export class AdminService {
@@ -93,20 +94,36 @@ export class AdminService {
     }
   }
 
-  async createSubscription(customerName: string, user: RequestUser) {
+  async createSubscription(dto: CreateSubscriptionDto, user: RequestUser) {
     await this.ensureAdmin(user);
-    const trimmed = customerName.trim();
+    const trimmed = dto.customerName.trim();
     if (!trimmed) throw new BadRequestException('Customer name is required');
 
     const customerTenantId = randomUUID();
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        const normalize = (value: string | null | undefined) => {
+          if (value === null) return null;
+          if (value === undefined) return undefined;
+          const v = value.trim();
+          return v ? v : null;
+        };
+
         // Provision the tenant so it exists before the customer signs up.
         await tx.tenant.upsert({
           where: { id: customerTenantId },
-          update: { name: trimmed },
-          create: { id: customerTenantId, name: trimmed },
+          update: {
+            name: trimmed,
+            crmMode: dto.crmMode ?? undefined,
+            industry: normalize(dto.industry),
+          },
+          create: {
+            id: customerTenantId,
+            name: trimmed,
+            crmMode: dto.crmMode ?? undefined,
+            industry: normalize(dto.industry),
+          },
         });
 
         return tx.subscription.create({

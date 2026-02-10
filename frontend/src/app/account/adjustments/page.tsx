@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useBranding } from '../../../contexts/BrandingContext';
@@ -20,6 +20,8 @@ export default function AccountAdjustmentsPage() {
   const [accentColor2, setAccentColor2] = useState<string>(DEFAULT_ACCENT_2);
   const [skinError, setSkinError] = useState<string | null>(null);
   const [skinInfo, setSkinInfo] = useState<string | null>(null);
+  const accentSaveTimerRef = useRef<number | null>(null);
+  const accent2SaveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!logoDirty) setLogoDataUrl(branding.logoDataUrl);
@@ -80,6 +82,32 @@ export default function AccountAdjustmentsPage() {
       setSkinError(message);
     }
   };
+
+  const scheduleSaveAccentColor = (next: string) => {
+    setAccentColor(next);
+    if (accentSaveTimerRef.current) window.clearTimeout(accentSaveTimerRef.current);
+    accentSaveTimerRef.current = window.setTimeout(() => {
+      accentSaveTimerRef.current = null;
+      // Debounced save so the palette feels "instant" without spamming the API.
+      void saveAccentColor(next);
+    }, 180);
+  };
+
+  const scheduleSaveAccentColor2 = (next: string) => {
+    setAccentColor2(next);
+    if (accent2SaveTimerRef.current) window.clearTimeout(accent2SaveTimerRef.current);
+    accent2SaveTimerRef.current = window.setTimeout(() => {
+      accent2SaveTimerRef.current = null;
+      void saveAccentColor2(next);
+    }, 180);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (accentSaveTimerRef.current) window.clearTimeout(accentSaveTimerRef.current);
+      if (accent2SaveTimerRef.current) window.clearTimeout(accent2SaveTimerRef.current);
+    };
+  }, []);
 
   const saveSkin = async (e: FormEvent) => {
     e.preventDefault();
@@ -188,8 +216,8 @@ export default function AccountAdjustmentsPage() {
                       <input
                         type="color"
                         value={accentColor}
-                        onInput={(e) => setAccentColor((e.target as HTMLInputElement).value)}
-                        onChange={(e) => void saveAccentColor(e.target.value)}
+                        onInput={(e) => scheduleSaveAccentColor((e.target as HTMLInputElement).value)}
+                        onChange={(e) => scheduleSaveAccentColor(e.target.value)}
                         className="h-10 w-10 cursor-pointer rounded-lg border border-white/10 bg-transparent"
                         aria-label={t('account.skin.accent')}
                       />
@@ -211,8 +239,8 @@ export default function AccountAdjustmentsPage() {
                       <input
                         type="color"
                         value={accentColor2}
-                        onInput={(e) => setAccentColor2((e.target as HTMLInputElement).value)}
-                        onChange={(e) => void saveAccentColor2(e.target.value)}
+                        onInput={(e) => scheduleSaveAccentColor2((e.target as HTMLInputElement).value)}
+                        onChange={(e) => scheduleSaveAccentColor2(e.target.value)}
                         className="h-10 w-10 cursor-pointer rounded-lg border border-white/10 bg-transparent"
                         aria-label={t('account.skin.accent2')}
                       />

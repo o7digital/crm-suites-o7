@@ -25,6 +25,9 @@ export default function AdminSubscriptionsPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [customerName, setCustomerName] = useState('');
+  const [crmMode, setCrmMode] = useState<'B2B' | 'B2C'>('B2B');
+  const [crmModeLocked, setCrmModeLocked] = useState(false);
+  const [industry, setIndustry] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -72,10 +75,17 @@ export default function AdminSubscriptionsPage() {
     try {
       const created = await api<(typeof items)[number]>('/admin/subscriptions', {
         method: 'POST',
-        body: JSON.stringify({ customerName: name }),
+        body: JSON.stringify({
+          customerName: name,
+          crmMode,
+          industry: industry.trim() ? industry.trim() : null,
+        }),
       });
       setItems((prev) => [created, ...prev]);
       setCustomerName('');
+      setIndustry('');
+      setCrmMode('B2B');
+      setCrmModeLocked(false);
 
       const url = buildInviteUrl(created.customerTenantId, created.customerName);
       if (url) {
@@ -129,8 +139,8 @@ export default function AdminSubscriptionsPage() {
           <p className="text-sm font-semibold text-slate-100">{t('adminSubscriptions.create.title')}</p>
           <p className="mt-1 text-sm text-slate-400">{t('adminSubscriptions.create.subtitle')}</p>
 
-          <form className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={create}>
-            <div className="flex-1">
+          <form className="mt-4 grid gap-3 sm:grid-cols-[1fr_220px_1fr_auto] sm:items-end" onSubmit={create}>
+            <div>
               <label className="text-sm text-slate-300">{t('adminSubscriptions.customerName')}</label>
               <input
                 className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
@@ -138,6 +148,44 @@ export default function AdminSubscriptionsPage() {
                 onChange={(e) => setCustomerName(e.target.value)}
                 placeholder={t('adminSubscriptions.customerNamePlaceholder')}
                 required
+              />
+            </div>
+            <div>
+              <label className="text-sm text-slate-300">{t('adminSubscriptions.crmMode')}</label>
+              <select
+                className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                value={crmMode}
+                onChange={(e) => {
+                  setCrmMode(e.target.value as 'B2B' | 'B2C');
+                  setCrmModeLocked(true);
+                }}
+              >
+                <option value="B2B">{t('adminSubscriptions.crmModeB2B')}</option>
+                <option value="B2C">{t('adminSubscriptions.crmModeB2C')}</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm text-slate-300">{t('adminSubscriptions.industry')}</label>
+              <input
+                className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                value={industry}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setIndustry(next);
+                  // Simple heuristic: common B2C industries default to B2C.
+                  const v = next.trim().toLowerCase();
+                  const looksB2c =
+                    v.includes('hotel') ||
+                    v.includes('hoteler') ||
+                    v.includes('ecommerce') ||
+                    v.includes('e-commerce') ||
+                    v.includes('retail') ||
+                    v.includes('restaurant') ||
+                    v.includes('tourism') ||
+                    v.includes('travel');
+                  if (looksB2c && !crmModeLocked) setCrmMode('B2C');
+                }}
+                placeholder={t('adminSubscriptions.industryPlaceholder')}
               />
             </div>
             <button

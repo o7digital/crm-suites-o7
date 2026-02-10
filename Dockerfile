@@ -23,4 +23,4 @@ COPY --from=builder /app/api/prisma ./prisma
 RUN npm ci --omit=dev \
   && npx prisma generate
 ENV PORT=8080
-CMD ["node", "dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]

@@ -28,6 +28,6 @@ export class AdminController {
 
   @Post('subscriptions')
   createSubscription(@Body() dto: CreateSubscriptionDto, @CurrentUser() user: RequestUser) {
-    return this.adminService.createSubscription(dto.customerName, user);
+    return this.adminService.createSubscription(dto, user);
   }
 }

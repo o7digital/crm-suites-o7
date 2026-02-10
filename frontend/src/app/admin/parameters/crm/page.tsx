@@ -1,0 +1,114 @@
+'use client';
+
+import { FormEvent, useEffect, useState } from 'react';
+import { AppShell } from '../../../../components/AppShell';
+import { Guard } from '../../../../components/Guard';
+import { useApi, useAuth } from '../../../../contexts/AuthContext';
+import { useI18n } from '../../../../contexts/I18nContext';
+
+type TenantSettings = {
+  crmMode: 'B2B' | 'B2C';
+  industry: string | null;
+};
+
+export default function AdminCrmParametersPage() {
+  const { token } = useAuth();
+  const api = useApi(token);
+  const { t } = useI18n();
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [crmMode, setCrmMode] = useState<TenantSettings['crmMode']>('B2B');
+  const [industry, setIndustry] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    setLoading(true);
+    setError(null);
+    api<{ settings: TenantSettings }>('/tenant/settings', { method: 'GET' })
+      .then((data) => {
+        setCrmMode(data.settings?.crmMode === 'B2C' ? 'B2C' : 'B2B');
+        setIndustry(data.settings?.industry || '');
+      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [api, token]);
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+    setInfo(null);
+    try {
+      await api('/tenant/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          crmMode,
+          industry: industry.trim() ? industry.trim() : null,
+        }),
+      });
+      setInfo(t('common.saved'));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to save';
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Guard>
+      <AppShell>
+        <div className="mb-6">
+          <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('nav.admin')}</p>
+          <h1 className="text-3xl font-semibold">CRM</h1>
+          <p className="mt-2 text-sm text-slate-400">Configure B2B/B2C mode and default pipeline for this workspace.</p>
+        </div>
+
+        <div className="card p-6">
+          {loading ? <p className="text-sm text-slate-300">{t('common.loading')}</p> : null}
+
+          {!loading ? (
+            <form className="mt-2 grid gap-4 md:grid-cols-2" onSubmit={save}>
+              <div>
+                <label className="text-sm text-slate-300">CRM mode</label>
+                <select
+                  className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                  value={crmMode}
+                  onChange={(e) => setCrmMode(e.target.value as TenantSettings['crmMode'])}
+                >
+                  <option value="B2B">B2B</option>
+                  <option value="B2C">B2C</option>
+                </select>
+                <p className="mt-2 text-xs text-slate-500">B2C uses a dedicated pipeline (Lead → Qualified → Offer → Checkout → Won/Lost).</p>
+              </div>
+
+              <div>
+                <label className="text-sm text-slate-300">Industry</label>
+                <input
+                  className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                  value={industry}
+                  onChange={(e) => setIndustry(e.target.value)}
+                  placeholder="e.g. Hospitality"
+                />
+                <p className="mt-2 text-xs text-slate-500">Used for onboarding and workspace configuration.</p>
+              </div>
+
+              <div className="flex items-center gap-2 md:col-span-2 md:justify-end">
+                <button type="submit" className="btn-primary text-sm" disabled={saving}>
+                  {saving ? t('common.saving') : t('common.save')}
+                </button>
+              </div>
+            </form>
+          ) : null}
+
+          {info ? <p className="mt-3 text-sm text-emerald-200">{info}</p> : null}
+          {error ? <div className="mt-3 rounded-lg bg-red-500/15 px-3 py-2 text-red-200">{error}</div> : null}
+        </div>
+      </AppShell>
+    </Guard>
+  );
+}
+

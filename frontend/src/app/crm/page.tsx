@@ -66,6 +66,11 @@ type Deal = {
   items?: DealItem[];
 };
 
+type TenantSettings = {
+  crmMode: 'B2B' | 'B2C';
+  industry?: string | null;
+};
+
 const DEAL_CURRENCIES = ['USD', 'EUR', 'MXN', 'CAD'] as const;
 type DealCurrency = (typeof DEAL_CURRENCIES)[number];
 
@@ -102,6 +107,7 @@ export default function CrmPage() {
   const router = useRouter();
   const { t, stageName } = useI18n();
   const lastDragAtRef = useRef<number>(0);
+  const [crmMode, setCrmMode] = useState<TenantSettings['crmMode']>('B2B');
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState<string>('');
   const [stages, setStages] = useState<Stage[]>([]);
@@ -237,9 +243,27 @@ export default function CrmPage() {
   useEffect(() => {
     if (!token) return;
     setLoading(true);
-    api<Pipeline[]>('/pipelines')
-      .then((data) => {
-        setPipelines(data);
+    Promise.allSettled([
+      api<{ settings: TenantSettings }>('/tenant/settings', { method: 'GET' }),
+      api<Pipeline[]>('/pipelines'),
+    ])
+      .then(([settingsResult, pipelinesResult]) => {
+        const mode =
+          settingsResult.status === 'fulfilled' && settingsResult.value.settings?.crmMode === 'B2C'
+            ? 'B2C'
+            : 'B2B';
+        setCrmMode(mode);
+
+        const data = pipelinesResult.status === 'fulfilled' ? pipelinesResult.value : [];
+        if (pipelinesResult.status === 'rejected') {
+          const message = pipelinesResult.reason instanceof Error ? pipelinesResult.reason.message : 'Unable to load pipelines';
+          setError(message);
+        }
+
+        const filtered =
+          mode === 'B2C' ? data.filter((p) => p.name !== 'New Sales') : data.filter((p) => p.name !== 'B2C');
+
+        setPipelines(filtered);
         let requested: string | null = null;
         let requestedStage: string | null = null;
         if (typeof window !== 'undefined') {
@@ -252,11 +276,10 @@ export default function CrmPage() {
           }
         }
         setRequestedStageId(requestedStage || null);
-        const match = requested ? data.find((p) => p.id === requested) : null;
-        const defaultPipeline = match || data.find((p) => p.isDefault) || data[0];
+        const match = requested ? filtered.find((p) => p.id === requested) : null;
+        const defaultPipeline = match || filtered.find((p) => p.isDefault) || filtered[0];
         setPipelineId(defaultPipeline?.id || '');
       })
-      .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [api, token]);
 

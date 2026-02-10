@@ -11,6 +11,11 @@ const tiles = [
     description: 'New fields (address, website, tax id, etc.).',
   },
   {
+    href: '/admin/parameters/crm',
+    title: 'CRM',
+    description: 'Workspace setup: B2B/B2C mode + industry.',
+  },
+  {
     href: '/admin/parameters/products',
     title: 'Products',
     description: 'List of products that can be selected in CRM deals.',
@@ -39,4 +44,3 @@ export default function AdminParametersPage() {
     </Guard>
   );
 }
-
