@@ -27,6 +27,8 @@ function RegisterPageContent() {
 
   const inviteTenantId = (searchParams.get('tenantId') || '').trim();
   const inviteTenantName = (searchParams.get('tenantName') || '').trim();
+  const inviteName = (searchParams.get('name') || '').trim();
+  const inviteEmail = (searchParams.get('email') || '').trim();
   const isInvite = Boolean(inviteTenantId);
 
   const [tenantName, setTenantName] = useState('');
@@ -42,6 +44,12 @@ function RegisterPageContent() {
     setTenantName(inviteTenantName || tenantName);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inviteTenantId, inviteTenantName, isInvite]);
+
+  useEffect(() => {
+    if (!isInvite) return;
+    if (inviteName) setName((prev) => prev || inviteName);
+    if (inviteEmail) setEmail((prev) => prev || inviteEmail);
+  }, [inviteEmail, inviteName, isInvite]);
 
   const tenantNameDisabled = useMemo(() => isInvite && Boolean(inviteTenantName), [inviteTenantName, isInvite]);
 

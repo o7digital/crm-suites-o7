@@ -255,6 +255,22 @@ export class SchemaUpgraderService {
       `);
     }
 
+    // New optional subscription contact fields.
+    const columns: Array<{ name: string; type: string }> = [
+      { name: 'contactFirstName', type: 'TEXT' },
+      { name: 'contactLastName', type: 'TEXT' },
+      { name: 'contactEmail', type: 'TEXT' },
+    ];
+    for (const col of columns) {
+      const exists = await this.columnExists('Subscription', col.name);
+      if (exists) continue;
+      try {
+        await this.prisma.$executeRawUnsafe(`ALTER TABLE "Subscription" ADD COLUMN "${col.name}" ${col.type};`);
+      } catch {
+        // Ignore permissions / already-added races.
+      }
+    }
+
     await this.prisma.$executeRawUnsafe(
       `CREATE UNIQUE INDEX IF NOT EXISTS "Subscription_customerTenantId_key" ON "Subscription"("customerTenantId");`,
     );

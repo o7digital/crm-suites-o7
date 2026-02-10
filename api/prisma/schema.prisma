@@ -64,6 +64,9 @@ model Subscription {
   tenantId          String
   customerTenantId  String             @unique
   customerName      String
+  contactFirstName  String?
+  contactLastName   String?
+  contactEmail      String?
   status            SubscriptionStatus @default(ACTIVE)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
