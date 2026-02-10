@@ -111,6 +111,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!active) return;
       const session = data.session;
       if (session) {
+        // Keep tenant bootstrap up-to-date for existing sessions (new pipelines/stages, etc.).
+        await bootstrapTenant(session.access_token);
         syncSession(session);
       }
       setLoading(false);
@@ -119,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [safeSupabase, syncSession]);
+  }, [bootstrapTenant, safeSupabase, syncSession]);
 
   const login = useCallback(
     async (email: string, password: string) => {
