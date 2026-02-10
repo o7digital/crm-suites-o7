@@ -15,17 +15,18 @@ export default function AccountAdjustmentsPage() {
   const DEFAULT_ACCENT_2 = '#22d3ee';
 
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
+  const [logoDirty, setLogoDirty] = useState(false);
   const [accentColor, setAccentColor] = useState<string>(DEFAULT_ACCENT);
   const [accentColor2, setAccentColor2] = useState<string>(DEFAULT_ACCENT_2);
   const [skinError, setSkinError] = useState<string | null>(null);
   const [skinInfo, setSkinInfo] = useState<string | null>(null);
 
   useEffect(() => {
-    setLogoDataUrl(branding.logoDataUrl);
+    if (!logoDirty) setLogoDataUrl(branding.logoDataUrl);
     setAccentColor(branding.accentColor || DEFAULT_ACCENT);
     setAccentColor2(branding.accentColor2 || DEFAULT_ACCENT_2);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branding.logoDataUrl, branding.accentColor, branding.accentColor2]);
+  }, [branding.logoDataUrl, branding.accentColor, branding.accentColor2, logoDirty]);
 
   const logoHint = useMemo(() => t('account.skin.logoHint'), [t]);
 
@@ -50,7 +51,34 @@ export default function AccountAdjustmentsPage() {
       reader.onerror = () => reject(new Error('Unable to read file'));
       reader.readAsDataURL(file);
     });
+    setLogoDirty(true);
     setLogoDataUrl(dataUrl);
+  };
+
+  const saveAccentColor = async (next: string) => {
+    setSkinError(null);
+    setSkinInfo(null);
+    setAccentColor(next);
+    try {
+      await updateBranding({ accentColor: next });
+      setSkinInfo(t('common.saved'));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to save';
+      setSkinError(message);
+    }
+  };
+
+  const saveAccentColor2 = async (next: string) => {
+    setSkinError(null);
+    setSkinInfo(null);
+    setAccentColor2(next);
+    try {
+      await updateBranding({ accentColor2: next });
+      setSkinInfo(t('common.saved'));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to save';
+      setSkinError(message);
+    }
   };
 
   const saveSkin = async (e: FormEvent) => {
@@ -63,6 +91,7 @@ export default function AccountAdjustmentsPage() {
         accentColor: accentColor || null,
         accentColor2: accentColor2 || null,
       });
+      setLogoDirty(false);
       setSkinInfo(t('common.saved'));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to save';
@@ -71,6 +100,7 @@ export default function AccountAdjustmentsPage() {
   };
 
   const resetSkin = () => {
+    setLogoDirty(true);
     setLogoDataUrl(null);
     setAccentColor(DEFAULT_ACCENT);
     setAccentColor2(DEFAULT_ACCENT_2);
@@ -140,7 +170,10 @@ export default function AccountAdjustmentsPage() {
                     <button
                       type="button"
                       className="btn-secondary text-sm"
-                      onClick={() => setLogoDataUrl(null)}
+                      onClick={() => {
+                        setLogoDirty(true);
+                        setLogoDataUrl(null);
+                      }}
                       disabled={!logoDataUrl}
                     >
                       {t('common.delete')}
@@ -155,7 +188,8 @@ export default function AccountAdjustmentsPage() {
                       <input
                         type="color"
                         value={accentColor}
-                        onChange={(e) => setAccentColor(e.target.value)}
+                        onInput={(e) => setAccentColor((e.target as HTMLInputElement).value)}
+                        onChange={(e) => void saveAccentColor(e.target.value)}
                         className="h-10 w-10 cursor-pointer rounded-lg border border-white/10 bg-transparent"
                         aria-label={t('account.skin.accent')}
                       />
@@ -163,6 +197,10 @@ export default function AccountAdjustmentsPage() {
                         className="flex-1 rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                         value={accentColor}
                         onChange={(e) => setAccentColor(e.target.value)}
+                        onBlur={(e) => {
+                          const v = e.target.value.trim();
+                          if (v && v !== branding.accentColor) void saveAccentColor(v);
+                        }}
                         placeholder={DEFAULT_ACCENT}
                       />
                     </div>
@@ -173,7 +211,8 @@ export default function AccountAdjustmentsPage() {
                       <input
                         type="color"
                         value={accentColor2}
-                        onChange={(e) => setAccentColor2(e.target.value)}
+                        onInput={(e) => setAccentColor2((e.target as HTMLInputElement).value)}
+                        onChange={(e) => void saveAccentColor2(e.target.value)}
                         className="h-10 w-10 cursor-pointer rounded-lg border border-white/10 bg-transparent"
                         aria-label={t('account.skin.accent2')}
                       />
@@ -181,6 +220,10 @@ export default function AccountAdjustmentsPage() {
                         className="flex-1 rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                         value={accentColor2}
                         onChange={(e) => setAccentColor2(e.target.value)}
+                        onBlur={(e) => {
+                          const v = e.target.value.trim();
+                          if (v && v !== branding.accentColor2) void saveAccentColor2(v);
+                        }}
                         placeholder={DEFAULT_ACCENT_2}
                       />
                     </div>
