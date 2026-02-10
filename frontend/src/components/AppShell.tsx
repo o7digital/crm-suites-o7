@@ -29,6 +29,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement | null>(null);
 
+  const showAdminBackToTop = Boolean(pathname && pathname !== '/admin' && pathname.startsWith('/admin/'));
+
   const isActiveRoute = useCallback(
     (href: string) => {
       if (!pathname) return false;
@@ -175,7 +177,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-6xl px-6 py-8">
+        {showAdminBackToTop ? (
+          <div className="mb-4 flex items-center justify-end">
+            <Link href="/admin" className="btn-secondary text-sm">
+              {t('admin.backToTop')}
+            </Link>
+          </div>
+        ) : null}
+        {children}
+      </main>
     </div>
   );
 }

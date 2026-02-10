@@ -14,6 +14,7 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     'nav.forecast': 'Forecast',
     'nav.export': 'Export',
     'nav.admin': 'Admin',
+    'admin.backToTop': 'Back to top',
 
     'auth.myAccount': 'My Account',
     'auth.logout': 'Logout',
@@ -282,6 +283,7 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     'nav.forecast': 'Forecast',
     'nav.export': 'Export',
     'nav.admin': 'Admin',
+    'admin.backToTop': 'Retour au menu',
 
     'auth.myAccount': 'Mon compte',
     'auth.logout': 'Deconnexion',
@@ -550,6 +552,7 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     'nav.forecast': 'Forecast',
     'nav.export': 'Export',
     'nav.admin': 'Admin',
+    'admin.backToTop': 'Volver al menu',
 
     'auth.myAccount': 'Mi cuenta',
     'auth.logout': 'Cerrar sesion',
