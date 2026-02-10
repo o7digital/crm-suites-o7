@@ -138,6 +138,36 @@ export class BootstrapService {
       });
     }
 
+    // Ensure B2C pipeline exists (Business-to-Consumer).
+    let b2c = find('B2C');
+    if (!b2c) {
+      const created = await this.prisma.pipeline.create({
+        data: {
+          tenantId,
+          name: 'B2C',
+          isDefault: false,
+        },
+      });
+      b2c = { id: created.id, name: created.name, isDefault: created.isDefault };
+
+      const stages = [
+        { name: 'Lead', position: 1, probability: 0.1, status: 'OPEN' as const },
+        { name: 'Qualified', position: 2, probability: 0.3, status: 'OPEN' as const },
+        { name: 'Offer', position: 3, probability: 0.5, status: 'OPEN' as const },
+        { name: 'Checkout', position: 4, probability: 0.7, status: 'OPEN' as const },
+        { name: 'Won', position: 5, probability: 1.0, status: 'WON' as const },
+        { name: 'Lost', position: 6, probability: 0.0, status: 'LOST' as const },
+      ];
+
+      await this.prisma.stage.createMany({
+        data: stages.map((stage) => ({
+          ...stage,
+          tenantId,
+          pipelineId: created.id,
+        })),
+      });
+    }
+
     // Keep New Sales stages up-to-date for existing tenants (idempotent).
     if (newSales) {
       await this.ensureNewSalesExtraStages(tenantId, newSales.id);
