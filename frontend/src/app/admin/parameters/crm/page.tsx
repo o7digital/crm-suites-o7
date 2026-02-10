@@ -5,6 +5,7 @@ import { AppShell } from '../../../../components/AppShell';
 import { Guard } from '../../../../components/Guard';
 import { useApi, useAuth } from '../../../../contexts/AuthContext';
 import { useI18n } from '../../../../contexts/I18nContext';
+import { findIndustryOption, industryGroups, industryLabel, industryRecommendedMode } from '../../../../lib/industries';
 
 type TenantSettings = {
   crmMode: 'B2B' | 'B2C';
@@ -14,12 +15,15 @@ type TenantSettings = {
 export default function AdminCrmParametersPage() {
   const { token } = useAuth();
   const api = useApi(token);
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const INDUSTRY_GROUPS = industryGroups();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [crmMode, setCrmMode] = useState<TenantSettings['crmMode']>('B2B');
-  const [industry, setIndustry] = useState('');
+  const [crmModeLocked, setCrmModeLocked] = useState(false);
+  const [industryId, setIndustryId] = useState('');
+  const [industryOther, setIndustryOther] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -30,7 +34,20 @@ export default function AdminCrmParametersPage() {
     api<{ settings: TenantSettings }>('/tenant/settings', { method: 'GET' })
       .then((data) => {
         setCrmMode(data.settings?.crmMode === 'B2C' ? 'B2C' : 'B2B');
-        setIndustry(data.settings?.industry || '');
+        setCrmModeLocked(false);
+
+        const rawIndustry = (data.settings?.industry || '').trim();
+        const known = findIndustryOption(rawIndustry);
+        if (!rawIndustry) {
+          setIndustryId('');
+          setIndustryOther('');
+        } else if (known) {
+          setIndustryId(known.id);
+          setIndustryOther('');
+        } else {
+          setIndustryId('OTHER');
+          setIndustryOther(rawIndustry);
+        }
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
@@ -41,12 +58,13 @@ export default function AdminCrmParametersPage() {
     setSaving(true);
     setError(null);
     setInfo(null);
+    const computedIndustry = industryId === 'OTHER' ? industryOther.trim() : industryId;
     try {
       await api('/tenant/settings', {
         method: 'PATCH',
         body: JSON.stringify({
           crmMode,
-          industry: industry.trim() ? industry.trim() : null,
+          industry: computedIndustry ? computedIndustry : null,
         }),
       });
       setInfo(t('common.saved'));
@@ -73,26 +91,63 @@ export default function AdminCrmParametersPage() {
           {!loading ? (
             <form className="mt-2 grid gap-4 md:grid-cols-2" onSubmit={save}>
               <div>
-                <label className="text-sm text-slate-300">CRM mode</label>
+                <label className="text-sm text-slate-300">{t('adminSubscriptions.crmMode')}</label>
                 <select
                   className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                   value={crmMode}
-                  onChange={(e) => setCrmMode(e.target.value as TenantSettings['crmMode'])}
+                  onChange={(e) => {
+                    setCrmMode(e.target.value as TenantSettings['crmMode']);
+                    setCrmModeLocked(true);
+                  }}
                 >
-                  <option value="B2B">B2B</option>
-                  <option value="B2C">B2C</option>
+                  <option value="B2B">{t('adminSubscriptions.crmModeB2B')}</option>
+                  <option value="B2C">{t('adminSubscriptions.crmModeB2C')}</option>
                 </select>
                 <p className="mt-2 text-xs text-slate-500">B2C uses a dedicated pipeline (Lead → Qualified → Offer → Checkout → Won/Lost).</p>
               </div>
 
               <div>
-                <label className="text-sm text-slate-300">Industry</label>
-                <input
+                <label className="text-sm text-slate-300">{t('adminSubscriptions.industry')}</label>
+                <select
                   className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
-                  value={industry}
-                  onChange={(e) => setIndustry(e.target.value)}
-                  placeholder="e.g. Hospitality"
-                />
+                  value={industryId}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setIndustryId(next);
+                    if (next !== 'OTHER') setIndustryOther('');
+                    const recommended = industryRecommendedMode(next);
+                    if (recommended && !crmModeLocked) setCrmMode(recommended);
+                  }}
+                >
+                  <option value="">{t('adminSubscriptions.industryPlaceholder')}</option>
+                  <optgroup label="B2C">
+                    {INDUSTRY_GROUPS.b2c.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {industryLabel(opt, language)}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="B2B">
+                    {INDUSTRY_GROUPS.b2b.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {industryLabel(opt, language)}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {INDUSTRY_GROUPS.other.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {industryLabel(opt, language)}
+                    </option>
+                  ))}
+                </select>
+                {industryId === 'OTHER' ? (
+                  <input
+                    className="mt-2 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                    value={industryOther}
+                    onChange={(e) => setIndustryOther(e.target.value)}
+                    placeholder={t('adminSubscriptions.industryPlaceholder')}
+                  />
+                ) : null}
                 <p className="mt-2 text-xs text-slate-500">Used for onboarding and workspace configuration.</p>
               </div>
 
@@ -111,4 +166,3 @@ export default function AdminCrmParametersPage() {
     </Guard>
   );
 }
-

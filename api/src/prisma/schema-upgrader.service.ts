@@ -8,6 +8,7 @@ export class SchemaUpgraderService {
   // Best-effort, idempotent schema upgrades for production drift.
   // This keeps the API functional even if Prisma Migrate is blocked.
   async run() {
+    await this.ensureUserRoleSchema();
     await this.ensureDealClientId();
     await this.ensureDealOwnerId();
     await this.ensureProductsSchema();
@@ -79,6 +80,37 @@ export class SchemaUpgraderService {
       } catch {
         // Ignore if the constraint already exists under a different name.
       }
+    }
+  }
+
+  private async ensureUserRoleSchema() {
+    const hasUser = await this.tableExists('User');
+    if (!hasUser) return;
+
+    const hasRole = await this.columnExists('User', 'role');
+    if (hasRole) return;
+
+    // Create enum if missing (no IF NOT EXISTS for CREATE TYPE in Postgres).
+    await this.prisma.$executeRawUnsafe(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_type t
+          JOIN pg_namespace n ON n.oid = t.typnamespace
+          WHERE t.typname = 'UserRole' AND n.nspname = 'public'
+        ) THEN
+          CREATE TYPE "UserRole" AS ENUM ('OWNER', 'ADMIN', 'MEMBER');
+        END IF;
+      END $$;
+    `);
+
+    try {
+      await this.prisma.$executeRawUnsafe(
+        `ALTER TABLE "User" ADD COLUMN "role" "UserRole" NOT NULL DEFAULT 'MEMBER';`,
+      );
+    } catch {
+      // Ignore permissions / already-added races.
     }
   }
 

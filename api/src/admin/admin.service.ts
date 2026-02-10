@@ -22,10 +22,17 @@ export class AdminService {
   }
 
   private async ensureAdmin(user: RequestUser) {
-    const dbUser = await this.prisma.user.findFirst({
-      where: { id: user.userId, tenantId: user.tenantId },
-      select: { role: true },
-    });
+    let dbUser: { role: string } | null = null;
+    try {
+      dbUser = await this.prisma.user.findFirst({
+        where: { id: user.userId, tenantId: user.tenantId },
+        select: { role: true },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
     if (!dbUser) throw new NotFoundException('User not found');
     if (dbUser.role !== 'OWNER' && dbUser.role !== 'ADMIN') {
       throw new ForbiddenException('Admin access required');

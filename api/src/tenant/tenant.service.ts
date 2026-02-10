@@ -22,11 +22,17 @@ export class TenantService {
   }
 
   private async getUserRole(user: RequestUser): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
-    const dbUser = await this.prisma.user.findFirst({
-      where: { id: user.userId, tenantId: user.tenantId },
-      select: { role: true },
-    });
-    return (dbUser?.role as 'OWNER' | 'ADMIN' | 'MEMBER' | undefined) ?? 'MEMBER';
+    try {
+      const dbUser = await this.prisma.user.findFirst({
+        where: { id: user.userId, tenantId: user.tenantId },
+        select: { role: true },
+      });
+      return (dbUser?.role as 'OWNER' | 'ADMIN' | 'MEMBER' | undefined) ?? 'MEMBER';
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
   }
 
   private async ensureAdmin(user: RequestUser) {

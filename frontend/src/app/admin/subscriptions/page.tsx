@@ -5,11 +5,13 @@ import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useApi, useAuth } from '../../../contexts/AuthContext';
 import { useI18n } from '../../../contexts/I18nContext';
+import { industryGroups, industryLabel, industryRecommendedMode } from '../../../lib/industries';
 
 export default function AdminSubscriptionsPage() {
   const { token } = useAuth();
   const api = useApi(token);
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const INDUSTRY_GROUPS = industryGroups();
 
   const [origin, setOrigin] = useState('');
   const [items, setItems] = useState<
@@ -36,7 +38,8 @@ export default function AdminSubscriptionsPage() {
   const [contactEmail, setContactEmail] = useState('');
   const [crmMode, setCrmMode] = useState<'B2B' | 'B2C'>('B2B');
   const [crmModeLocked, setCrmModeLocked] = useState(false);
-  const [industry, setIndustry] = useState('');
+  const [industryId, setIndustryId] = useState('');
+  const [industryOther, setIndustryOther] = useState('');
   const [plan, setPlan] = useState<
     'TRIAL' | 'PULSE_BASIC' | 'PULSE_STANDARD' | 'PULSE_ADVANCED' | 'PULSE_ADVANCED_PLUS' | 'PULSE_TEAM'
   >('TRIAL');
@@ -87,7 +90,8 @@ export default function AdminSubscriptionsPage() {
     const first = contactFirstName.trim();
     const last = contactLastName.trim();
     const email = contactEmail.trim();
-    if (!name || !first || !last || !email) return;
+    const industryValue = industryId === 'OTHER' ? industryOther.trim() : industryId;
+    if (!name || !first || !last || !email || !industryValue) return;
 
     setCreating(true);
     try {
@@ -99,7 +103,7 @@ export default function AdminSubscriptionsPage() {
           contactLastName: last,
           contactEmail: email,
           crmMode,
-          industry: industry.trim() ? industry.trim() : null,
+          industry: industryValue,
           plan,
           seats: plan === 'PULSE_TEAM' ? teamSeats : undefined,
         }),
@@ -109,7 +113,8 @@ export default function AdminSubscriptionsPage() {
       setContactFirstName('');
       setContactLastName('');
       setContactEmail('');
-      setIndustry('');
+      setIndustryId('');
+      setIndustryOther('');
       setCrmMode('B2B');
       setCrmModeLocked(false);
       setPlan('TRIAL');
@@ -284,27 +289,48 @@ export default function AdminSubscriptionsPage() {
               </div>
               <div>
                 <label className="text-sm text-slate-300">{t('adminSubscriptions.industry')}</label>
-                <input
+                <select
                   className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
-                  value={industry}
+                  value={industryId}
                   onChange={(e) => {
                     const next = e.target.value;
-                    setIndustry(next);
-                    // Simple heuristic: common B2C industries default to B2C.
-                    const v = next.trim().toLowerCase();
-                    const looksB2c =
-                      v.includes('hotel') ||
-                      v.includes('hoteler') ||
-                      v.includes('ecommerce') ||
-                      v.includes('e-commerce') ||
-                      v.includes('retail') ||
-                      v.includes('restaurant') ||
-                      v.includes('tourism') ||
-                      v.includes('travel');
-                    if (looksB2c && !crmModeLocked) setCrmMode('B2C');
+                    setIndustryId(next);
+                    if (next !== 'OTHER') setIndustryOther('');
+                    const recommended = industryRecommendedMode(next);
+                    if (recommended && !crmModeLocked) setCrmMode(recommended);
                   }}
-                  placeholder={t('adminSubscriptions.industryPlaceholder')}
-                />
+                  required
+                >
+                  <option value="">{t('adminSubscriptions.industryPlaceholder')}</option>
+                  <optgroup label="B2C">
+                    {INDUSTRY_GROUPS.b2c.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {industryLabel(opt, language)}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="B2B">
+                    {INDUSTRY_GROUPS.b2b.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {industryLabel(opt, language)}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {INDUSTRY_GROUPS.other.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {industryLabel(opt, language)}
+                    </option>
+                  ))}
+                </select>
+                {industryId === 'OTHER' ? (
+                  <input
+                    className="mt-2 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                    value={industryOther}
+                    onChange={(e) => setIndustryOther(e.target.value)}
+                    placeholder={t('adminSubscriptions.industryPlaceholder')}
+                    required
+                  />
+                ) : null}
               </div>
               <button
                 type="submit"
@@ -314,7 +340,9 @@ export default function AdminSubscriptionsPage() {
                   !customerName.trim() ||
                   !contactFirstName.trim() ||
                   !contactLastName.trim() ||
-                  !contactEmail.trim()
+                  !contactEmail.trim() ||
+                  !industryId ||
+                  (industryId === 'OTHER' && !industryOther.trim())
                 }
               >
                 {creating ? t('adminSubscriptions.creating') : t('adminSubscriptions.createButton')}
