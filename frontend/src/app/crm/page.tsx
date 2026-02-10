@@ -553,7 +553,7 @@ export default function CrmPage() {
         )}
 
         {/* Keep all stages on one line (no wrap). Horizontal scroll if needed. */}
-        <div className="overflow-x-auto pb-4 2xl:-ml-48 2xl:w-[calc(100%+12rem)]">
+        <div className="overflow-x-auto pb-4 2xl:-ml-48 2xl:w-[calc(100%+24rem)]">
           <div className="flex w-max gap-4 pr-6">
             {sortedStages.map((stage) => (
               <StageColumn
