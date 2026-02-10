@@ -12,7 +12,9 @@ export class AdminService {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
       // Common Prisma codes when tables/columns are missing because migrations haven't run yet.
       if (err.code === 'P2021' || err.code === 'P2022') {
-        return new ServiceUnavailableException('Database upgrade in progress. Please retry in a minute.');
+        return new ServiceUnavailableException(
+          'Database schema upgrade pending. Redeploy the API (or run migrations), then retry.',
+        );
       }
     }
     return null;
