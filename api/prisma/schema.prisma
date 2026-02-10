@@ -173,6 +173,7 @@ model Deal {
   value            Decimal  @db.Decimal(12, 2)
   currency         String   @default("USD")
   expectedCloseDate DateTime?
+  proposalFilePath String?
   clientId         String?
   ownerId          String?
   tenantId         String

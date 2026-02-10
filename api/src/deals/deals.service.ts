@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
 import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
 import { MoveStageDto } from './dto/move-stage.dto';
+import * as fs from 'fs';
 
 const DEAL_BASE_SELECT = {
   id: true,
@@ -24,6 +25,7 @@ type DealSchemaCaps = {
   hasClientId: boolean;
   hasOwnerId: boolean;
   hasProductTables: boolean;
+  hasProposalFilePath: boolean;
 };
 
 @Injectable()
@@ -44,7 +46,7 @@ export class DealsService {
         FROM information_schema.columns
         WHERE table_schema = 'public'
           AND table_name = 'Deal'
-          AND column_name IN ('clientId', 'ownerId')
+          AND column_name IN ('clientId', 'ownerId', 'proposalFilePath')
       `,
       this.prisma.$queryRaw<Array<{ table_name: string }>>`
         SELECT table_name
@@ -56,9 +58,10 @@ export class DealsService {
 
     const hasClientId = dealColumns.some((c) => c.column_name === 'clientId');
     const hasOwnerId = dealColumns.some((c) => c.column_name === 'ownerId');
+    const hasProposalFilePath = dealColumns.some((c) => c.column_name === 'proposalFilePath');
     const hasProductTables = tables.some((t) => t.table_name === 'Product') && tables.some((t) => t.table_name === 'DealItem');
 
-    const caps = { hasClientId, hasOwnerId, hasProductTables };
+    const caps = { hasClientId, hasOwnerId, hasProductTables, hasProposalFilePath };
     this.schemaCache = { checkedAt: now, caps };
     return caps;
   }
@@ -72,6 +75,9 @@ export class DealsService {
     if (caps.hasOwnerId) {
       select.ownerId = true;
     }
+    if (caps.hasProposalFilePath) {
+      select.proposalFilePath = true;
+    }
     if (caps.hasProductTables) {
       select.items = { include: { product: true } };
     }
@@ -79,11 +85,21 @@ export class DealsService {
   }
 
   private async getUserRole(user: RequestUser): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
-    const dbUser = await this.prisma.user.findFirst({
-      where: { id: user.userId, tenantId: user.tenantId },
-      select: { role: true },
-    });
-    return (dbUser?.role as 'OWNER' | 'ADMIN' | 'MEMBER' | undefined) ?? 'MEMBER';
+    try {
+      const dbUser = await this.prisma.user.findFirst({
+        where: { id: user.userId, tenantId: user.tenantId },
+        select: { role: true },
+      });
+      return (dbUser?.role as 'OWNER' | 'ADMIN' | 'MEMBER' | undefined) ?? 'MEMBER';
+    } catch (err) {
+      // Legacy / drifted schemas might not have the role column yet. Don't hard-fail the whole CRM.
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        if (err.code === 'P2021' || err.code === 'P2022') {
+          return 'OWNER';
+        }
+      }
+      throw err;
+    }
   }
 
   async create(dto: CreateDealDto, user: RequestUser) {
@@ -239,6 +255,65 @@ export class DealsService {
       data,
       select: this.dealSelect(caps),
     });
+  }
+
+  async uploadProposal(id: string, file: Express.Multer.File, user: RequestUser) {
+    if (!file) throw new BadRequestException('File is required');
+
+    const isPdf =
+      (file.mimetype || '').toLowerCase() === 'application/pdf' ||
+      (file.originalname || '').toLowerCase().endsWith('.pdf');
+    if (!isPdf) throw new BadRequestException('Only PDF files are allowed');
+
+    const caps = await this.getSchemaCaps();
+    if (!caps.hasProposalFilePath) {
+      throw new BadRequestException(
+        'CRM schema upgrade pending (missing Deal.proposalFilePath). Please retry in a minute.',
+      );
+    }
+
+    await this.ensureBelongs(id, user, caps);
+
+    const existing = await this.prisma.deal.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: { proposalFilePath: true },
+    });
+    const oldPath = existing?.proposalFilePath || null;
+
+    const updated = await this.prisma.deal.update({
+      where: { id },
+      data: { proposalFilePath: file.path },
+      select: this.dealSelect(caps),
+    });
+
+    if (oldPath && oldPath !== file.path) {
+      try {
+        fs.unlinkSync(oldPath);
+      } catch {
+        // ignore missing permissions / already deleted
+      }
+    }
+
+    return updated;
+  }
+
+  async getProposalFilePath(id: string, user: RequestUser): Promise<string> {
+    const caps = await this.getSchemaCaps();
+    if (!caps.hasProposalFilePath) {
+      throw new BadRequestException(
+        'CRM schema upgrade pending (missing Deal.proposalFilePath). Please retry in a minute.',
+      );
+    }
+
+    await this.ensureBelongs(id, user, caps);
+
+    const deal = await this.prisma.deal.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: { proposalFilePath: true },
+    });
+    const filePath = deal?.proposalFilePath || null;
+    if (!filePath) throw new NotFoundException('Proposal not found');
+    return filePath;
   }
 
   async moveStage(id: string, dto: MoveStageDto, user: RequestUser) {

@@ -107,6 +107,7 @@ export default function CrmPage() {
   const router = useRouter();
   const { t, stageName } = useI18n();
   const lastDragAtRef = useRef<number>(0);
+  const proposalRef = useRef<HTMLInputElement | null>(null);
   const [crmMode, setCrmMode] = useState<TenantSettings['crmMode']>('B2B');
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState<string>('');
@@ -123,6 +124,9 @@ export default function CrmPage() {
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
+  const [proposalFile, setProposalFile] = useState<File | null>(null);
+  const [proposalFileName, setProposalFileName] = useState('');
+  const [proposalError, setProposalError] = useState<string | null>(null);
   const [stagesByPipelineId, setStagesByPipelineId] = useState<Record<string, Stage[]>>({});
   const [modalStagesLoading, setModalStagesLoading] = useState(false);
   const [modalStagesError, setModalStagesError] = useState<string | null>(null);
@@ -183,6 +187,10 @@ export default function CrmPage() {
       setClientDraftError(null);
       setClientDraftSaving(false);
       setEditingDeal(null);
+      setProposalFile(null);
+      setProposalFileName('');
+      setProposalError(null);
+      if (proposalRef.current) proposalRef.current.value = '';
       setForm({
         title: '',
         value: '',
@@ -434,6 +442,10 @@ export default function CrmPage() {
   const openCreateModal = () => {
     setError(null);
     setEditingDeal(null);
+    setProposalFile(null);
+    setProposalFileName('');
+    setProposalError(null);
+    if (proposalRef.current) proposalRef.current.value = '';
     setForm({
       title: '',
       value: '',
@@ -450,6 +462,10 @@ export default function CrmPage() {
   const openEditModal = (deal: Deal) => {
     setError(null);
     setEditingDeal(deal);
+    setProposalFile(null);
+    setProposalFileName('');
+    setProposalError(null);
+    if (proposalRef.current) proposalRef.current.value = '';
     setForm({
       title: deal.title ?? '',
       value: deal.value === null || deal.value === undefined ? '' : String(deal.value),
@@ -501,9 +517,28 @@ export default function CrmPage() {
           });
         }
 
+        let finalDeal: Deal = { ...editingDeal, ...updated, stageId };
+
+        if (proposalFile) {
+          const proposalForm = new FormData();
+          proposalForm.append('file', proposalFile);
+          try {
+            const withProposal = await api<Deal>(`/deals/${editingDeal.id}/proposal`, {
+              method: 'POST',
+              body: proposalForm,
+            });
+            finalDeal = { ...finalDeal, ...withProposal };
+            setProposalError(null);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unable to upload proposal PDF';
+            setProposalError(message);
+            throw err;
+          }
+        }
+
         setDeals((prev) =>
           prev.map((deal) =>
-            deal.id === editingDeal.id ? { ...deal, ...updated, stageId } : deal,
+            deal.id === editingDeal.id ? { ...deal, ...finalDeal } : deal,
           ),
         );
       } else {
@@ -520,9 +555,42 @@ export default function CrmPage() {
             productIds: form.productIds,
           }),
         });
+        let finalDeal = created;
+
+        // Optimistically add the deal so it's not lost even if the PDF upload fails.
         if (targetPipelineId === pipelineId) {
           setDeals((prev) => [created, ...prev]);
-        } else {
+        }
+
+        if (proposalFile) {
+          const proposalForm = new FormData();
+          proposalForm.append('file', proposalFile);
+          try {
+            const withProposal = await api<Deal>(`/deals/${created.id}/proposal`, {
+              method: 'POST',
+              body: proposalForm,
+            });
+            finalDeal = withProposal;
+            setProposalError(null);
+            if (targetPipelineId === pipelineId) {
+              setDeals((prev) => prev.map((d) => (d.id === created.id ? { ...d, ...withProposal } : d)));
+            }
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Unable to upload proposal PDF';
+            setProposalError(message);
+            // Keep the modal open in edit mode so the user can retry the upload.
+            if (targetPipelineId !== pipelineId) {
+              setPipelineId(targetPipelineId);
+              setRequestedStageId(null);
+              setHighlightStageId(null);
+              router.replace(`/crm?pipelineId=${targetPipelineId}`);
+            }
+            setEditingDeal(created);
+            return;
+          }
+        }
+
+        if (targetPipelineId !== pipelineId) {
           // Created in a different pipeline: switch the board so the user immediately sees it.
           setPipelineId(targetPipelineId);
           setRequestedStageId(null);
@@ -688,15 +756,15 @@ export default function CrmPage() {
         </div>
 
         {showModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-            <div className="card w-full max-w-md p-6">
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-10">
+            <div className="card flex w-full max-w-md max-h-[90vh] flex-col overflow-hidden p-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold">{editingDeal ? t('crm.editDeal') : t('crm.newDeal')}</h2>
                 <button className="text-slate-400" onClick={() => setShowModal(false)}>
                   ✕
                 </button>
               </div>
-              <div className="mt-4 space-y-3">
+              <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
                 <label className="block text-sm text-slate-300">
                   {t('crm.dealName')}
                   <input
@@ -975,6 +1043,59 @@ export default function CrmPage() {
                       </div>
                     )}
                   </div>
+                </div>
+
+                <div>
+                  <p className="text-sm text-slate-300">{t('crm.proposalPdf')}</p>
+                  <div className="mt-2 flex items-center gap-3 rounded-lg border border-dashed border-white/15 bg-white/5 px-3 py-3 text-sm text-slate-300">
+                    <input
+                      ref={proposalRef}
+                      type="file"
+                      accept="application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        setProposalError(null);
+                        const file = e.target.files?.[0] || null;
+                        if (!file) {
+                          setProposalFile(null);
+                          setProposalFileName('');
+                          return;
+                        }
+                        const ok =
+                          (file.type || '').toLowerCase() === 'application/pdf' ||
+                          (file.name || '').toLowerCase().endsWith('.pdf');
+                        if (!ok) {
+                          setProposalFile(null);
+                          setProposalFileName('');
+                          if (proposalRef.current) proposalRef.current.value = '';
+                          setProposalError(t('crm.proposalPdfOnly'));
+                          return;
+                        }
+                        setProposalFile(file);
+                        setProposalFileName(file.name || 'proposal.pdf');
+                      }}
+                    />
+                    <button type="button" className="btn-secondary" onClick={() => proposalRef.current?.click()}>
+                      {t('invoices.chooseFile')}
+                    </button>
+                    <span className="text-slate-400">{proposalFileName || t('invoices.noFileChosen')}</span>
+                    {proposalFileName ? (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          setProposalFile(null);
+                          setProposalFileName('');
+                          setProposalError(null);
+                          if (proposalRef.current) proposalRef.current.value = '';
+                        }}
+                      >
+                        {t('common.delete')}
+                      </button>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">{t('crm.proposalPdfHint')}</p>
+                  {proposalError ? <p className="mt-2 text-xs text-red-200">{proposalError}</p> : null}
                 </div>
               </div>
               <div className="mt-6 flex items-center justify-end gap-2">

@@ -11,6 +11,7 @@ export class SchemaUpgraderService {
     await this.ensureUserRoleSchema();
     await this.ensureDealClientId();
     await this.ensureDealOwnerId();
+    await this.ensureDealProposalFields();
     await this.ensureProductsSchema();
     await this.ensureClientProfileFields();
     await this.ensureSubscriptionsSchema();
@@ -156,6 +157,17 @@ export class SchemaUpgraderService {
         `);
       } catch {
         // Ignore if the constraint already exists under a different name.
+      }
+    }
+  }
+
+  private async ensureDealProposalFields() {
+    const hasProposalFilePath = await this.columnExists('Deal', 'proposalFilePath');
+    if (!hasProposalFilePath) {
+      try {
+        await this.prisma.$executeRawUnsafe(`ALTER TABLE "Deal" ADD COLUMN "proposalFilePath" TEXT;`);
+      } catch {
+        // Ignore permissions / already-added races.
       }
     }
   }
