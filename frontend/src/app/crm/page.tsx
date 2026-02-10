@@ -117,6 +117,9 @@ export default function CrmPage() {
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
+  const [stagesByPipelineId, setStagesByPipelineId] = useState<Record<string, Stage[]>>({});
+  const [modalStagesLoading, setModalStagesLoading] = useState(false);
+  const [modalStagesError, setModalStagesError] = useState<string | null>(null);
   const [showClientCreate, setShowClientCreate] = useState(false);
   const [clientDraft, setClientDraft] = useState<{
     firstName: string;
@@ -144,6 +147,7 @@ export default function CrmPage() {
     expectedCloseDate: string;
     clientId: string;
     productIds: string[];
+    pipelineId: string;
     stageId: string;
   }>({
     title: '',
@@ -152,12 +156,15 @@ export default function CrmPage() {
     expectedCloseDate: '',
     clientId: '',
     productIds: [],
+    pipelineId: '',
     stageId: '',
   });
 
   useEffect(() => {
     if (!showModal) {
       setShowClientCreate(false);
+      setModalStagesLoading(false);
+      setModalStagesError(null);
       setClientDraft({
         firstName: '',
         name: '',
@@ -170,7 +177,16 @@ export default function CrmPage() {
       setClientDraftError(null);
       setClientDraftSaving(false);
       setEditingDeal(null);
-      setForm({ title: '', value: '', currency: 'USD', expectedCloseDate: '', clientId: '', productIds: [], stageId: '' });
+      setForm({
+        title: '',
+        value: '',
+        currency: 'USD',
+        expectedCloseDate: '',
+        clientId: '',
+        productIds: [],
+        pipelineId: '',
+        stageId: '',
+      });
     }
   }, [showModal]);
 
@@ -258,8 +274,10 @@ export default function CrmPage() {
 
         if (stagesResult.status === 'fulfilled') {
           setStages(stagesResult.value);
+          setStagesByPipelineId((prev) => ({ ...prev, [pipelineId]: stagesResult.value }));
         } else {
           setStages([]);
+          setStagesByPipelineId((prev) => ({ ...prev, [pipelineId]: [] }));
         }
 
         if (dealsResult.status === 'fulfilled') {
@@ -328,11 +346,67 @@ export default function CrmPage() {
     return openStage?.id || sortedStages[0]?.id || '';
   }, [sortedStages]);
 
-  const selectedStage = useMemo(() => {
-    return sortedStages.find((stage) => stage.id === form.stageId) || null;
-  }, [form.stageId, sortedStages]);
+  const modalPipelineId = form.pipelineId || pipelineId;
 
-  const stageProbabilityPct = Math.round(((selectedStage?.probability ?? 0) as number) * 100);
+  const modalSortedStages = useMemo(() => {
+    const cached = modalPipelineId ? stagesByPipelineId[modalPipelineId] : undefined;
+    const fallback = modalPipelineId === pipelineId ? stages : [];
+    const source = cached ?? fallback;
+    return [...(source || [])].sort((a, b) => a.position - b.position);
+  }, [modalPipelineId, pipelineId, stages, stagesByPipelineId]);
+
+  const modalDefaultStageId = useMemo(() => {
+    const openStage = modalSortedStages.find((stage) => stage.status === 'OPEN');
+    return openStage?.id || modalSortedStages[0]?.id || '';
+  }, [modalSortedStages]);
+
+  const modalSelectedStage = useMemo(() => {
+    return modalSortedStages.find((stage) => stage.id === form.stageId) || null;
+  }, [form.stageId, modalSortedStages]);
+
+  const stageProbabilityPct = Math.round(((modalSelectedStage?.probability ?? 0) as number) * 100);
+
+  useEffect(() => {
+    if (!token) return;
+    if (!showModal) return;
+    if (!modalPipelineId) return;
+
+    // Fetch stages for the selected pipeline if we don't have them yet.
+    if (stagesByPipelineId[modalPipelineId]) return;
+    if (modalPipelineId === pipelineId && stages.length > 0) return;
+
+    let active = true;
+    setModalStagesLoading(true);
+    setModalStagesError(null);
+    api<Stage[]>(`/stages?pipelineId=${modalPipelineId}`)
+      .then((data) => {
+        if (!active) return;
+        setStagesByPipelineId((prev) => ({ ...prev, [modalPipelineId]: data }));
+      })
+      .catch((err) => {
+        if (!active) return;
+        const message = err instanceof Error ? err.message : 'Unable to load stages';
+        setModalStagesError(message);
+        setStagesByPipelineId((prev) => ({ ...prev, [modalPipelineId]: [] }));
+      })
+      .finally(() => {
+        if (!active) return;
+        setModalStagesLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [api, modalPipelineId, pipelineId, showModal, stages, stagesByPipelineId, token]);
+
+  useEffect(() => {
+    if (!showModal) return;
+    if (!modalPipelineId) return;
+    if (modalSortedStages.length === 0) return;
+    const exists = modalSortedStages.some((stage) => stage.id === form.stageId);
+    if (exists) return;
+    setForm((prev) => ({ ...prev, stageId: modalDefaultStageId }));
+  }, [form.stageId, modalDefaultStageId, modalPipelineId, modalSortedStages, showModal]);
 
   const openCreateModal = () => {
     setError(null);
@@ -344,6 +418,7 @@ export default function CrmPage() {
       expectedCloseDate: '',
       clientId: '',
       productIds: [],
+      pipelineId,
       stageId: defaultStageId,
     });
     setShowModal(true);
@@ -359,6 +434,7 @@ export default function CrmPage() {
       expectedCloseDate: toDateInputValue(deal.expectedCloseDate),
       clientId: deal.clientId ?? '',
       productIds: (deal.items ?? []).map((it) => it.productId).filter(Boolean),
+      pipelineId: deal.pipelineId,
       stageId: deal.stageId,
     });
     setShowModal(true);
@@ -371,7 +447,8 @@ export default function CrmPage() {
   };
 
   const handleSaveDeal = async () => {
-    if (!form.title || !form.value || !pipelineId) return;
+    const targetPipelineId = form.pipelineId || pipelineId;
+    if (!form.title || !form.value || !targetPipelineId) return;
     setError(null);
     try {
       const title = form.title.trim();
@@ -379,7 +456,7 @@ export default function CrmPage() {
       if (!title) throw new Error('Deal name is required');
       if (!Number.isFinite(value)) throw new Error('Amount must be a number');
 
-      const stageId = form.stageId || defaultStageId;
+      const stageId = form.stageId || modalDefaultStageId || defaultStageId;
       if (!stageId) throw new Error('Stage is required');
 
       if (editingDeal) {
@@ -415,12 +492,20 @@ export default function CrmPage() {
             currency: form.currency,
             expectedCloseDate: form.expectedCloseDate || undefined,
             clientId: form.clientId || undefined,
-            pipelineId,
+            pipelineId: targetPipelineId,
             stageId,
             productIds: form.productIds,
           }),
         });
-        setDeals((prev) => [created, ...prev]);
+        if (targetPipelineId === pipelineId) {
+          setDeals((prev) => [created, ...prev]);
+        } else {
+          // Created in a different pipeline: switch the board so the user immediately sees it.
+          setPipelineId(targetPipelineId);
+          setRequestedStageId(null);
+          setHighlightStageId(null);
+          router.replace(`/crm?pipelineId=${targetPipelineId}`);
+        }
       }
       setShowModal(false);
     } catch (err) {
@@ -751,14 +836,37 @@ export default function CrmPage() {
                   {clientsError ? <p className="mt-2 text-xs text-red-200">{clientsError}</p> : null}
                 </label>
                 <label className="block text-sm text-slate-300">
+                  {t('crm.pipeline')}
+                  <select
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                    value={form.pipelineId || pipelineId}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setModalStagesError(null);
+                      setForm((prev) => ({ ...prev, pipelineId: next, stageId: '' }));
+                    }}
+                    disabled={Boolean(editingDeal)}
+                  >
+                    {pipelines.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  {modalStagesLoading ? <p className="mt-1 text-xs text-slate-500">{t('common.loading')}</p> : null}
+                  {modalStagesError ? <p className="mt-1 text-xs text-red-200">{modalStagesError}</p> : null}
+                </label>
+
+                <label className="block text-sm text-slate-300">
                   {t('crm.stage')}
                   <select
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.stageId}
                     onChange={(e) => setForm((prev) => ({ ...prev, stageId: e.target.value }))}
+                    disabled={modalStagesLoading || modalSortedStages.length === 0}
                   >
-                    <option value="">{sortedStages.length ? t('crm.selectStage') : t('crm.noStagesShort')}</option>
-                    {sortedStages.map((s) => (
+                    <option value="">{modalSortedStages.length ? t('crm.selectStage') : t('crm.noStagesShort')}</option>
+                    {modalSortedStages.map((s) => (
                       <option key={s.id} value={s.id}>
                         {stageName(s.name)} · {t(`stageStatus.${s.status}`)} · {Math.round((s.probability ?? 0) * 100)}%
                       </option>
