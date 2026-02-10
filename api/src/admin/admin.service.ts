@@ -1,4 +1,5 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
 
@@ -56,5 +57,53 @@ export class AdminService {
       select: { id: true, email: true, name: true, role: true, createdAt: true, updatedAt: true },
     });
   }
-}
 
+  async listSubscriptions(user: RequestUser) {
+    await this.ensureAdmin(user);
+    return this.prisma.subscription.findMany({
+      where: { tenantId: user.tenantId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        customerName: true,
+        customerTenantId: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  async createSubscription(customerName: string, user: RequestUser) {
+    await this.ensureAdmin(user);
+    const trimmed = customerName.trim();
+    if (!trimmed) throw new BadRequestException('Customer name is required');
+
+    const customerTenantId = randomUUID();
+
+    return this.prisma.$transaction(async (tx) => {
+      // Provision the tenant so it exists before the customer signs up.
+      await tx.tenant.upsert({
+        where: { id: customerTenantId },
+        update: { name: trimmed },
+        create: { id: customerTenantId, name: trimmed },
+      });
+
+      return tx.subscription.create({
+        data: {
+          tenantId: user.tenantId,
+          customerTenantId,
+          customerName: trimmed,
+        },
+        select: {
+          id: true,
+          customerName: true,
+          customerTenantId: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    });
+  }
+}

@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
 import { CurrentUser } from '../common/user.decorator';
 import type { RequestUser } from '../common/user.decorator';
 import { AdminService } from './admin.service';
+import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -19,5 +20,14 @@ export class AdminController {
   updateUserRole(@Param('id') id: string, @Body() dto: UpdateUserRoleDto, @CurrentUser() user: RequestUser) {
     return this.adminService.updateUserRole(id, dto.role, user);
   }
-}
 
+  @Get('subscriptions')
+  listSubscriptions(@CurrentUser() user: RequestUser) {
+    return this.adminService.listSubscriptions(user);
+  }
+
+  @Post('subscriptions')
+  createSubscription(@Body() dto: CreateSubscriptionDto, @CurrentUser() user: RequestUser) {
+    return this.adminService.createSubscription(dto.customerName, user);
+  }
+}

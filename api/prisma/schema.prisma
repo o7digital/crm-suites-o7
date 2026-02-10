@@ -19,6 +19,7 @@ model Tenant {
   clients Client[]
   tasks   Task[]
   invoices Invoice[]
+  subscriptions Subscription[]
   pipelines Pipeline[]
   stages Stage[]
   deals Deal[]
@@ -33,6 +34,12 @@ enum UserRole {
   MEMBER
 }
 
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELED
+}
+
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
@@ -45,6 +52,20 @@ model User {
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   deals  Deal[] @relation("DealOwner")
+}
+
+model Subscription {
+  id               String             @id @default(uuid())
+  tenantId          String
+  customerTenantId  String             @unique
+  customerName      String
+  status            SubscriptionStatus @default(ACTIVE)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
 }
 
 model Client {
