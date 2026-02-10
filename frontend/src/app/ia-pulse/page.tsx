@@ -83,6 +83,7 @@ export default function IaPulsePage() {
               bg="whiteAlpha.50"
               borderColor="whiteAlpha.200"
               _focusVisible={{ borderColor: 'cyan.300' }}
+              borderRadius="xl"
             />
 
             <Input
@@ -92,44 +93,54 @@ export default function IaPulsePage() {
               bg="whiteAlpha.50"
               borderColor="whiteAlpha.200"
               _focusVisible={{ borderColor: 'cyan.300' }}
+              borderRadius="xl"
             />
 
             <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} gap={3}>
               <Button
-                colorScheme="blue"
+                colorPalette="blue"
                 disabled={!canUseText || loadingSentiment}
                 onClick={() => void analyzeLead(text.trim())}
+                borderRadius="xl"
               >
                 {loadingSentiment ? <Spinner size="sm" /> : 'Analyser lead'}
               </Button>
 
               <Button
-                colorScheme="teal"
+                colorPalette="teal"
                 disabled={!canUseText || loadingSummary}
                 onClick={() => void summarize(text.trim())}
+                borderRadius="xl"
               >
                 {loadingSummary ? <Spinner size="sm" /> : 'Resumer'}
               </Button>
 
               <Button
-                colorScheme="purple"
+                colorPalette="purple"
                 disabled={!canGenerateEmail || loadingEmail}
                 onClick={() => void generateEmail(leadName.trim(), text.trim())}
+                borderRadius="xl"
               >
                 {loadingEmail ? <Spinner size="sm" /> : 'Generer email'}
               </Button>
 
               <Button
-                colorScheme="orange"
+                colorPalette="orange"
                 disabled={!canUseText || loadingImprove}
                 onClick={() => void improveProposal(text.trim())}
+                borderRadius="xl"
               >
                 {loadingImprove ? <Spinner size="sm" /> : 'Ameliorer devis'}
               </Button>
             </SimpleGrid>
 
             <Box display="flex" justifyContent="flex-end">
-              <Button variant="outline" borderColor="whiteAlpha.300" onClick={clearAll}>
+              <Button
+                variant="outline"
+                borderColor="whiteAlpha.300"
+                onClick={clearAll}
+                borderRadius="xl"
+              >
                 Effacer tout
               </Button>
             </Box>
