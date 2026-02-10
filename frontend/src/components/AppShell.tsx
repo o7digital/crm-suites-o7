@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../contexts/I18nContext';
+import { useBranding } from '../contexts/BrandingContext';
 
 const nav = [
   { href: '/', labelKey: 'nav.dashboard' },
@@ -23,6 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { branding } = useBranding();
   const { t } = useI18n();
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement | null>(null);
@@ -67,14 +69,21 @@ export function AppShell({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-white/5 bg-[rgba(12,17,34,0.9)] backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-400 text-slate-900">
-              <div className="text-center leading-[0.95]">
-                <div className="text-[12px] font-extrabold">o7</div>
-                <div className="text-[10px] font-semibold">Pulse</div>
+            {branding.logoDataUrl ? (
+              <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={branding.logoDataUrl} alt="Logo" className="h-full w-full object-contain p-1" />
               </div>
-            </div>
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-400 text-slate-900">
+                <div className="text-center leading-[0.95]">
+                  <div className="text-[12px] font-extrabold">o7</div>
+                  <div className="text-[10px] font-semibold">Pulse</div>
+                </div>
+              </div>
+            )}
             <div>
-              <p className="text-lg font-semibold">o7 PulseCRM</p>
+              <p className="text-lg font-semibold">{user?.tenantName || 'o7 PulseCRM'}</p>
               <p className="text-xs text-slate-400">{t('app.tagline')}</p>
             </div>
           </div>
@@ -85,11 +94,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`rounded-lg px-3 py-2 transition ${
-                    active
-                      ? 'bg-gradient-to-r from-orange-500/45 to-amber-500/25 text-orange-300 ring-1 ring-orange-400/45 shadow-[0_14px_34px_rgba(249,115,22,0.26)]'
-                      : 'text-slate-300 hover:bg-white/5'
-                  }`}
+                  className={`nav-link ${active ? 'nav-link-active' : 'text-slate-300 hover:bg-white/5'}`}
                 >
                   {t(item.labelKey)}
                 </Link>
@@ -161,11 +166,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`rounded-lg px-3 py-2 transition ${
-                    active
-                      ? 'bg-gradient-to-r from-orange-500/45 to-amber-500/25 text-orange-300 ring-1 ring-orange-400/45'
-                      : 'text-slate-300 hover:bg-white/5'
-                  }`}
+                  className={`nav-link ${active ? 'nav-link-active' : 'text-slate-300 hover:bg-white/5'}`}
                 >
                   {t(item.labelKey)}
                 </Link>

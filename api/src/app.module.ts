@@ -18,6 +18,7 @@ import { AdminModule } from './admin/admin.module';
 import { ProductsModule } from './products/products.module';
 import { FxModule } from './fx/fx.module';
 import { IaModule } from './ia/ia.module';
+import { TenantModule } from './tenant/tenant.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { IaModule } from './ia/ia.module';
     ForecastModule,
     AdminModule,
     ProductsModule,
+    TenantModule,
   ],
   controllers: [AppController],
   providers: [AppService],

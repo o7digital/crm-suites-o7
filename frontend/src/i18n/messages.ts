@@ -42,6 +42,16 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     'account.language': 'Language',
     'account.languageHint': 'Choose the language used across the CRM interface.',
 
+    'account.skin.title': 'Featured & Skin',
+    'account.skin.subtitle': 'Upload your logo and customize the CRM accent colors.',
+    'account.skin.logo': 'Logo',
+    'account.skin.logoHint': 'PNG/JPG/SVG. Max 250 KB.',
+    'account.skin.logoTooLarge': 'Logo too large (max 250 KB).',
+    'account.skin.logoInvalid': 'Invalid image file.',
+    'account.skin.accent': 'Accent color',
+    'account.skin.accent2': 'Secondary accent',
+    'account.skin.reset': 'Reset',
+
     'field.name': 'Name',
     'field.firstName': 'First name',
     'field.email': 'Email',
@@ -299,6 +309,16 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     'account.language': 'Langue',
     'account.languageHint': "Choisissez la langue de l'interface CRM.",
 
+    'account.skin.title': 'Featured & Skin',
+    'account.skin.subtitle': 'Ajoutez votre logo et personnalisez les couleurs du CRM.',
+    'account.skin.logo': 'Logo',
+    'account.skin.logoHint': 'PNG/JPG/SVG. 250 KB max.',
+    'account.skin.logoTooLarge': 'Logo trop lourd (250 KB max).',
+    'account.skin.logoInvalid': 'Fichier image invalide.',
+    'account.skin.accent': 'Couleur principale',
+    'account.skin.accent2': 'Couleur secondaire',
+    'account.skin.reset': 'Reinitialiser',
+
     'field.name': 'Nom',
     'field.firstName': 'Prenom',
     'field.email': 'Email',
@@ -555,6 +575,16 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
 
     'account.language': 'Idioma',
     'account.languageHint': 'Elige el idioma de la interfaz del CRM.',
+
+    'account.skin.title': 'Featured & Skin',
+    'account.skin.subtitle': 'Sube tu logo y personaliza los colores del CRM.',
+    'account.skin.logo': 'Logo',
+    'account.skin.logoHint': 'PNG/JPG/SVG. Max 250 KB.',
+    'account.skin.logoTooLarge': 'Logo demasiado grande (max 250 KB).',
+    'account.skin.logoInvalid': 'Archivo de imagen invalido.',
+    'account.skin.accent': 'Color principal',
+    'account.skin.accent2': 'Color secundario',
+    'account.skin.reset': 'Restablecer',
 
     'field.name': 'Nombre',
     'field.firstName': 'Nombre (pila)',
