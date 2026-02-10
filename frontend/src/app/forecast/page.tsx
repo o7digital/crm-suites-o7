@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
+import { useI18n } from '../../contexts/I18nContext';
 
 const USD = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -37,6 +38,7 @@ type ForecastPayload = {
 export default function ForecastPage() {
   const { token } = useAuth();
   const api = useApi(token);
+  const { t, stageName } = useI18n();
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState<string>('');
   const [forecast, setForecast] = useState<ForecastPayload | null>(null);
@@ -91,8 +93,8 @@ export default function ForecastPage() {
       <AppShell>
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Forecast</p>
-            <h1 className="text-3xl font-semibold">Pipeline outlook</h1>
+            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('nav.forecast')}</p>
+            <h1 className="text-3xl font-semibold">{t('forecast.title')}</h1>
           </div>
           <select
             className="btn-secondary text-sm"
@@ -107,37 +109,43 @@ export default function ForecastPage() {
           </select>
         </div>
 
-        {loading && <p className="text-slate-300">Loading forecast...</p>}
-        {error && <p className="text-red-300">Error: {error}</p>}
+        {loading && <p className="text-slate-300">{t('forecast.loading')}</p>}
+        {error && (
+          <p className="text-red-300">
+            {t('common.error')}: {error}
+          </p>
+        )}
 
         {forecast && (
           <div className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="card p-5">
-                <p className="text-sm text-slate-400">Pipeline total</p>
+                <p className="text-sm text-slate-400">{t('forecast.pipelineTotal')}</p>
                 <p className="mt-2 text-3xl font-semibold">{USD.format(forecast.total)}</p>
               </div>
               <div className="card p-5">
-                <p className="text-sm text-slate-400">Weighted total</p>
+                <p className="text-sm text-slate-400">{t('forecast.weightedTotal')}</p>
                 <p className="mt-2 text-3xl font-semibold">{USD.format(forecast.weightedTotal)}</p>
               </div>
             </div>
 
             <div className="card p-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-400">By stage</p>
-                <p className="text-xs text-slate-500">{INT.format(forecast.byStage.length)} stages</p>
+                <p className="text-sm text-slate-400">{t('forecast.byStage')}</p>
+                <p className="text-xs text-slate-500">
+                  {INT.format(forecast.byStage.length)} {t('forecast.stages')}
+                </p>
               </div>
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="text-slate-400">
                     <tr>
-                      <th className="pb-2 text-left">Stage</th>
-                      <th className="pb-2 text-left">Status</th>
-                      <th className="pb-2 text-right">Deals</th>
-                      <th className="pb-2 text-right">Probability</th>
-                      <th className="pb-2 text-right">Total</th>
-                      <th className="pb-2 text-right">Weighted</th>
+                      <th className="pb-2 text-left">{t('forecast.table.stage')}</th>
+                      <th className="pb-2 text-left">{t('forecast.table.status')}</th>
+                      <th className="pb-2 text-right">{t('forecast.table.deals')}</th>
+                      <th className="pb-2 text-right">{t('forecast.table.probability')}</th>
+                      <th className="pb-2 text-right">{t('forecast.table.total')}</th>
+                      <th className="pb-2 text-right">{t('forecast.table.weighted')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -150,10 +158,12 @@ export default function ForecastPage() {
                             )}`}
                             className="hover:underline"
                           >
-                            {row.stageName}
+                            {stageName(row.stageName)}
                           </Link>
                         </td>
-                        <td className="py-2 text-left text-slate-400">{row.status}</td>
+                        <td className="py-2 text-left text-slate-400">
+                          {t(`stageStatus.${row.status}`)}
+                        </td>
                         <td className="py-2 text-right">{INT.format(row.count)}</td>
                         <td className="py-2 text-right">{Math.round(row.probability * 100)}%</td>
                         <td className="py-2 text-right">{USD.format(row.total)}</td>

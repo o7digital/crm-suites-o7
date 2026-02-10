@@ -5,6 +5,7 @@ import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
 import { getClientDisplayName } from '@/lib/clients';
+import { useI18n } from '../../contexts/I18nContext';
 
 type Task = {
   id: string;
@@ -22,6 +23,7 @@ type TaskInput = { title: string; clientId: string; dueDate?: string; amount?: n
 export default function TasksPage() {
   const { token } = useAuth();
   const api = useApi(token);
+  const { t } = useI18n();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,14 +61,14 @@ export default function TasksPage() {
       <AppShell>
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Workflow</p>
-            <h1 className="text-3xl font-semibold">Tasks</h1>
+            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('tasks.section')}</p>
+            <h1 className="text-3xl font-semibold">{t('nav.tasks')}</h1>
           </div>
         </div>
 
         <TaskForm clients={clients} onSubmit={handleCreate} />
 
-        {loading && <div className="mt-6 text-slate-300">Loading tasks…</div>}
+        {loading && <div className="mt-6 text-slate-300">{t('tasks.loading')}</div>}
 
         <div className="mt-6 space-y-3">
           {tasks.map((task) => (
@@ -74,8 +76,8 @@ export default function TasksPage() {
               <div>
                 <p className="text-lg font-semibold">{task.title}</p>
                 <p className="text-sm text-slate-400">
-                  {task.client ? `Client: ${getClientDisplayName(task.client)}` : 'No client'} ·{' '}
-                  {task.dueDate ? `Due ${new Date(task.dueDate).toLocaleDateString()}` : 'No due date'}
+                  {task.client ? `${t('tasks.client')}: ${getClientDisplayName(task.client)}` : t('tasks.noClient')} ·{' '}
+                  {task.dueDate ? `${t('tasks.due')} ${new Date(task.dueDate).toLocaleDateString()}` : t('tasks.noDueDate')}
                   {task.amount !== null && task.amount !== undefined && task.amount !== '' ? (
                     <>
                       {' '}
@@ -90,20 +92,20 @@ export default function TasksPage() {
                   onChange={(e) => handleStatusChange(task.id, e.target.value)}
                   className="rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                 >
-                  <option value="PENDING">Pending</option>
-                  <option value="IN_PROGRESS">In Progress</option>
-                  <option value="DONE">Done</option>
+                  <option value="PENDING">{t('taskStatus.PENDING')}</option>
+                  <option value="IN_PROGRESS">{t('taskStatus.IN_PROGRESS')}</option>
+                  <option value="DONE">{t('taskStatus.DONE')}</option>
                 </select>
                 <button
                   className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
                   onClick={() => handleDelete(task.id)}
                 >
-                  Delete
+                  {t('common.delete')}
                 </button>
               </div>
             </div>
           ))}
-          {tasks.length === 0 && !loading && <p className="text-sm text-slate-400">No tasks yet.</p>}
+          {tasks.length === 0 && !loading && <p className="text-sm text-slate-400">{t('tasks.empty')}</p>}
         </div>
       </AppShell>
     </Guard>
@@ -111,6 +113,7 @@ export default function TasksPage() {
 }
 
 function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload: TaskInput) => Promise<void> }) {
+  const { t } = useI18n();
   const [title, setTitle] = useState('');
   const [clientId, setClientId] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -139,7 +142,7 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
   return (
     <form onSubmit={handleSubmit} className="card grid gap-3 p-4 md:grid-cols-6">
       <div className="md:col-span-3">
-        <label className="text-sm text-slate-300">Task title</label>
+        <label className="text-sm text-slate-300">{t('tasks.taskTitle')}</label>
         <input
           required
           value={title}
@@ -148,14 +151,14 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
         />
       </div>
       <div className="md:col-span-3">
-        <label className="text-sm text-slate-300">Client</label>
+        <label className="text-sm text-slate-300">{t('tasks.client')}</label>
         <select
           required
           value={clientId}
           onChange={(e) => setClientId(e.target.value)}
           className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
         >
-          <option value="">Select client</option>
+          <option value="">{t('tasks.selectClient')}</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
               {getClientDisplayName(c)}
@@ -164,7 +167,7 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
         </select>
       </div>
       <div className="md:col-span-2">
-        <label className="text-sm text-slate-300">Due date</label>
+        <label className="text-sm text-slate-300">{t('field.dueDate')}</label>
         <input
           type="date"
           value={dueDate}
@@ -173,7 +176,7 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
         />
       </div>
       <div className="md:col-span-2">
-        <label className="text-sm text-slate-300">Amount</label>
+        <label className="text-sm text-slate-300">{t('field.amount')}</label>
         <input
           type="number"
           inputMode="decimal"
@@ -185,7 +188,7 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
         />
       </div>
       <div className="md:col-span-2">
-        <label className="text-sm text-slate-300">Currency</label>
+        <label className="text-sm text-slate-300">{t('field.currency')}</label>
         <select
           value={currency}
           onChange={(e) => setCurrency(e.target.value as 'USD' | 'EUR' | 'MXN')}
@@ -198,7 +201,7 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
       </div>
       <div className="md:col-span-6 flex justify-end">
         <button type="submit" className="btn-primary" disabled={saving}>
-          {saving ? 'Adding…' : 'Add task'}
+          {saving ? t('tasks.adding') : t('tasks.add')}
         </button>
       </div>
     </form>

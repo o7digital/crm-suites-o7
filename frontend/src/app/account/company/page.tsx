@@ -2,14 +2,17 @@
 
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
+import { useI18n } from '../../../contexts/I18nContext';
 
 export default function AccountCompanyPage() {
+  const { t } = useI18n();
+
   return (
     <Guard>
       <AppShell>
         <div className="mb-6">
-          <p className="text-sm uppercase tracking-[0.15em] text-slate-400">My Account</p>
-          <h1 className="text-3xl font-semibold">Company detail</h1>
+          <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('account.myAccount')}</p>
+          <h1 className="text-3xl font-semibold">{t('account.companyDetail')}</h1>
         </div>
 
         <div className="card p-6 text-slate-300">
@@ -19,4 +22,3 @@ export default function AccountCompanyPage() {
     </Guard>
   );
 }
-

@@ -8,6 +8,7 @@ import { useApi, useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { CLIENT_FUNCTION_OPTIONS, getClientDisplayName } from '@/lib/clients';
 import { formatUsdTotal, toUsd, type FxRatesSnapshot } from '@/lib/fx';
+import { useI18n } from '../../contexts/I18nContext';
 
 type Pipeline = {
   id: string;
@@ -99,6 +100,7 @@ export default function CrmPage() {
   const { token } = useAuth();
   const api = useApi(token);
   const router = useRouter();
+  const { t, stageName } = useI18n();
   const lastDragAtRef = useRef<number>(0);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState<string>('');
@@ -513,10 +515,10 @@ export default function CrmPage() {
       <AppShell>
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">CRM</p>
-            <h1 className="text-3xl font-semibold">Pipeline</h1>
+            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('nav.crm')}</p>
+            <h1 className="text-3xl font-semibold">{t('crm.title')}</h1>
             <p className="mt-1 text-sm text-slate-400">
-              Open leads: {openLeadsCount} | Total leads: {deals.length}
+              {t('crm.openLeads', { open: openLeadsCount, total: deals.length })}
             </p>
           </div>
           <div className="flex gap-3">
@@ -538,17 +540,21 @@ export default function CrmPage() {
               ))}
             </select>
             <button className="btn-primary" onClick={openCreateModal}>
-              New deal
+              {t('crm.newDeal')}
             </button>
           </div>
         </div>
 
-        {loading && <p className="text-slate-300">Loading pipeline...</p>}
-        {error && <p className="text-red-300">Error: {error}</p>}
+        {loading && <p className="text-slate-300">{t('crm.loading')}</p>}
+        {error && (
+          <p className="text-red-300">
+            {t('common.error')}: {error}
+          </p>
+        )}
 
         {!loading && sortedStages.length === 0 && (
           <div className="card p-6 text-slate-300">
-            No stages yet. Add stages to this pipeline first.
+            {t('crm.noStages')}
           </div>
         )}
 
@@ -577,14 +583,14 @@ export default function CrmPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
             <div className="card w-full max-w-md p-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{editingDeal ? 'Edit deal' : 'New deal'}</h2>
+                <h2 className="text-xl font-semibold">{editingDeal ? t('crm.editDeal') : t('crm.newDeal')}</h2>
                 <button className="text-slate-400" onClick={() => setShowModal(false)}>
                   ✕
                 </button>
               </div>
               <div className="mt-4 space-y-3">
                 <label className="block text-sm text-slate-300">
-                  Deal name
+                  {t('crm.dealName')}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.title}
@@ -592,13 +598,13 @@ export default function CrmPage() {
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  Client
+                  {t('tasks.client')}
                   <select
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.clientId}
                     onChange={(e) => setForm((prev) => ({ ...prev, clientId: e.target.value }))}
                   >
-                    <option value="">{clients.length ? 'Select client' : 'No clients yet'}</option>
+                    <option value="">{clients.length ? t('tasks.selectClient') : t('crm.noClients')}</option>
                     {clients.map((c) => (
                       <option key={c.id} value={c.id}>
                         {getClientDisplayName(c)}
@@ -608,18 +614,18 @@ export default function CrmPage() {
                   </select>
                   {showClientCreate ? (
                     <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3">
-                      <p className="text-xs text-slate-400">New client</p>
+                      <p className="text-xs text-slate-400">{t('crm.newClient')}</p>
                       <div className="mt-2 grid gap-2">
                         <input
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                          placeholder="First name"
+                          placeholder={t('field.firstName')}
                           value={clientDraft.firstName}
                           onChange={(e) => setClientDraft((prev) => ({ ...prev, firstName: e.target.value }))}
                           autoComplete="given-name"
                         />
                         <input
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                          placeholder="Name"
+                          placeholder={t('field.name')}
                           value={clientDraft.name}
                           onChange={(e) => setClientDraft((prev) => ({ ...prev, name: e.target.value }))}
                           autoComplete="family-name"
@@ -631,7 +637,7 @@ export default function CrmPage() {
                             setClientDraft((prev) => ({ ...prev, clientFunction: e.target.value }))
                           }
                         >
-                          <option value="">Function</option>
+                          <option value="">{t('field.function')}</option>
                           {CLIENT_FUNCTION_OPTIONS.map((opt) => (
                             <option key={opt} value={opt}>
                               {opt}
@@ -640,13 +646,13 @@ export default function CrmPage() {
                         </select>
                         <input
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                          placeholder="Company sector"
+                          placeholder={t('field.companySector')}
                           value={clientDraft.companySector}
                           onChange={(e) => setClientDraft((prev) => ({ ...prev, companySector: e.target.value }))}
                         />
                         <input
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                          placeholder="Email"
+                          placeholder={t('field.email')}
                           type="email"
                           value={clientDraft.email}
                           onChange={(e) => {
@@ -683,21 +689,25 @@ export default function CrmPage() {
                         />
                         <input
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                          placeholder="Company"
+                          placeholder={t('field.company')}
                           value={clientDraft.company}
                           onChange={(e) => setClientDraft((prev) => ({ ...prev, company: e.target.value }))}
                           autoComplete="organization"
                         />
                         <input
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                          placeholder="Phone"
+                          placeholder={t('field.phone')}
                           value={clientDraft.phone}
                           onChange={(e) => setClientDraft((prev) => ({ ...prev, phone: e.target.value }))}
                           autoComplete="tel"
                         />
                       </div>
                       <p className="mt-2 text-[11px] text-slate-500">
-                        Tip: you can paste <span className="font-mono">Name {'<'}email@domain{'>'}</span> in Email.
+                        {t('clients.emailTip')}{' '}
+                        <span className="font-mono">
+                          Name {'<'}email@domain{'>'}
+                        </span>{' '}
+                        {t('crm.emailTipEnd')}
                       </p>
                       {clientDraftError ? <p className="mt-2 text-xs text-red-200">{clientDraftError}</p> : null}
                       <div className="mt-3 flex items-center justify-end gap-2">
@@ -709,7 +719,7 @@ export default function CrmPage() {
                             setClientDraftError(null);
                           }}
                         >
-                          Cancel
+                          {t('common.cancel')}
                         </button>
                         <button
                           type="button"
@@ -717,7 +727,7 @@ export default function CrmPage() {
                           disabled={clientDraftSaving}
                           onClick={handleCreateClientFromCrm}
                         >
-                          {clientDraftSaving ? 'Saving…' : 'Add client'}
+                          {clientDraftSaving ? t('common.saving') : t('clients.add')}
                         </button>
                       </div>
                     </div>
@@ -731,43 +741,43 @@ export default function CrmPage() {
                           setClientDraftError(null);
                         }}
                       >
-                        + Add client
+                        + {t('clients.add')}
                       </button>
                       <Link href="/clients" className="text-slate-400 hover:underline">
-                        Manage clients
+                        {t('crm.manageClients')}
                       </Link>
                     </div>
                   )}
                   {clientsError ? <p className="mt-2 text-xs text-red-200">{clientsError}</p> : null}
                 </label>
                 <label className="block text-sm text-slate-300">
-                  Stage
+                  {t('crm.stage')}
                   <select
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.stageId}
                     onChange={(e) => setForm((prev) => ({ ...prev, stageId: e.target.value }))}
                   >
-                    <option value="">{sortedStages.length ? 'Select stage' : 'No stages yet'}</option>
+                    <option value="">{sortedStages.length ? t('crm.selectStage') : t('crm.noStagesShort')}</option>
                     {sortedStages.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.name} · {s.status} · {Math.round((s.probability ?? 0) * 100)}%
+                        {stageName(s.name)} · {t(`stageStatus.${s.status}`)} · {Math.round((s.probability ?? 0) * 100)}%
                       </option>
                     ))}
                   </select>
                 </label>
 
                 <label className="block text-sm text-slate-300">
-                  Probability
+                  {t('crm.probability')}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200"
                     value={`${stageProbabilityPct}%`}
                     readOnly
                   />
-                  <p className="mt-1 text-[11px] text-slate-500">Probability comes from the selected stage.</p>
+                  <p className="mt-1 text-[11px] text-slate-500">{t('crm.probabilityHint')}</p>
                 </label>
 
                 <label className="block text-sm text-slate-300">
-                  Amount
+                  {t('field.amount')}
                   <input
                     type="number"
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
@@ -776,7 +786,7 @@ export default function CrmPage() {
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  Closing date
+                  {t('crm.closingDate')}
                   <input
                     type="date"
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
@@ -785,7 +795,7 @@ export default function CrmPage() {
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  Currency
+                  {t('field.currency')}
                   <select
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.currency}
@@ -800,11 +810,11 @@ export default function CrmPage() {
                 </label>
 
                 <div>
-                  <p className="text-sm text-slate-300">Products</p>
+                  <p className="text-sm text-slate-300">{t('crm.products')}</p>
                   <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-white/10 bg-white/5 p-3">
                     {products.filter((p) => p.isActive).length === 0 ? (
                       <p className="text-xs text-slate-500">
-                        No products configured yet. Go to Admin → Parameters → Products.
+                        {t('crm.noProducts')}
                       </p>
                     ) : (
                       <div className="space-y-2">
@@ -839,14 +849,14 @@ export default function CrmPage() {
               <div className="mt-6 flex items-center justify-end gap-2">
                 {editingDeal ? (
                   <button className="btn-secondary" onClick={handleDeleteDeal}>
-                    Delete
+                    {t('common.delete')}
                   </button>
                 ) : null}
                 <button className="btn-secondary" onClick={() => setShowModal(false)}>
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button className="btn-primary" onClick={handleSaveDeal}>
-                  {editingDeal ? 'Save' : 'Create deal'}
+                  {editingDeal ? t('common.save') : t('crm.createDeal')}
                 </button>
               </div>
             </div>
@@ -876,6 +886,7 @@ function StageColumn({
   onDealDragStart: () => void;
   highlighted: boolean;
 }) {
+  const { t, stageName } = useI18n();
   const totals = deals.reduce<Record<string, number>>((acc, deal) => {
     const currency = (deal.currency || 'USD').toUpperCase();
     const value = Number(deal.value);
@@ -929,19 +940,22 @@ function StageColumn({
     >
       <div className="flex items-center justify-between">
         <div className="text-left">
-          <p className="text-sm text-slate-400">{stage.status}</p>
+          <p className="text-sm text-slate-400">{t(`stageStatus.${stage.status}`)}</p>
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-semibold">{stage.name}</h3>
+            <h3 className="text-lg font-semibold">{stageName(stage.name)}</h3>
             <span className="text-xs text-slate-500">{Math.round((stage.probability ?? 0) * 100)}%</span>
           </div>
         </div>
         <div className="text-right">
-          <p className="text-xs text-slate-400">Deals</p>
+          <p className="text-xs text-slate-400">{t('crm.deals')}</p>
           <p className="text-sm font-semibold">{deals.length}</p>
         </div>
       </div>
-      <p className="mt-2 text-xs text-slate-400" title={fx?.date ? `Converted to USD (FX ${fx.date})` : undefined}>
-        Total: {totalLabel}
+      <p
+        className="mt-2 text-xs text-slate-400"
+        title={fx?.date ? t('crm.convertedToUsd', { date: fx.date }) : undefined}
+      >
+        {t('crm.total')}: {totalLabel}
       </p>
       <div className="mt-4 space-y-3">
         {deals.map((deal) => (
@@ -954,7 +968,7 @@ function StageColumn({
             }}
             role="button"
             tabIndex={0}
-            title="Edit deal"
+            title={t('crm.editDeal')}
             onClick={() => onOpenDeal(deal)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
@@ -972,7 +986,7 @@ function StageColumn({
             </div>
             {deal.client ? (
               <p className="mt-1 text-[11px] text-slate-400">
-                Client: {getClientDisplayName(deal.client)}
+                {t('tasks.client')}: {getClientDisplayName(deal.client)}
                 {deal.client.company ? ` · ${deal.client.company}` : ''}
               </p>
             ) : null}
@@ -990,7 +1004,7 @@ function StageColumn({
             ) : null}
             {deal.expectedCloseDate ? (
               <p className="mt-1 text-[11px] text-slate-500">
-                Closing: {new Date(deal.expectedCloseDate).toLocaleDateString()}
+                {t('crm.closing')}: {new Date(deal.expectedCloseDate).toLocaleDateString()}
               </p>
             ) : null}
             <p className="text-xs text-slate-400">
@@ -998,7 +1012,7 @@ function StageColumn({
             </p>
           </div>
         ))}
-        {deals.length === 0 && <p className="text-xs text-slate-500">No deals</p>}
+        {deals.length === 0 && <p className="text-xs text-slate-500">{t('crm.noDeals')}</p>}
       </div>
     </div>
   );

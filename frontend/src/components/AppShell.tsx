@@ -4,24 +4,26 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '../contexts/AuthContext';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useI18n } from '../contexts/I18nContext';
 
 const nav = [
-  { href: '/', label: 'Dashboard' },
-  { href: '/clients', label: 'Clients' },
-  { href: '/tasks', label: 'Tasks' },
-  { href: '/invoices', label: 'Invoices' },
-  { href: '/crm', label: 'CRM' },
-  { href: '/post-sales', label: 'Post-Sales' },
-  { href: '/ia-pulse', label: 'o7 IA Pulse' },
-  { href: '/forecast', label: 'Forecast' },
-  { href: '/export', label: 'Export' },
-  { href: '/admin', label: 'Admin' },
-];
+  { href: '/', labelKey: 'nav.dashboard' },
+  { href: '/clients', labelKey: 'nav.clients' },
+  { href: '/tasks', labelKey: 'nav.tasks' },
+  { href: '/invoices', labelKey: 'nav.invoices' },
+  { href: '/crm', labelKey: 'nav.crm' },
+  { href: '/post-sales', labelKey: 'nav.postSales' },
+  { href: '/ia-pulse', labelKey: 'nav.iaPulse' },
+  { href: '/forecast', labelKey: 'nav.forecast' },
+  { href: '/export', labelKey: 'nav.export' },
+  { href: '/admin', labelKey: 'nav.admin' },
+] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { t } = useI18n();
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement | null>(null);
 
@@ -53,9 +55,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const accountItems = useMemo(
     () => [
-      { href: '/account', label: 'My information' },
-      { href: '/account/company', label: 'Company detail' },
-      { href: '/account/adjustments', label: 'Adjustments' },
+      { href: '/account', labelKey: 'account.myInformation' },
+      { href: '/account/company', labelKey: 'account.companyDetail' },
+      { href: '/account/adjustments', labelKey: 'account.adjustments' },
     ],
     [],
   );
@@ -73,7 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
             <div>
               <p className="text-lg font-semibold">o7 PulseCRM</p>
-              <p className="text-xs text-slate-400">Tenant-ready SaaS</p>
+              <p className="text-xs text-slate-400">{t('app.tagline')}</p>
             </div>
           </div>
           <nav className="hidden items-center gap-3 text-sm font-medium text-slate-200 md:flex">
@@ -89,7 +91,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       : 'text-slate-300 hover:bg-white/5'
                   }`}
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </Link>
               );
             })}
@@ -104,7 +106,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   aria-haspopup="menu"
                   aria-expanded={accountOpen}
                 >
-                  My Account
+                  {t('auth.myAccount')}
                 </button>
 
                 {accountOpen ? (
@@ -126,7 +128,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                           role="menuitem"
                           onClick={() => setAccountOpen(false)}
                         >
-                          {item.label}
+                          {t(item.labelKey)}
                         </Link>
                       ))}
                     </div>
@@ -138,7 +140,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                         onClick={handleLogout}
                         role="menuitem"
                       >
-                        Logout
+                        {t('auth.logout')}
                       </button>
                     </div>
                   </div>
@@ -146,7 +148,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             ) : (
               <Link href="/login" className="btn-secondary text-sm">
-                Log in
+                {t('auth.login')}
               </Link>
             )}
           </div>
@@ -165,7 +167,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       : 'text-slate-300 hover:bg-white/5'
                   }`}
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </Link>
               );
             })}

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
+import { useI18n } from '../../contexts/I18nContext';
 import { CLIENT_FUNCTION_OPTIONS, getClientDisplayName } from '@/lib/clients';
 import { detectCsvDelimiter, normalizeCsvHeader, parseCsv } from '@/lib/csv';
 
@@ -84,10 +85,12 @@ function parseContactLine(input: string): { name?: string; email?: string } {
 }
 
 export default function ClientsPage() {
+  const { t } = useI18n();
+
   return (
     <Guard>
       <AppShell>
-        <Suspense fallback={<div className="mt-6 text-slate-300">Loading clients…</div>}>
+        <Suspense fallback={<div className="mt-6 text-slate-300">{t('clients.loading')}</div>}>
           <ClientsPageContent />
         </Suspense>
       </AppShell>
@@ -100,6 +103,7 @@ function ClientsPageContent() {
   const api = useApi(token);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useI18n();
   const detailsClientId = searchParams.get('clientId');
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -138,7 +142,7 @@ function ClientsPageContent() {
   });
 
   const [importOpen, setImportOpen] = useState(false);
-  const [importFileName, setImportFileName] = useState<string>('No file chosen');
+  const [importFileName, setImportFileName] = useState<string>('');
   const [importParseError, setImportParseError] = useState<string | null>(null);
   const [importItems, setImportItems] = useState<ClientImportItem[]>([]);
   const [importSkipped, setImportSkipped] = useState<{ row: number; reason: string }[]>([]);
@@ -199,7 +203,7 @@ function ClientsPageContent() {
     try {
       const csv = await api<string>('/export/clients');
       downloadCsv(csv, exportFilename);
-      setActionMessage(`Exported: ${exportFilename}`);
+      setActionMessage(t('clients.exported', { filename: exportFilename }));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to export clients';
       setError(message);
@@ -207,8 +211,8 @@ function ClientsPageContent() {
   };
 
   const detailsDisplayName = useMemo(() => {
-    return detailsClient ? getClientDisplayName(detailsClient) : 'Client';
-  }, [detailsClient]);
+    return detailsClient ? getClientDisplayName(detailsClient) : t('clients.details.section');
+  }, [detailsClient, t]);
 
   const closeDetails = useCallback(() => {
     if (detailsSaving) return;
@@ -265,7 +269,7 @@ function ClientsPageContent() {
     setDetailsSuccess(null);
     try {
       const nextName = detailsForm.name.trim();
-      if (!nextName) throw new Error('Name is required');
+      if (!nextName) throw new Error(t('clients.nameRequired'));
 
       const updated = await api<ClientDetails>(`/clients/${detailsClientId}`, {
         method: 'PATCH',
@@ -284,7 +288,7 @@ function ClientsPageContent() {
         }),
       });
       setDetailsClient(updated);
-      setDetailsSuccess('Saved');
+      setDetailsSuccess(t('common.saved'));
       fetchClients();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to save client';
@@ -292,11 +296,11 @@ function ClientsPageContent() {
     } finally {
       setDetailsSaving(false);
     }
-  }, [api, detailsClientId, detailsForm, fetchClients]);
+  }, [api, detailsClientId, detailsForm, fetchClients, t]);
 
   const handleDeleteDetails = useCallback(async () => {
     if (!detailsClientId) return;
-    const ok = confirm('Delete this client? This will also delete related tasks and invoices.');
+    const ok = confirm(t('clients.confirmDelete'));
     if (!ok) return;
     setDetailsSaving(true);
     setDetailsError(null);
@@ -311,10 +315,10 @@ function ClientsPageContent() {
     } finally {
       setDetailsSaving(false);
     }
-  }, [api, closeDetails, detailsClientId]);
+  }, [api, closeDetails, detailsClientId, t]);
 
   const resetImportState = () => {
-    setImportFileName('No file chosen');
+    setImportFileName('');
     setImportParseError(null);
     setImportItems([]);
     setImportSkipped([]);
@@ -490,12 +494,12 @@ function ClientsPageContent() {
     <>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Accounts</p>
-          <h1 className="text-3xl font-semibold">Clients</h1>
+          <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('clients.section')}</p>
+          <h1 className="text-3xl font-semibold">{t('nav.clients')}</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <button className="btn-secondary text-sm" onClick={handleExportCsv}>
-            Export CSV
+            {t('clients.exportCsv')}
           </button>
           <button
             className="btn-secondary text-sm"
@@ -504,14 +508,14 @@ function ClientsPageContent() {
               resetImportState();
             }}
           >
-            Import CSV
+            {t('clients.importCsv')}
           </button>
         </div>
       </div>
 
       <ClientForm onSubmit={handleCreate} />
 
-      {loading && <div className="mt-6 text-slate-300">Loading clients...</div>}
+      {loading && <div className="mt-6 text-slate-300">{t('clients.loading')}</div>}
       {error && <div className="mt-4 rounded-lg bg-red-500/15 px-3 py-2 text-red-200">{error}</div>}
       {actionMessage && (
         <div className="mt-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-emerald-200">{actionMessage}</div>
@@ -535,10 +539,10 @@ function ClientsPageContent() {
             <div>
               <p className="text-lg font-semibold">{getClientDisplayName(client)}</p>
               <p className="text-sm text-slate-400">
-                {client.email || '—'} · {client.company || 'No company'}
+                {client.email || '—'} · {client.company || t('clients.noCompany')}
                 {client.companySector ? ` · ${client.companySector}` : ''}
                 {client.function ? ` · ${client.function}` : ''}
-                {client.taxId ? ` · Tax ID: ${client.taxId}` : ''}
+                {client.taxId ? ` · ${t('clients.taxId')}: ${client.taxId}` : ''}
               </p>
               {client.website ? <p className="text-xs text-slate-500">{client.website}</p> : null}
             </div>
@@ -550,13 +554,13 @@ function ClientsPageContent() {
                   handleDelete(client.id);
                 }}
               >
-                Delete
+                {t('common.delete')}
               </button>
             </div>
           </div>
         ))}
         {clients.length === 0 && !loading && (
-          <p className="text-sm text-slate-400">No clients yet. Add your first customer above.</p>
+          <p className="text-sm text-slate-400">{t('clients.empty')}</p>
         )}
       </div>
 
@@ -564,14 +568,14 @@ function ClientsPageContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="card w-full max-w-xl p-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Import clients (CSV)</h2>
+              <h2 className="text-xl font-semibold">{t('clients.importModal.title')}</h2>
               <button
                 className="text-slate-400"
                 onClick={() => {
                   if (importing) return;
                   setImportOpen(false);
                 }}
-                title={importing ? 'Import in progress' : 'Close'}
+                title={importing ? t('clients.importModal.inProgress') : t('common.close')}
               >
                 ✕
               </button>
@@ -591,20 +595,19 @@ function ClientsPageContent() {
               />
 
               <div className="rounded-lg border border-dashed border-white/15 bg-white/5 p-4">
-                <p className="text-sm text-slate-300">Choose a CSV file</p>
+                <p className="text-sm text-slate-300">{t('clients.importModal.chooseFile')}</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Supported headers: First Name, Name, Email, Company, Phone, Website, Address, RFC/Tax ID, Notes,
-                  Function, Company Sector. Delimiters supported: comma, semicolon, tab, pipe.
+                  {t('clients.importModal.headersHint')}
                 </p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm text-slate-300">{importFileName}</p>
+                  <p className="text-sm text-slate-300">{importFileName || t('clients.importModal.noFileChosen')}</p>
                   <button
                     type="button"
                     className="btn-secondary text-sm"
                     onClick={handleChooseImportFile}
                     disabled={importing}
                   >
-                    Select file
+                    {t('clients.importModal.selectFile')}
                   </button>
                 </div>
               </div>
@@ -617,10 +620,13 @@ function ClientsPageContent() {
                 <div className="rounded-lg border border-white/10 bg-white/5 p-4">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-slate-300">
-                      Ready to import <span className="font-semibold text-slate-100">{importItems.length}</span> clients
+                      {t('clients.importModal.readyToImport')}{' '}
+                      <span className="font-semibold text-slate-100">{importItems.length}</span> {t('clients.importModal.clients')}
                     </p>
                     <p className="text-xs text-slate-500">
-                      {importSkipped.length ? `${importSkipped.length} skipped` : 'No skipped rows'}
+                      {importSkipped.length
+                        ? t('clients.importModal.skipped', { count: importSkipped.length })
+                        : t('clients.importModal.noSkipped')}
                     </p>
                   </div>
 
@@ -643,36 +649,44 @@ function ClientsPageContent() {
                               {p.function ? ` · ${p.function}` : ''}
                             </p>
                           </div>
-                          <p className="text-[11px] text-slate-500">Row {it.row}</p>
+                          <p className="text-[11px] text-slate-500">
+                            {t('common.row')} {it.row}
+                          </p>
                         </div>
                       );
                     })}
                     {importItems.length > 5 ? (
-                      <p className="text-xs text-slate-500">Showing first 5 records…</p>
+                      <p className="text-xs text-slate-500">{t('clients.importModal.showingFirst', { count: 5 })}</p>
                     ) : null}
                   </div>
 
                   {importProgress ? (
                     <p className="mt-3 text-xs text-slate-400">
-                      Importing: {importProgress.done}/{importProgress.total}
+                      {t('clients.importModal.importing', {
+                        done: importProgress.done,
+                        total: importProgress.total,
+                      })}
                     </p>
                   ) : null}
 
                   {importResult ? (
                     <div className="mt-3 space-y-2">
                       <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-                        Imported {importResult.created}, failed {importResult.failed}.
+                        {t('clients.importModal.imported', {
+                          created: importResult.created,
+                          failed: importResult.failed,
+                        })}
                       </div>
                       {importResult.errors.length ? (
                         <details className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">
-                          <summary className="cursor-pointer text-slate-200">See errors</summary>
+                          <summary className="cursor-pointer text-slate-200">{t('clients.importModal.seeErrors')}</summary>
                           <ul className="mt-2 list-disc pl-5 text-xs text-slate-400">
                             {importResult.errors.slice(0, 50).map((e, i) => (
                               <li key={i}>{e}</li>
                             ))}
                           </ul>
                           {importResult.errors.length > 50 ? (
-                            <p className="mt-2 text-xs text-slate-500">Showing first 50 errors…</p>
+                            <p className="mt-2 text-xs text-slate-500">{t('clients.importModal.showingFirstErrors')}</p>
                           ) : null}
                         </details>
                       ) : null}
@@ -683,16 +697,16 @@ function ClientsPageContent() {
 
               {importSkipped.length ? (
                 <details className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300">
-                  <summary className="cursor-pointer text-slate-200">Skipped rows</summary>
+                  <summary className="cursor-pointer text-slate-200">{t('clients.importModal.skippedRows')}</summary>
                   <ul className="mt-2 list-disc pl-5 text-xs text-slate-400">
                     {importSkipped.slice(0, 50).map((s, i) => (
                       <li key={i}>
-                        Row {s.row}: {s.reason}
+                        {t('common.row')} {s.row}: {s.reason}
                       </li>
                     ))}
                   </ul>
                   {importSkipped.length > 50 ? (
-                    <p className="mt-2 text-xs text-slate-500">Showing first 50…</p>
+                    <p className="mt-2 text-xs text-slate-500">{t('clients.importModal.showingFirstSkipped')}</p>
                   ) : null}
                 </details>
               ) : null}
@@ -707,7 +721,7 @@ function ClientsPageContent() {
                   }}
                   disabled={importing}
                 >
-                  Close
+                  {t('common.close')}
                 </button>
                 <button
                   type="button"
@@ -715,7 +729,7 @@ function ClientsPageContent() {
                   onClick={handleImport}
                   disabled={importing || importItems.length === 0}
                 >
-                  {importing ? 'Importing…' : 'Import'}
+                  {importing ? t('clients.importModal.importingButton') : t('clients.importModal.importButton')}
                 </button>
               </div>
             </div>
@@ -728,7 +742,7 @@ function ClientsPageContent() {
           <div className="card w-full max-w-3xl p-6">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Client</p>
+                <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('clients.details.section')}</p>
                 <h2 className="text-xl font-semibold">{detailsDisplayName}</h2>
               </div>
               <div className="flex items-center gap-2">
@@ -738,12 +752,12 @@ function ClientsPageContent() {
                   onClick={() => loadClientDetails(detailsClientId)}
                   disabled={detailsLoading || detailsSaving}
                 >
-                  Refresh
+                  {t('common.refresh')}
                 </button>
                 <button
                   className="text-slate-400"
                   onClick={closeDetails}
-                  title={detailsSaving ? 'Saving in progress' : 'Close'}
+                  title={detailsSaving ? t('clients.details.savingInProgress') : t('common.close')}
                 >
                   ✕
                 </button>
@@ -751,7 +765,7 @@ function ClientsPageContent() {
             </div>
 
             <div className="mt-4 space-y-4">
-              {detailsLoading && <p className="text-slate-300">Loading client…</p>}
+              {detailsLoading && <p className="text-slate-300">{t('clients.details.loading')}</p>}
               {detailsError && (
                 <div className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-200">{detailsError}</div>
               )}
@@ -763,7 +777,7 @@ function ClientsPageContent() {
                 <div className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="block text-sm text-slate-300">
-                      First name
+                      {t('field.firstName')}
                       <input
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                         value={detailsForm.firstName}
@@ -772,7 +786,7 @@ function ClientsPageContent() {
                       />
                     </label>
                     <label className="block text-sm text-slate-300">
-                      Name
+                      {t('field.name')}
                       <input
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                         value={detailsForm.name}
@@ -782,13 +796,13 @@ function ClientsPageContent() {
                       />
                     </label>
                     <label className="block text-sm text-slate-300">
-                      Function
+                      {t('field.function')}
                       <select
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                         value={detailsForm.clientFunction}
                         onChange={(e) => setDetailsForm((prev) => ({ ...prev, clientFunction: e.target.value }))}
                       >
-                        <option value="">Select function</option>
+                        <option value="">{t('clients.selectFunction')}</option>
                         {CLIENT_FUNCTION_OPTIONS.map((opt) => (
                           <option key={opt} value={opt}>
                             {opt}
@@ -797,16 +811,16 @@ function ClientsPageContent() {
                       </select>
                     </label>
                     <label className="block text-sm text-slate-300">
-                      Company sector
+                      {t('field.companySector')}
                       <input
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                         value={detailsForm.companySector}
                         onChange={(e) => setDetailsForm((prev) => ({ ...prev, companySector: e.target.value }))}
-                        placeholder="e.g. Technology, Finance, Healthcare"
+                        placeholder={t('clients.companySectorPlaceholder')}
                       />
                     </label>
                     <label className="block text-sm text-slate-300">
-                      Email
+                      {t('field.email')}
                       <input
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                         value={detailsForm.email}
@@ -816,7 +830,7 @@ function ClientsPageContent() {
                       />
                     </label>
                     <label className="block text-sm text-slate-300">
-                      Company
+                      {t('field.company')}
                       <input
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                         value={detailsForm.company}
@@ -825,7 +839,7 @@ function ClientsPageContent() {
                       />
                     </label>
                     <label className="block text-sm text-slate-300">
-                      Phone
+                      {t('field.phone')}
                       <input
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                         value={detailsForm.phone}
@@ -834,7 +848,7 @@ function ClientsPageContent() {
                       />
                     </label>
                     <label className="block text-sm text-slate-300">
-                      Website
+                      {t('field.website')}
                       <input
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                         value={detailsForm.website}
@@ -844,7 +858,7 @@ function ClientsPageContent() {
                       />
                     </label>
                     <label className="block text-sm text-slate-300">
-                      RFC / Tax ID
+                      {t('field.taxId')}
                       <input
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                         value={detailsForm.taxId}
@@ -853,17 +867,17 @@ function ClientsPageContent() {
                     </label>
                     <div />
                     <label className="block text-sm text-slate-300 md:col-span-2">
-                      Address
+                      {t('field.address')}
                       <textarea
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                         value={detailsForm.address}
                         onChange={(e) => setDetailsForm((prev) => ({ ...prev, address: e.target.value }))}
                         rows={3}
-                        placeholder="Street, number, city, state, ZIP, country"
+                        placeholder={t('clients.addressPlaceholder')}
                       />
                     </label>
                     <label className="block text-sm text-slate-300 md:col-span-2">
-                      Notes
+                      {t('field.notes')}
                       <textarea
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                         value={detailsForm.notes}
@@ -875,8 +889,12 @@ function ClientsPageContent() {
 
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-xs text-slate-500">
-                      <p>Created: {new Date(detailsClient.createdAt).toLocaleString()}</p>
-                      <p>Updated: {new Date(detailsClient.updatedAt).toLocaleString()}</p>
+                      <p>
+                        {t('common.created')}: {new Date(detailsClient.createdAt).toLocaleString()}
+                      </p>
+                      <p>
+                        {t('common.updated')}: {new Date(detailsClient.updatedAt).toLocaleString()}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -884,10 +902,10 @@ function ClientsPageContent() {
                         onClick={handleDeleteDetails}
                         disabled={detailsSaving}
                       >
-                        Delete
+                        {t('common.delete')}
                       </button>
                       <button className="btn-primary" onClick={handleSaveDetails} disabled={detailsSaving}>
-                        {detailsSaving ? 'Saving…' : 'Save'}
+                        {detailsSaving ? t('common.saving') : t('common.save')}
                       </button>
                     </div>
                   </div>
@@ -896,7 +914,7 @@ function ClientsPageContent() {
 
               <div className="flex justify-end">
                 <button type="button" className="btn-secondary" onClick={closeDetails} disabled={detailsSaving}>
-                  Close
+                  {t('common.close')}
                 </button>
               </div>
             </div>
@@ -908,6 +926,7 @@ function ClientsPageContent() {
 }
 
 function ClientForm({ onSubmit }: { onSubmit: (payload: Partial<Client>) => Promise<void> }) {
+  const { t } = useI18n();
   const [firstName, setFirstName] = useState('');
   const [name, setName] = useState('');
   const [clientFunction, setClientFunction] = useState('');
@@ -967,7 +986,7 @@ function ClientForm({ onSubmit }: { onSubmit: (payload: Partial<Client>) => Prom
   return (
     <form onSubmit={handleSubmit} className="card grid gap-3 p-4 md:grid-cols-2">
       <div>
-        <label className="text-sm text-slate-300">First name</label>
+        <label className="text-sm text-slate-300">{t('field.firstName')}</label>
         <input
           value={firstName}
           onChange={(e) => setFirstName(e.target.value)}
@@ -976,7 +995,7 @@ function ClientForm({ onSubmit }: { onSubmit: (payload: Partial<Client>) => Prom
         />
       </div>
       <div>
-        <label className="text-sm text-slate-300">Name</label>
+        <label className="text-sm text-slate-300">{t('field.name')}</label>
         <input
           required
           value={name}
@@ -986,13 +1005,13 @@ function ClientForm({ onSubmit }: { onSubmit: (payload: Partial<Client>) => Prom
         />
       </div>
       <div>
-        <label className="text-sm text-slate-300">Function</label>
+        <label className="text-sm text-slate-300">{t('field.function')}</label>
         <select
           value={clientFunction}
           onChange={(e) => setClientFunction(e.target.value)}
           className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
         >
-          <option value="">Select function</option>
+          <option value="">{t('clients.selectFunction')}</option>
           {CLIENT_FUNCTION_OPTIONS.map((opt) => (
             <option key={opt} value={opt}>
               {opt}
@@ -1001,16 +1020,16 @@ function ClientForm({ onSubmit }: { onSubmit: (payload: Partial<Client>) => Prom
         </select>
       </div>
       <div>
-        <label className="text-sm text-slate-300">Company sector</label>
+        <label className="text-sm text-slate-300">{t('field.companySector')}</label>
         <input
           value={companySector}
           onChange={(e) => setCompanySector(e.target.value)}
           className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
-          placeholder="e.g. Technology, Finance, Healthcare"
+          placeholder={t('clients.companySectorPlaceholder')}
         />
       </div>
       <div>
-        <label className="text-sm text-slate-300">Email</label>
+        <label className="text-sm text-slate-300">{t('field.email')}</label>
         <input
           value={email}
           onChange={(e) => {
@@ -1039,15 +1058,15 @@ function ClientForm({ onSubmit }: { onSubmit: (payload: Partial<Client>) => Prom
           autoComplete="email"
         />
         <p className="mt-1 text-xs text-slate-500">
-          Tip: you can paste{' '}
+          {t('clients.emailTip')}{' '}
           <span className="font-mono">
             Name {'<'}email@domain{'>'}
           </span>{' '}
-          and it will auto-extract.
+          {t('clients.emailTipEnd')}
         </p>
       </div>
       <div>
-        <label className="text-sm text-slate-300">Company</label>
+        <label className="text-sm text-slate-300">{t('field.company')}</label>
         <input
           value={company}
           onChange={(e) => setCompany(e.target.value)}
@@ -1056,7 +1075,7 @@ function ClientForm({ onSubmit }: { onSubmit: (payload: Partial<Client>) => Prom
         />
       </div>
       <div>
-        <label className="text-sm text-slate-300">Phone</label>
+        <label className="text-sm text-slate-300">{t('field.phone')}</label>
         <input
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
@@ -1065,7 +1084,7 @@ function ClientForm({ onSubmit }: { onSubmit: (payload: Partial<Client>) => Prom
         />
       </div>
       <div>
-        <label className="text-sm text-slate-300">Website</label>
+        <label className="text-sm text-slate-300">{t('field.website')}</label>
         <input
           value={website}
           onChange={(e) => setWebsite(e.target.value)}
@@ -1075,7 +1094,7 @@ function ClientForm({ onSubmit }: { onSubmit: (payload: Partial<Client>) => Prom
         />
       </div>
       <div>
-        <label className="text-sm text-slate-300">RFC / Tax ID</label>
+        <label className="text-sm text-slate-300">{t('field.taxId')}</label>
         <input
           value={taxId}
           onChange={(e) => setTaxId(e.target.value)}
@@ -1083,16 +1102,16 @@ function ClientForm({ onSubmit }: { onSubmit: (payload: Partial<Client>) => Prom
         />
       </div>
       <div className="md:col-span-2">
-        <label className="text-sm text-slate-300">Address</label>
+        <label className="text-sm text-slate-300">{t('field.address')}</label>
         <textarea
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
-          placeholder="Street, number, city, state, ZIP, country"
+          placeholder={t('clients.addressPlaceholder')}
         />
       </div>
       <div className="md:col-span-2">
-        <label className="text-sm text-slate-300">Notes</label>
+        <label className="text-sm text-slate-300">{t('field.notes')}</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
@@ -1104,7 +1123,7 @@ function ClientForm({ onSubmit }: { onSubmit: (payload: Partial<Client>) => Prom
       ) : null}
       <div className="md:col-span-2 flex justify-end">
         <button type="submit" className="btn-primary" disabled={saving}>
-          {saving ? 'Saving…' : 'Add client'}
+          {saving ? t('common.saving') : t('clients.add')}
         </button>
       </div>
     </form>

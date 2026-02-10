@@ -3,10 +3,12 @@
 import { useRouter } from 'next/navigation';
 import { ReactNode, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useI18n } from '../contexts/I18nContext';
 
 export function Guard({ children }: { children: ReactNode }) {
   const { token, loading } = useAuth();
   const router = useRouter();
+  const { t } = useI18n();
 
   useEffect(() => {
     if (!loading && !token) {
@@ -14,6 +16,6 @@ export function Guard({ children }: { children: ReactNode }) {
     }
   }, [loading, token, router]);
 
-  if (!token) return <div className="text-slate-300">Checking session…</div>;
+  if (!token) return <div className="text-slate-300">{t('guard.checkingSession')}</div>;
   return <>{children}</>;
 }

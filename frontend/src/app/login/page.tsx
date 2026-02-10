@@ -4,9 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useI18n } from '../../contexts/I18nContext';
 
 export default function LoginPage() {
   const { login, token } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,12 +38,12 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="card w-full max-w-md p-8">
         <p className="text-sm uppercase tracking-[0.2em] text-slate-400">o7 PulseCRM</p>
-        <h1 className="mt-2 text-2xl font-semibold">Welcome back</h1>
-        <p className="text-sm text-slate-400">Sign in to your workspace</p>
+        <h1 className="mt-2 text-2xl font-semibold">{t('auth.welcomeBack')}</h1>
+        <p className="text-sm text-slate-400">{t('auth.signInWorkspace')}</p>
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <div>
-            <label className="text-sm text-slate-300">Email</label>
+            <label className="text-sm text-slate-300">{t('field.email')}</label>
             <input
               className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
               type="email"
@@ -51,7 +53,7 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <label className="text-sm text-slate-300">Password</label>
+            <label className="text-sm text-slate-300">{t('field.password')}</label>
             <input
               className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
               type="password"
@@ -62,14 +64,14 @@ export default function LoginPage() {
           </div>
           {error && <div className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-200">{error}</div>}
           <button type="submit" className="btn-primary w-full justify-center" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? t('auth.signingIn') : t('auth.signIn')}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-400">
-          New tenant?{' '}
+          {t('auth.newTenant')}{' '}
           <Link href="/register" className="text-cyan-300 underline">
-            Create an account
+            {t('auth.createAccount')}
           </Link>
         </p>
       </div>

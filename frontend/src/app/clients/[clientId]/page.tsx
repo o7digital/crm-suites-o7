@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useApi, useAuth } from '../../../contexts/AuthContext';
+import { useI18n } from '../../../contexts/I18nContext';
 import { CLIENT_FUNCTION_OPTIONS, getClientDisplayName } from '@/lib/clients';
 
 type Client = {
@@ -37,6 +38,7 @@ export default function ClientPage() {
 
   const { token } = useAuth();
   const api = useApi(token);
+  const { t } = useI18n();
 
   const [client, setClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,8 +73,8 @@ export default function ClientPage() {
   });
 
   const displayName = useMemo(() => {
-    return client ? getClientDisplayName(client) : 'Client';
-  }, [client]);
+    return client ? getClientDisplayName(client) : t('clients.details.section');
+  }, [client, t]);
 
   const load = useCallback(async () => {
     if (!clientId) return;
@@ -116,7 +118,7 @@ export default function ClientPage() {
     setSuccess(null);
     try {
       const nextName = form.name.trim();
-      if (!nextName) throw new Error('Name is required');
+      if (!nextName) throw new Error(t('clients.nameRequired'));
 
       const updated = await api<Client>(`/clients/${clientId}`, {
         method: 'PATCH',
@@ -135,18 +137,18 @@ export default function ClientPage() {
         }),
       });
       setClient(updated);
-      setSuccess('Saved');
+      setSuccess(t('common.saved'));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to save client';
       setError(message);
     } finally {
       setSaving(false);
     }
-  }, [api, clientId, form]);
+  }, [api, clientId, form, t]);
 
   const handleDelete = useCallback(async () => {
     if (!clientId) return;
-    const ok = confirm('Delete this client? This will also delete related tasks and invoices.');
+    const ok = confirm(t('clients.confirmDelete'));
     if (!ok) return;
     setSaving(true);
     setError(null);
@@ -159,43 +161,43 @@ export default function ClientPage() {
       setError(message);
       setSaving(false);
     }
-  }, [api, clientId, router]);
+  }, [api, clientId, router, t]);
 
   return (
     <Guard>
       <AppShell>
         <div className="mb-6">
-          <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Accounts</p>
+          <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('clients.section')}</p>
           <h1 className="text-3xl font-semibold">{displayName}</h1>
           <div className="mt-3 flex gap-2">
             <Link href="/clients" className="btn-secondary text-sm">
-              Back
+              {t('common.back')}
             </Link>
             <button className="btn-secondary text-sm" onClick={load} disabled={loading}>
-              Refresh
+              {t('common.refresh')}
             </button>
             <button
               className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
               onClick={handleDelete}
               disabled={saving}
             >
-              Delete
+              {t('common.delete')}
             </button>
           </div>
         </div>
 
-        {loading && <p className="text-slate-300">Loading client…</p>}
+        {loading && <p className="text-slate-300">{t('clients.details.loading')}</p>}
         {error && <div className="mt-4 rounded-lg bg-red-500/15 px-3 py-2 text-red-200">{error}</div>}
         {success && <div className="mt-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-emerald-200">{success}</div>}
 
         {!loading && client && (
           <div className="space-y-6">
             <div className="card p-5">
-              <p className="text-sm text-slate-400">Client details</p>
+              <p className="text-sm text-slate-400">{t('clients.details.title')}</p>
 
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="block text-sm text-slate-300">
-                  First name
+                  {t('field.firstName')}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.firstName}
@@ -204,7 +206,7 @@ export default function ClientPage() {
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  Name
+                  {t('field.name')}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.name}
@@ -214,13 +216,13 @@ export default function ClientPage() {
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  Function
+                  {t('field.function')}
                   <select
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.clientFunction}
                     onChange={(e) => setForm((prev) => ({ ...prev, clientFunction: e.target.value }))}
                   >
-                    <option value="">Select function</option>
+                    <option value="">{t('clients.selectFunction')}</option>
                     {CLIENT_FUNCTION_OPTIONS.map((opt) => (
                       <option key={opt} value={opt}>
                         {opt}
@@ -229,16 +231,16 @@ export default function ClientPage() {
                   </select>
                 </label>
                 <label className="block text-sm text-slate-300">
-                  Company sector
+                  {t('field.companySector')}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.companySector}
                     onChange={(e) => setForm((prev) => ({ ...prev, companySector: e.target.value }))}
-                    placeholder="e.g. Technology, Finance, Healthcare"
+                    placeholder={t('clients.companySectorPlaceholder')}
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  Email
+                  {t('field.email')}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.email}
@@ -248,7 +250,7 @@ export default function ClientPage() {
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  Company
+                  {t('field.company')}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.company}
@@ -257,7 +259,7 @@ export default function ClientPage() {
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  Phone
+                  {t('field.phone')}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.phone}
@@ -266,7 +268,7 @@ export default function ClientPage() {
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  Website
+                  {t('field.website')}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.website}
@@ -276,7 +278,7 @@ export default function ClientPage() {
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  RFC / Tax ID
+                  {t('field.taxId')}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.taxId}
@@ -285,17 +287,17 @@ export default function ClientPage() {
                 </label>
                 <div />
                 <label className="block text-sm text-slate-300 md:col-span-2">
-                  Address
+                  {t('field.address')}
                   <textarea
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.address}
                     onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
                     rows={3}
-                    placeholder="Street, number, city, state, ZIP, country"
+                    placeholder={t('clients.addressPlaceholder')}
                   />
                 </label>
                 <label className="block text-sm text-slate-300 md:col-span-2">
-                  Notes
+                  {t('field.notes')}
                   <textarea
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.notes}
@@ -307,16 +309,20 @@ export default function ClientPage() {
 
               <div className="mt-5 flex justify-end gap-2">
                 <button className="btn-primary" onClick={handleSave} disabled={saving}>
-                  {saving ? 'Saving…' : 'Save'}
+                  {saving ? t('common.saving') : t('common.save')}
                 </button>
               </div>
             </div>
 
             <div className="card p-5">
-              <p className="text-sm text-slate-400">Metadata</p>
+              <p className="text-sm text-slate-400">{t('common.metadata')}</p>
               <div className="mt-2 text-sm text-slate-300">
-                <p>Created: {new Date(client.createdAt).toLocaleString()}</p>
-                <p>Updated: {new Date(client.updatedAt).toLocaleString()}</p>
+                <p>
+                  {t('common.created')}: {new Date(client.createdAt).toLocaleString()}
+                </p>
+                <p>
+                  {t('common.updated')}: {new Date(client.updatedAt).toLocaleString()}
+                </p>
               </div>
             </div>
           </div>
@@ -325,4 +331,3 @@ export default function ClientPage() {
     </Guard>
   );
 }
-

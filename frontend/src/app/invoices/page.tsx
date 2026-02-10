@@ -5,6 +5,7 @@ import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
 import { getClientDisplayName } from '@/lib/clients';
+import { useI18n } from '../../contexts/I18nContext';
 
 type Invoice = {
   id: string;
@@ -21,6 +22,7 @@ type Client = { id: string; firstName?: string | null; name: string };
 export default function InvoicesPage() {
   const { token } = useAuth();
   const api = useApi(token);
+  const { t } = useI18n();
   const [clients, setClients] = useState<Client[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,14 +53,14 @@ export default function InvoicesPage() {
       <AppShell>
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Revenue</p>
-            <h1 className="text-3xl font-semibold">Invoices</h1>
+            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('invoices.section')}</p>
+            <h1 className="text-3xl font-semibold">{t('nav.invoices')}</h1>
           </div>
         </div>
 
         <UploadForm clients={clients} onUpload={handleUpload} />
 
-        {loading && <div className="mt-6 text-slate-300">Loading invoices…</div>}
+        {loading && <div className="mt-6 text-slate-300">{t('invoices.loading')}</div>}
         {error && <div className="mt-4 rounded-lg bg-red-500/15 px-3 py-2 text-red-200">{error}</div>}
 
         <div className="mt-6 space-y-3">
@@ -70,7 +72,7 @@ export default function InvoicesPage() {
                     {inv.currency} {Number(inv.amount).toFixed(2)}
                   </p>
                   <p className="text-sm text-slate-400">
-                    {inv.client ? getClientDisplayName(inv.client) : 'Unassigned'} ·{' '}
+                    {inv.client ? getClientDisplayName(inv.client) : t('invoices.unassigned')} ·{' '}
                     {new Date(inv.createdAt).toLocaleDateString()}
                   </p>
                 </div>
@@ -79,11 +81,13 @@ export default function InvoicesPage() {
                 </span>
               </div>
               {inv.extractedRaw?.notes && (
-                <p className="mt-2 text-xs text-slate-400">AI notes: {inv.extractedRaw.notes}</p>
+                <p className="mt-2 text-xs text-slate-400">
+                  {t('invoices.aiNotes')}: {inv.extractedRaw.notes}
+                </p>
               )}
             </div>
           ))}
-          {invoices.length === 0 && !loading && <p className="text-sm text-slate-400">No invoices yet.</p>}
+          {invoices.length === 0 && !loading && <p className="text-sm text-slate-400">{t('invoices.empty')}</p>}
         </div>
       </AppShell>
     </Guard>
@@ -91,10 +95,11 @@ export default function InvoicesPage() {
 }
 
 function UploadForm({ clients, onUpload }: { clients: Client[]; onUpload: (form: FormData) => Promise<void> }) {
+  const { t } = useI18n();
   const [clientId, setClientId] = useState('');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState('USD');
-  const [fileName, setFileName] = useState('No file chosen');
+  const [fileName, setFileName] = useState('');
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -112,20 +117,20 @@ function UploadForm({ clients, onUpload }: { clients: Client[]; onUpload: (form:
     setClientId('');
     setAmount('');
     setCurrency('USD');
-    setFileName('No file chosen');
+    setFileName('');
     if (fileRef.current) fileRef.current.value = '';
   };
 
   return (
     <form onSubmit={handleSubmit} className="card grid gap-3 p-4 md:grid-cols-4">
       <div>
-        <label className="text-sm text-slate-300">Client (optional)</label>
+        <label className="text-sm text-slate-300">{t('invoices.clientOptional')}</label>
         <select
           value={clientId}
           onChange={(e) => setClientId(e.target.value)}
           className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
         >
-          <option value="">Unassigned</option>
+          <option value="">{t('invoices.unassigned')}</option>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
               {getClientDisplayName(c)}
@@ -134,7 +139,7 @@ function UploadForm({ clients, onUpload }: { clients: Client[]; onUpload: (form:
         </select>
       </div>
       <div>
-        <label className="text-sm text-slate-300">Amount (optional)</label>
+        <label className="text-sm text-slate-300">{t('invoices.amountOptional')}</label>
         <input
           type="number"
           value={amount}
@@ -145,7 +150,7 @@ function UploadForm({ clients, onUpload }: { clients: Client[]; onUpload: (form:
         />
       </div>
       <div>
-        <label className="text-sm text-slate-300">Currency</label>
+        <label className="text-sm text-slate-300">{t('field.currency')}</label>
         <input
           value={currency}
           onChange={(e) => setCurrency(e.target.value)}
@@ -153,13 +158,13 @@ function UploadForm({ clients, onUpload }: { clients: Client[]; onUpload: (form:
         />
       </div>
       <div className="md:col-span-4">
-        <label className="text-sm text-slate-300">Upload file</label>
+        <label className="text-sm text-slate-300">{t('invoices.uploadFile')}</label>
         <div className="mt-1 flex items-center gap-3 rounded-lg border border-dashed border-white/15 bg-white/5 px-3 py-3 text-sm text-slate-300">
           <input
             ref={fileRef}
             type="file"
             className="hidden"
-            onChange={(e) => setFileName(e.target.files?.[0]?.name || 'No file chosen')}
+            onChange={(e) => setFileName(e.target.files?.[0]?.name || '')}
             required
           />
           <button
@@ -167,14 +172,14 @@ function UploadForm({ clients, onUpload }: { clients: Client[]; onUpload: (form:
             className="btn-secondary"
             onClick={() => fileRef.current?.click()}
           >
-            Choose file
+            {t('invoices.chooseFile')}
           </button>
-          <span className="text-slate-400">{fileName}</span>
+          <span className="text-slate-400">{fileName || t('invoices.noFileChosen')}</span>
         </div>
       </div>
       <div className="md:col-span-4 flex justify-end">
         <button type="submit" className="btn-primary" disabled={saving}>
-          {saving ? 'Uploading…' : 'Upload invoice'}
+          {saving ? t('invoices.uploading') : t('invoices.uploadInvoice')}
         </button>
       </div>
     </form>

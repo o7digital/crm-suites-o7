@@ -4,10 +4,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useI18n } from '../../contexts/I18nContext';
 
 export default function RegisterPage() {
   const { register } = useAuth();
   const router = useRouter();
+  const { t } = useI18n();
   const [tenantName, setTenantName] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -24,7 +26,7 @@ export default function RegisterPage() {
     try {
       const result = await register({ tenantName, name, email, password });
       if (result === 'confirm') {
-        setInfo('Check your email to confirm your account, then sign in.');
+        setInfo(t('register.checkEmail'));
         return;
       }
       router.push('/');
@@ -40,12 +42,12 @@ export default function RegisterPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="card w-full max-w-md p-8">
         <p className="text-sm uppercase tracking-[0.2em] text-slate-400">o7 PulseCRM</p>
-        <h1 className="mt-2 text-2xl font-semibold">Create your tenant</h1>
-        <p className="text-sm text-slate-400">Multi-tenant ready from day one</p>
+        <h1 className="mt-2 text-2xl font-semibold">{t('register.title')}</h1>
+        <p className="text-sm text-slate-400">{t('register.subtitle')}</p>
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           <div>
-            <label className="text-sm text-slate-300">Tenant / Workspace name</label>
+            <label className="text-sm text-slate-300">{t('register.tenantName')}</label>
             <input
               className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
               value={tenantName}
@@ -54,7 +56,7 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="text-sm text-slate-300">Your name</label>
+            <label className="text-sm text-slate-300">{t('register.yourName')}</label>
             <input
               className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
               value={name}
@@ -63,7 +65,7 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="text-sm text-slate-300">Email</label>
+            <label className="text-sm text-slate-300">{t('field.email')}</label>
             <input
               className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
               type="email"
@@ -73,7 +75,7 @@ export default function RegisterPage() {
             />
           </div>
           <div>
-            <label className="text-sm text-slate-300">Password</label>
+            <label className="text-sm text-slate-300">{t('field.password')}</label>
             <input
               className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
               type="password"
@@ -85,14 +87,14 @@ export default function RegisterPage() {
           {info && <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{info}</div>}
           {error && <div className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-200">{error}</div>}
           <button type="submit" className="btn-primary w-full justify-center" disabled={loading}>
-            {loading ? 'Creating…' : 'Create account'}
+            {loading ? t('register.creating') : t('auth.createAccount')}
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-400">
-          Already have an account?{' '}
+          {t('register.haveAccount')}{' '}
           <Link href="/login" className="text-cyan-300 underline">
-            Sign in
+            {t('auth.signIn')}
           </Link>
         </p>
       </div>

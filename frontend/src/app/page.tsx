@@ -5,6 +5,7 @@ import { AppShell } from '../components/AppShell';
 import { Guard } from '../components/Guard';
 import { useApi, useAuth } from '../contexts/AuthContext';
 import Link from 'next/link';
+import { useI18n } from '../contexts/I18nContext';
 
 const USD = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -44,6 +45,7 @@ type InvoiceSummary = {
 export default function DashboardPage() {
   const { token } = useAuth();
   const api = useApi(token);
+  const { t } = useI18n();
   const [data, setData] = useState<DashboardPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,51 +86,59 @@ export default function DashboardPage() {
       <AppShell>
         <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Overview</p>
-            <h1 className="text-3xl font-semibold">Dashboard</h1>
+            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('dashboard.section')}</p>
+            <h1 className="text-3xl font-semibold">{t('nav.dashboard')}</h1>
           </div>
           <div className="flex gap-3">
             <Link href="/clients" className="btn-secondary">
-              New client
+              {t('dashboard.newClient')}
             </Link>
             <Link href="/invoices" className="btn-primary">
-              Upload invoice
+              {t('dashboard.uploadInvoice')}
             </Link>
           </div>
         </div>
 
-        {loading && <div className="text-slate-300">Loading metrics...</div>}
-        {error && <div className="text-red-300">Error: {error}</div>}
+        {loading && <div className="text-slate-300">{t('dashboard.loading')}</div>}
+        {error && (
+          <div className="text-red-300">
+            {t('common.error')}: {error}
+          </div>
+        )}
 
         {data && (
           <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
-            <MetricCard title="Clients" value={INT.format(data.clients)} hint="Total accounts in your tenant" />
             <MetricCard
-              title="Open Tasks"
+              title={t('nav.clients')}
+              value={INT.format(data.clients)}
+              hint={t('dashboard.clientsHint')}
+            />
+            <MetricCard
+              title={t('dashboard.openTasks')}
               value={INT.format(data.tasks['PENDING'] || 0)}
-              hint="Pending items across clients"
+              hint={t('dashboard.openTasksHint')}
             />
             <MetricCard
-              title="Open Leads"
+              title={t('dashboard.openLeads')}
               value={INT.format(data.leads.open ?? 0)}
-              hint="Deals in progress (all currencies)"
+              hint={t('dashboard.openLeadsHint')}
             />
             <MetricCard
-              title="Total Leads"
+              title={t('dashboard.totalLeads')}
               value={INT.format(data.leads.total ?? 0)}
-              hint="All deals (open + won + lost)"
+              hint={t('dashboard.totalLeadsHint')}
             />
             <MetricCard
-              title="Open Pipeline Value (USD)"
+              title={t('dashboard.openPipelineValue')}
               value={USD.format(data.leads.openValueUsd ?? data.leads.amountUsd ?? 0)}
               hint={
                 data.leads.fx?.error
-                  ? `FX unavailable; showing USD-only: ${USD.format(data.leads.amountUsd ?? 0)}`
-                  : `${data.leads.fx?.date ? `FX ${data.leads.fx.date}` : 'FX —'}${
+                  ? t('dashboard.fxUnavailable', { amount: USD.format(data.leads.amountUsd ?? 0) })
+                  : `${data.leads.fx?.date ? t('dashboard.fxDate', { date: data.leads.fx.date }) : t('dashboard.fxNA')}${
                       data.leads.fx?.missingCurrencies?.length
-                        ? ` · Missing: ${data.leads.fx.missingCurrencies.join(', ')}`
+                        ? ` · ${t('dashboard.fxMissing', { currencies: data.leads.fx.missingCurrencies.join(', ') })}`
                         : ''
-                    } · USD-only: ${USD.format(data.leads.amountUsd ?? 0)}`
+                    } · ${t('dashboard.usdOnly', { amount: USD.format(data.leads.amountUsd ?? 0) })}`
               }
             />
           </div>
@@ -138,9 +148,9 @@ export default function DashboardPage() {
           <div className="mt-8 grid gap-6 md:grid-cols-2">
             <div className="card p-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-400">Tasks</p>
+                <p className="text-sm text-slate-400">{t('nav.tasks')}</p>
                 <Link href="/tasks" className="text-xs text-cyan-300 underline">
-                  Manage
+                  {t('common.manage')}
                 </Link>
               </div>
               <div className="mt-4 space-y-2">
@@ -154,14 +164,14 @@ export default function DashboardPage() {
             </div>
             <div className="card p-5">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-400">Recent Invoices</p>
+                <p className="text-sm text-slate-400">{t('dashboard.recentInvoices')}</p>
                 <Link href="/invoices" className="text-xs text-cyan-300 underline">
-                  View all
+                  {t('common.viewAll')}
                 </Link>
               </div>
               <div className="mt-4 space-y-3">
                 {data.invoices.recent.length === 0 && (
-                  <p className="text-slate-400 text-sm">No invoices yet</p>
+                  <p className="text-slate-400 text-sm">{t('dashboard.noInvoices')}</p>
                 )}
                 {data.invoices.recent.map((inv) => (
                   <div key={inv.id} className="flex items-center justify-between rounded-lg bg-white/5 px-4 py-3">
