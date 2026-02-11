@@ -8,7 +8,11 @@ export class UpdateTenantSettingsDto {
 
   @IsOptional()
   @IsString()
+  @IsIn(['USD', 'EUR', 'MXN', 'CAD'])
+  crmDisplayCurrency?: 'USD' | 'EUR' | 'MXN' | 'CAD' | null;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(120)
   industry?: string | null;
 }
-

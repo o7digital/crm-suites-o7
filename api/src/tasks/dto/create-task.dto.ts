@@ -48,6 +48,12 @@ export class CreateTaskDto {
   @Transform(({ value }) => optionalNumber(value))
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  timeSpentHours?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => optionalNumber(value))
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   amount?: number;
 
   @IsOptional()

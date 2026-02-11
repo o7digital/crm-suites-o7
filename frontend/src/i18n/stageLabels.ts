@@ -8,6 +8,7 @@ export const STAGE_LABELS: Record<LanguageCode, Record<string, string>> = {
     Proposal: 'Proposal',
     Negotiation: 'Negotiation',
     'Verbal yes': 'Verbal yes',
+    Contract: 'Contract',
     Won: 'Won',
     Lost: 'Lost',
     'INVOICE Customer': 'INVOICE Customer',
@@ -21,6 +22,7 @@ export const STAGE_LABELS: Record<LanguageCode, Record<string, string>> = {
     Proposal: 'Proposition',
     Negotiation: 'Negociation',
     'Verbal yes': 'Accord verbal',
+    Contract: 'Contrat',
     Won: 'Gagne',
     Lost: 'Perdu',
     'INVOICE Customer': 'Facture client',
@@ -34,6 +36,7 @@ export const STAGE_LABELS: Record<LanguageCode, Record<string, string>> = {
     Proposal: 'Propuesta',
     Negotiation: 'Negociacion',
     'Verbal yes': 'Si verbal',
+    Contract: 'Contrato',
     Won: 'Ganado',
     Lost: 'Perdido',
     'INVOICE Customer': 'Factura cliente',
@@ -46,4 +49,3 @@ export const STAGE_LABELS: Record<LanguageCode, Record<string, string>> = {
 export function translateStageName(lang: LanguageCode, name: string): string {
   return STAGE_LABELS[lang]?.[name] ?? name;
 }
-

@@ -1,15 +1,64 @@
 import { Injectable } from '@nestjs/common';
 
-const HF_BASE_URL = 'https://api-inference.huggingface.co/models';
+// HF deprecated `api-inference.huggingface.co` in late 2025.
+// The replacement for the legacy task-style API is:
+// https://router.huggingface.co/hf-inference/models/<model>
+const DEFAULT_HF_BASE_URL = 'https://router.huggingface.co/hf-inference/models';
+
+function normalizeBaseUrl(raw?: string): string {
+  const value = (raw || '').trim();
+  if (!value) return '';
+  return value.replace(/\/+$/, '');
+}
+
+function resolveBaseUrl(raw?: string): string {
+  const normalized = normalizeBaseUrl(raw);
+  if (!normalized) return DEFAULT_HF_BASE_URL;
+
+  try {
+    const url = new URL(normalized);
+    const host = url.hostname.toLowerCase();
+    const path = url.pathname.replace(/\/+$/, '');
+
+    // HF deprecated this host; auto-remap to avoid breaking existing env vars.
+    if (host === 'api-inference.huggingface.co') {
+      return DEFAULT_HF_BASE_URL;
+    }
+
+    // If router host is configured without the task path, append the expected path.
+    if (host === 'router.huggingface.co') {
+      if (!path || path === '/') return DEFAULT_HF_BASE_URL;
+      if (path === '/models' || path === '/hf-inference') return DEFAULT_HF_BASE_URL;
+      if (path.startsWith('/hf-inference/models')) return `${url.origin}${path}`;
+      return `${url.origin}/hf-inference/models`;
+    }
+  } catch {
+    // Not a valid URL: keep previous behavior and let request errors explain.
+  }
+
+  return normalized;
+}
 
 @Injectable()
 export class HfClientService {
   private apiKey(): string {
-    const key = process.env.HF_API_KEY;
+    // HF docs now commonly refer to the token as `HF_TOKEN`; keep `HF_API_KEY`
+    // for backward-compat and avoid breaking existing deployments.
+    const key = (process.env.HF_API_KEY || process.env.HF_TOKEN || '').trim();
     if (!key) {
-      throw new Error('Missing HF_API_KEY in environment variables');
+      throw new Error('Missing HF_API_KEY (or HF_TOKEN) in environment variables');
     }
     return key;
+  }
+
+  private baseUrl(): string {
+    // Allows overriding for testing or future provider changes.
+    const raw =
+      process.env.HF_BASE_URL ||
+      process.env.HF_INFERENCE_BASE_URL ||
+      process.env.HF_API_URL ||
+      process.env.HF_INFERENCE_URL;
+    return resolveBaseUrl(raw);
   }
 
   private timeoutMs(): number {
@@ -25,7 +74,7 @@ export class HfClientService {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs());
 
     try {
-      const res = await fetch(`${HF_BASE_URL}/${model}`, {
+      const res = await fetch(`${this.baseUrl()}/${model}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey()}`,

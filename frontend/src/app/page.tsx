@@ -93,7 +93,7 @@ export default function DashboardPage() {
             <Link href="/clients" className="btn-secondary">
               {t('dashboard.newClient')}
             </Link>
-            <Link href="/invoices" className="btn-primary">
+            <Link href="/admin/ocr-scan" className="btn-primary">
               {t('dashboard.uploadInvoice')}
             </Link>
           </div>
@@ -165,7 +165,7 @@ export default function DashboardPage() {
             <div className="card p-5">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-slate-400">{t('dashboard.recentInvoices')}</p>
-                <Link href="/invoices" className="text-xs text-cyan-300 underline">
+                <Link href="/admin/ocr-scan" className="text-xs text-cyan-300 underline">
                   {t('common.viewAll')}
                 </Link>
               </div>

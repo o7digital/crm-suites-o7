@@ -9,8 +9,11 @@ import { findIndustryOption, industryGroups, industryLabel, industryRecommendedM
 
 type TenantSettings = {
   crmMode: 'B2B' | 'B2C';
+  crmDisplayCurrency?: 'USD' | 'EUR' | 'MXN' | 'CAD';
   industry: string | null;
 };
+const CRM_DISPLAY_CURRENCIES = ['USD', 'EUR', 'MXN', 'CAD'] as const;
+type CrmDisplayCurrency = (typeof CRM_DISPLAY_CURRENCIES)[number];
 
 export default function AdminCrmParametersPage() {
   const { token } = useAuth();
@@ -21,6 +24,7 @@ export default function AdminCrmParametersPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [crmMode, setCrmMode] = useState<TenantSettings['crmMode']>('B2B');
+  const [crmDisplayCurrency, setCrmDisplayCurrency] = useState<CrmDisplayCurrency>('USD');
   const [crmModeLocked, setCrmModeLocked] = useState(false);
   const [industryId, setIndustryId] = useState('');
   const [industryOther, setIndustryOther] = useState('');
@@ -34,6 +38,12 @@ export default function AdminCrmParametersPage() {
     api<{ settings: TenantSettings }>('/tenant/settings', { method: 'GET' })
       .then((data) => {
         setCrmMode(data.settings?.crmMode === 'B2C' ? 'B2C' : 'B2B');
+        const rawCurrency = String(data.settings?.crmDisplayCurrency || 'USD').toUpperCase();
+        setCrmDisplayCurrency(
+          CRM_DISPLAY_CURRENCIES.includes(rawCurrency as CrmDisplayCurrency)
+            ? (rawCurrency as CrmDisplayCurrency)
+            : 'USD',
+        );
         setCrmModeLocked(false);
 
         const rawIndustry = (data.settings?.industry || '').trim();
@@ -64,6 +74,7 @@ export default function AdminCrmParametersPage() {
         method: 'PATCH',
         body: JSON.stringify({
           crmMode,
+          crmDisplayCurrency,
           industry: computedIndustry ? computedIndustry : null,
         }),
       });
@@ -104,6 +115,22 @@ export default function AdminCrmParametersPage() {
                   <option value="B2C">{t('adminSubscriptions.crmModeB2C')}</option>
                 </select>
                 <p className="mt-2 text-xs text-slate-500">B2C uses a dedicated pipeline (Lead → Qualified → Offer → Checkout → Won/Lost).</p>
+              </div>
+
+              <div>
+                <label className="text-sm text-slate-300">{t('admin.crmDisplayCurrency')}</label>
+                <select
+                  className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                  value={crmDisplayCurrency}
+                  onChange={(e) => setCrmDisplayCurrency(e.target.value as CrmDisplayCurrency)}
+                >
+                  {CRM_DISPLAY_CURRENCIES.map((cur) => (
+                    <option key={cur} value={cur}>
+                      {cur}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-slate-500">{t('admin.crmDisplayCurrencyHint')}</p>
               </div>
 
               <div>

@@ -7,7 +7,7 @@ import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { CLIENT_FUNCTION_OPTIONS, getClientDisplayName } from '@/lib/clients';
-import { formatUsdTotal, toUsd, type FxRatesSnapshot } from '@/lib/fx';
+import { convertCurrency, formatCurrencyTotal, type FxRatesSnapshot } from '@/lib/fx';
 import { useI18n } from '../../contexts/I18nContext';
 
 type Pipeline = {
@@ -68,6 +68,7 @@ type Deal = {
 
 type TenantSettings = {
   crmMode: 'B2B' | 'B2C';
+  crmDisplayCurrency?: DealCurrency;
   industry?: string | null;
 };
 
@@ -109,6 +110,7 @@ export default function CrmPage() {
   const lastDragAtRef = useRef<number>(0);
   const proposalRef = useRef<HTMLInputElement | null>(null);
   const [crmMode, setCrmMode] = useState<TenantSettings['crmMode']>('B2B');
+  const [crmDisplayCurrency, setCrmDisplayCurrency] = useState<DealCurrency>('USD');
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState<string>('');
   const [stages, setStages] = useState<Stage[]>([]);
@@ -261,6 +263,13 @@ export default function CrmPage() {
             ? 'B2C'
             : 'B2B';
         setCrmMode(mode);
+        const rawCurrency =
+          settingsResult.status === 'fulfilled'
+            ? String(settingsResult.value.settings?.crmDisplayCurrency || 'USD').toUpperCase()
+            : 'USD';
+        setCrmDisplayCurrency(
+          DEAL_CURRENCIES.includes(rawCurrency as DealCurrency) ? (rawCurrency as DealCurrency) : 'USD',
+        );
 
         const data = pipelinesResult.status === 'fulfilled' ? pipelinesResult.value : [];
         if (pipelinesResult.status === 'rejected') {
@@ -268,8 +277,10 @@ export default function CrmPage() {
           setError(message);
         }
 
-        const filtered =
-          mode === 'B2C' ? data.filter((p) => p.name !== 'New Sales') : data.filter((p) => p.name !== 'B2C');
+        // Keep CRM board focused on the sales + post-sales flow.
+        // Hide legacy/alternate B2C board from the main selector.
+        let filtered = data.filter((p) => p.name !== 'B2C');
+        if (filtered.length === 0) filtered = data;
 
         setPipelines(filtered);
         let requested: string | null = null;
@@ -285,7 +296,8 @@ export default function CrmPage() {
         }
         setRequestedStageId(requestedStage || null);
         const match = requested ? filtered.find((p) => p.id === requested) : null;
-        const defaultPipeline = match || filtered.find((p) => p.isDefault) || filtered[0];
+        const defaultPipeline =
+          match || filtered.find((p) => p.name === 'New Sales') || filtered.find((p) => p.isDefault) || filtered[0];
         setPipelineId(defaultPipeline?.id || '');
       })
       .finally(() => setLoading(false));
@@ -742,6 +754,7 @@ export default function CrmPage() {
                 key={stage.id}
                 stage={stage}
                 deals={deals.filter((deal) => deal.stageId === stage.id)}
+                displayCurrency={crmDisplayCurrency}
                 fx={fx}
                 fxLoading={fxLoading}
                 onMoveDeal={handleMoveDeal}
@@ -1122,6 +1135,7 @@ export default function CrmPage() {
 function StageColumn({
   stage,
   deals,
+  displayCurrency,
   fx,
   fxLoading,
   onMoveDeal,
@@ -1131,6 +1145,7 @@ function StageColumn({
 }: {
   stage: Stage;
   deals: Deal[];
+  displayCurrency: DealCurrency;
   fx: FxRatesSnapshot | null;
   fxLoading: boolean;
   onMoveDeal: (dealId: string, stageId: string) => void;
@@ -1146,33 +1161,31 @@ function StageColumn({
     acc[currency] = (acc[currency] || 0) + value;
     return acc;
   }, {});
+  const entries = Object.entries(totals).sort(([a], [b]) => a.localeCompare(b));
+  const requiresConversion = entries.some(([currency]) => currency !== displayCurrency);
 
   const totalLabel = (() => {
-    const entries = Object.entries(totals).sort(([a], [b]) => a.localeCompare(b));
     if (entries.length === 0) return '—';
 
-    const hasNonUsd = entries.some(([currency]) => currency !== 'USD');
-    if (!hasNonUsd) {
-      const usd = totals.USD ?? 0;
-      return formatUsdTotal(usd);
+    if (!requiresConversion) {
+      const sameCurrencyTotal = totals[displayCurrency] ?? 0;
+      return formatCurrencyTotal(sameCurrencyTotal, displayCurrency);
     }
 
     if (!fx) {
-      return fxLoading ? 'USD …' : 'USD —';
+      return fxLoading ? `${displayCurrency} …` : `${displayCurrency} —`;
     }
 
     const missing = entries
       .map(([currency]) => currency)
-      .filter((currency) => currency !== 'USD')
-      .filter((currency) => toUsd(1, currency, fx) === null);
-    if (missing.length > 0) return 'USD —';
+      .filter((currency) => convertCurrency(1, currency, displayCurrency, fx) === null);
+    if (missing.length > 0) return `${displayCurrency} —`;
 
-    const usdTotal = entries.reduce((sum, [currency, value]) => {
-      if (currency === 'USD') return sum + value;
-      const converted = toUsd(value, currency, fx);
+    const convertedTotal = entries.reduce((sum, [currency, value]) => {
+      const converted = convertCurrency(value, currency, displayCurrency, fx);
       return converted === null ? sum : sum + converted;
     }, 0);
-    return formatUsdTotal(usdTotal);
+    return formatCurrencyTotal(convertedTotal, displayCurrency);
   })();
 
   return (
@@ -1205,7 +1218,11 @@ function StageColumn({
       </div>
       <p
         className="mt-2 text-xs text-slate-400"
-        title={fx?.date ? t('crm.convertedToUsd', { date: fx.date }) : undefined}
+        title={
+          requiresConversion && fx?.date
+            ? t('crm.convertedToCurrency', { currency: displayCurrency, date: fx.date })
+            : undefined
+        }
       >
         {t('crm.total')}: {totalLabel}
       </p>

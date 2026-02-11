@@ -12,9 +12,13 @@ import { SummaryDto } from './dto/summary.dto';
 import { DraftEmailDto } from './dto/draft-email.dto';
 import { ImproveProposalDto } from './dto/improve-proposal.dto';
 
-const SENTIMENT_MODEL = 'cardiffnlp/twitter-roberta-base-sentiment';
-const SUMMARY_MODEL = 'facebook/bart-large-cnn';
-const INSTRUCT_MODEL = 'tiiuae/falcon-7b-instruct';
+const SENTIMENT_MODEL = process.env.HF_SENTIMENT_MODEL || 'cardiffnlp/twitter-roberta-base-sentiment';
+const SUMMARY_MODEL = process.env.HF_SUMMARY_MODEL || 'facebook/bart-large-cnn';
+// `tiiuae/falcon-7b-instruct` is often not available on HF Inference; keep this configurable.
+const INSTRUCT_MODEL = process.env.HF_INSTRUCT_MODEL || 'HuggingFaceTB/SmolLM3-3B';
+const IA_FAIL_HARD =
+  process.env.NODE_ENV !== 'production' &&
+  String(process.env.IA_FAIL_HARD || '').toLowerCase() === 'true';
 
 @UseGuards(JwtAuthGuard)
 @Controller('ia')
@@ -36,7 +40,8 @@ export class IaController {
         confidence: score ?? 0,
       };
     } catch (err) {
-      throw new InternalServerErrorException(toErrorMessage(err));
+      if (IA_FAIL_HARD) throw new InternalServerErrorException(toErrorMessage(err));
+      return fallbackSentiment(body.text);
     }
   }
 
@@ -50,9 +55,10 @@ export class IaController {
       });
 
       const summaryText = extractSummaryText(output);
-      return { summary: summaryText };
+      return { summary: summaryText || fallbackSummary(body.text) };
     } catch (err) {
-      throw new InternalServerErrorException(toErrorMessage(err));
+      if (IA_FAIL_HARD) throw new InternalServerErrorException(toErrorMessage(err));
+      return { summary: fallbackSummary(body.text) };
     }
   }
 
@@ -81,9 +87,13 @@ export class IaController {
       const textOut = extractGeneratedText(output);
       const { subject, body: emailBody } = parseEmailSubjectBody(textOut);
 
-      return { subject, body: emailBody };
+      if ((subject || '').trim() || (emailBody || '').trim()) {
+        return { subject, body: emailBody };
+      }
+      return fallbackDraftEmail(body.leadName, body.leadContext);
     } catch (err) {
-      throw new InternalServerErrorException(toErrorMessage(err));
+      if (IA_FAIL_HARD) throw new InternalServerErrorException(toErrorMessage(err));
+      return fallbackDraftEmail(body.leadName, body.leadContext);
     }
   }
 
@@ -107,9 +117,10 @@ export class IaController {
       });
 
       const improved = extractGeneratedText(output).trim();
-      return { improvedProposal: improved };
+      return { improvedProposal: improved || fallbackImprovedProposal(body.proposalText) };
     } catch (err) {
-      throw new InternalServerErrorException(toErrorMessage(err));
+      if (IA_FAIL_HARD) throw new InternalServerErrorException(toErrorMessage(err));
+      return { improvedProposal: fallbackImprovedProposal(body.proposalText) };
     }
   }
 }
@@ -236,4 +247,72 @@ function parseEmailSubjectBody(text: string): {
 
   // Worst-case: no markers, return the whole text as body.
   return { subject: '', body: normalized };
+}
+
+function fallbackSentiment(text: string): {
+  sentiment: string;
+  confidence: number;
+} {
+  const value = (text || '').toLowerCase();
+  const positive = ['ok', 'merci', 'gracias', 'perfecto', 'confirm', 'vale', 'super', 'si', 'yes'];
+  const negative = ['retard', 'delay', 'problem', 'problema', 'urgent', 'cancel', 'no puedo', 'error'];
+
+  const pos = positive.reduce((n, w) => n + (value.includes(w) ? 1 : 0), 0);
+  const neg = negative.reduce((n, w) => n + (value.includes(w) ? 1 : 0), 0);
+
+  if (pos > neg) return { sentiment: 'POSITIVE', confidence: 0.62 };
+  if (neg > pos) return { sentiment: 'NEGATIVE', confidence: 0.62 };
+  return { sentiment: 'NEUTRAL', confidence: 0.5 };
+}
+
+function fallbackSummary(text: string): string {
+  const normalized = (text || '').replace(/\r\n/g, '\n').trim();
+  if (!normalized) return '';
+  const lines = normalized
+    .split('\n')
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const preview = lines.slice(0, 4).join(' ');
+  if (preview.length <= 280) return preview;
+  return `${preview.slice(0, 277).trim()}...`;
+}
+
+function fallbackDraftEmail(leadName: string, leadContext: string): {
+  subject: string;
+  body: string;
+} {
+  const safeName = (leadName || 'client').trim() || 'client';
+  const context = fallbackSummary(leadContext || '');
+  const subject = `Suivi de votre projet - ${safeName}`;
+  const body = [
+    `Bonjour ${safeName},`,
+    '',
+    'Merci pour votre retour.',
+    context ? `Contexte: ${context}` : '',
+    'Je vous propose un court appel pour valider les prochaines etapes.',
+    'Pouvez-vous me partager vos disponibilites ?',
+    '',
+    'Bien a vous,',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return { subject, body };
+}
+
+function fallbackImprovedProposal(text: string): string {
+  const base = fallbackSummary(text || '');
+  const source = base || (text || '').trim();
+  if (!source) return '';
+  return [
+    'Proposition amelioree',
+    '',
+    source,
+    '',
+    'Livrables:',
+    '- Cadrage et validation des besoins',
+    '- Plan de mise en oeuvre detaille',
+    '- Suivi et reporting de l avancement',
+    '',
+    'Prochaine etape: planifier un appel de validation.',
+  ].join('\n');
 }

@@ -15,6 +15,7 @@ export class TasksService {
         title: dto.title,
         status: dto.status,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        timeSpentHours: dto.timeSpentHours,
         amount: dto.amount,
         currency: (dto.currency ?? 'USD').toUpperCase(),
         clientId: dto.clientId,

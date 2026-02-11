@@ -8,6 +8,7 @@ import { UpdateTenantSettingsDto } from './dto/update-settings.dto';
 @Injectable()
 export class TenantService {
   constructor(private prisma: PrismaService) {}
+  private readonly crmDisplayCurrencies = ['USD', 'EUR', 'MXN', 'CAD'] as const;
 
   private mapSchemaError(err: unknown): ServiceUnavailableException | null {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -108,14 +109,19 @@ export class TenantService {
     try {
       const tenant = await this.prisma.tenant.findFirst({
         where: { id: user.tenantId },
-        select: { id: true, name: true, crmMode: true, industry: true, updatedAt: true },
+        select: { id: true, name: true, crmMode: true, crmDisplayCurrency: true, industry: true, updatedAt: true },
       });
       if (!tenant) throw new NotFoundException('Tenant not found');
+      const currency = String(tenant.crmDisplayCurrency || 'USD').toUpperCase();
+      const crmDisplayCurrency = this.crmDisplayCurrencies.includes(currency as (typeof this.crmDisplayCurrencies)[number])
+        ? (currency as (typeof this.crmDisplayCurrencies)[number])
+        : 'USD';
       return {
         tenantId: tenant.id,
         tenantName: tenant.name,
         settings: {
           crmMode: (tenant.crmMode || 'B2B') as 'B2B' | 'B2C',
+          crmDisplayCurrency,
           industry: tenant.industry ?? null,
         },
         updatedAt: tenant.updatedAt,
@@ -138,25 +144,35 @@ export class TenantService {
     };
 
     const nextCrmMode = dto.crmMode === 'B2B' || dto.crmMode === 'B2C' ? dto.crmMode : undefined;
+    const nextCrmDisplayCurrency = dto.crmDisplayCurrency
+      ? String(dto.crmDisplayCurrency).toUpperCase()
+      : undefined;
 
     try {
       const updated = await this.prisma.tenant.update({
         where: { id: user.tenantId },
         data: {
           crmMode: nextCrmMode,
+          crmDisplayCurrency: nextCrmDisplayCurrency,
           industry: normalize(dto.industry),
         },
-        select: { id: true, name: true, crmMode: true, industry: true, updatedAt: true },
+        select: { id: true, name: true, crmMode: true, crmDisplayCurrency: true, industry: true, updatedAt: true },
       });
 
       // Keep pipeline default aligned with the tenant mode when possible.
       await this.enforceDefaultPipeline(updated.id, updated.crmMode || 'B2B');
+
+      const currency = String(updated.crmDisplayCurrency || 'USD').toUpperCase();
+      const crmDisplayCurrency = this.crmDisplayCurrencies.includes(currency as (typeof this.crmDisplayCurrencies)[number])
+        ? (currency as (typeof this.crmDisplayCurrencies)[number])
+        : 'USD';
 
       return {
         tenantId: updated.id,
         tenantName: updated.name,
         settings: {
           crmMode: (updated.crmMode || 'B2B') as 'B2B' | 'B2C',
+          crmDisplayCurrency,
           industry: updated.industry ?? null,
         },
         updatedAt: updated.updatedAt,

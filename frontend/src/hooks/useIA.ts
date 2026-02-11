@@ -32,6 +32,89 @@ function toErrorMessage(err: unknown): string {
   }
 }
 
+function shouldUseLocalFallback(message: string): boolean {
+  const value = (message || '').toLowerCase().trim();
+  if (!value) return true;
+
+  if (value.includes('unauthorized') || value.includes('forbidden') || value.includes('jwt')) {
+    return false;
+  }
+
+  return (
+    value.includes('hf error') ||
+    value.includes('huggingface') ||
+    value.includes('hf_api_key') ||
+    value.includes('hf_token') ||
+    value.includes('request failed (5') ||
+    value.includes('failed to fetch') ||
+    value.includes('networkerror')
+  );
+}
+
+function fallbackSentiment(text: string): SentimentResult {
+  const value = (text || '').toLowerCase();
+  const positive = ['ok', 'merci', 'gracias', 'perfecto', 'confirm', 'vale', 'super', 'si', 'yes'];
+  const negative = ['retard', 'delay', 'problem', 'problema', 'urgent', 'cancel', 'no puedo', 'error'];
+
+  const pos = positive.reduce((n, w) => n + (value.includes(w) ? 1 : 0), 0);
+  const neg = negative.reduce((n, w) => n + (value.includes(w) ? 1 : 0), 0);
+
+  if (pos > neg) return { sentiment: 'POSITIVE', confidence: 0.62 };
+  if (neg > pos) return { sentiment: 'NEGATIVE', confidence: 0.62 };
+  return { sentiment: 'NEUTRAL', confidence: 0.5 };
+}
+
+function fallbackSummary(text: string): string {
+  const normalized = (text || '').replace(/\r\n/g, '\n').trim();
+  if (!normalized) return '';
+  const lines = normalized
+    .split('\n')
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const preview = lines.slice(0, 4).join(' ');
+  if (preview.length <= 280) return preview;
+  return `${preview.slice(0, 277).trim()}...`;
+}
+
+function fallbackDraftEmail(leadName: string, leadContext: string): DraftEmailResult {
+  const safeName = (leadName || 'client').trim() || 'client';
+  const context = fallbackSummary(leadContext || '');
+  const subject = `Suivi de votre projet - ${safeName}`;
+  const body = [
+    `Bonjour ${safeName},`,
+    '',
+    'Merci pour votre retour.',
+    context ? `Contexte: ${context}` : '',
+    'Je vous propose un court appel pour valider les prochaines etapes.',
+    'Pouvez-vous me partager vos disponibilites ?',
+    '',
+    'Bien a vous,',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return { subject, body };
+}
+
+function fallbackImprovedProposal(text: string): ImproveProposalResult {
+  const base = fallbackSummary(text || '');
+  const source = base || (text || '').trim();
+  if (!source) return { improvedProposal: '' };
+  return {
+    improvedProposal: [
+      'Proposition amelioree',
+      '',
+      source,
+      '',
+      'Livrables:',
+      '- Cadrage et validation des besoins',
+      '- Plan de mise en oeuvre detaille',
+      '- Suivi et reporting de l avancement',
+      '',
+      'Prochaine etape: planifier un appel de validation.',
+    ].join('\n'),
+  };
+}
+
 export function useIA() {
   const { token } = useAuth();
   const api = useApi(token);
@@ -64,6 +147,12 @@ export function useIA() {
         return result;
       } catch (err) {
         const message = toErrorMessage(err);
+        if (shouldUseLocalFallback(message)) {
+          const fallback = fallbackSentiment(text);
+          setSentiment(fallback);
+          setErrorSentiment(null);
+          return fallback;
+        }
         setErrorSentiment(message);
         throw err;
       } finally {
@@ -86,6 +175,12 @@ export function useIA() {
         return result;
       } catch (err) {
         const message = toErrorMessage(err);
+        if (shouldUseLocalFallback(message)) {
+          const fallback = { summary: fallbackSummary(text) };
+          setSummary(fallback);
+          setErrorSummary(null);
+          return fallback;
+        }
         setErrorSummary(message);
         throw err;
       } finally {
@@ -108,6 +203,12 @@ export function useIA() {
         return result;
       } catch (err) {
         const message = toErrorMessage(err);
+        if (shouldUseLocalFallback(message)) {
+          const fallback = fallbackDraftEmail(leadName, leadContext);
+          setDraftEmail(fallback);
+          setErrorEmail(null);
+          return fallback;
+        }
         setErrorEmail(message);
         throw err;
       } finally {
@@ -130,6 +231,12 @@ export function useIA() {
         return result;
       } catch (err) {
         const message = toErrorMessage(err);
+        if (shouldUseLocalFallback(message)) {
+          const fallback = fallbackImprovedProposal(proposalText);
+          setImprovedProposal(fallback);
+          setErrorImprove(null);
+          return fallback;
+        }
         setErrorImprove(message);
         throw err;
       } finally {
@@ -174,4 +281,3 @@ export function useIA() {
     errorImprove,
   };
 }
-

@@ -105,12 +105,13 @@ export class BootstrapService {
         { name: 'Proposal', position: 3, probability: 0.5, status: 'OPEN' as const },
         { name: 'Negotiation', position: 4, probability: 0.7, status: 'OPEN' as const },
         { name: 'Verbal yes', position: 5, probability: 0.9, status: 'OPEN' as const },
-        { name: 'Won', position: 6, probability: 1.0, status: 'WON' as const },
-        { name: 'INVOICE Customer', position: 7, probability: 1.0, status: 'WON' as const },
-        { name: 'TRANSFER PAYMENT', position: 8, probability: 1.0, status: 'WON' as const },
-        { name: 'Lost', position: 9, probability: 0.0, status: 'LOST' as const },
-        { name: 'Transfer Scheduled', position: 10, probability: 1.0, status: 'WON' as const },
-        { name: 'Paid', position: 11, probability: 1.0, status: 'WON' as const },
+        { name: 'Contract', position: 6, probability: 0.95, status: 'OPEN' as const },
+        { name: 'Won', position: 7, probability: 1.0, status: 'WON' as const },
+        { name: 'INVOICE Customer', position: 8, probability: 1.0, status: 'WON' as const },
+        { name: 'TRANSFER PAYMENT', position: 9, probability: 1.0, status: 'WON' as const },
+        { name: 'Lost', position: 10, probability: 0.0, status: 'LOST' as const },
+        { name: 'Transfer Scheduled', position: 11, probability: 1.0, status: 'WON' as const },
+        { name: 'Paid', position: 12, probability: 1.0, status: 'WON' as const },
       ];
 
       await this.prisma.stage.createMany({
@@ -205,8 +206,48 @@ export class BootstrapService {
     if (stages.length === 0) return;
 
     const byName = new Map(stages.map((s) => [s.name, s]));
-    const maxPos = stages.reduce((m, s) => Math.max(m, s.position), 0);
-    const lostPos = byName.get('Lost')?.position ?? maxPos;
+
+    // Ensure "Contract" exists between "Verbal yes" and "Won".
+    const verbalYesPos = byName.get('Verbal yes')?.position;
+    const wonPos = byName.get('Won')?.position;
+    const existingContract = byName.get('Contract');
+
+    if (typeof verbalYesPos === 'number' && typeof wonPos === 'number') {
+      if (!existingContract) {
+        // Keep ordering stable by making room before "Won".
+        await this.prisma.stage.updateMany({
+          where: { tenantId, pipelineId, position: { gte: wonPos } },
+          data: { position: { increment: 1 } },
+        });
+        await this.prisma.stage.create({
+          data: {
+            tenantId,
+            pipelineId,
+            name: 'Contract',
+            status: 'OPEN',
+            probability: 0.95,
+            position: wonPos,
+          },
+        });
+      } else {
+        const patch: Partial<{ status: 'OPEN' | 'WON' | 'LOST'; probability: number }> = {};
+        if (existingContract.status !== 'OPEN') patch.status = 'OPEN';
+        if (existingContract.probability !== 0.95) patch.probability = 0.95;
+        if (Object.keys(patch).length > 0) {
+          await this.prisma.stage.update({ where: { id: existingContract.id }, data: patch });
+        }
+      }
+    }
+
+    // Re-read after potential position shifts to keep calculations accurate.
+    const refreshed = await this.prisma.stage.findMany({
+      where: { tenantId, pipelineId },
+      select: { id: true, name: true, position: true, status: true, probability: true },
+      orderBy: { position: 'asc' },
+    });
+    const refreshedByName = new Map(refreshed.map((s) => [s.name, s]));
+    const maxPos = refreshed.reduce((m, s) => Math.max(m, s.position), 0);
+    const lostPos = refreshedByName.get('Lost')?.position ?? maxPos;
 
     // We want these stages after "Lost" and kept in order (Transfer Scheduled -> Paid).
     let nextPos = maxPos + 1;
@@ -217,7 +258,7 @@ export class BootstrapService {
       probability: number;
       minPosition: number;
     }) => {
-      const existing = byName.get(opts.name);
+      const existing = refreshedByName.get(opts.name);
       if (!existing) {
         const position = Math.max(nextPos, opts.minPosition);
         nextPos = position + 1;
@@ -232,7 +273,7 @@ export class BootstrapService {
           },
           select: { id: true, name: true, position: true, status: true, probability: true },
         });
-        byName.set(opts.name, created);
+        refreshedByName.set(opts.name, created);
         return created;
       }
 
@@ -250,7 +291,7 @@ export class BootstrapService {
           data: patch,
           select: { id: true, name: true, position: true, status: true, probability: true },
         });
-        byName.set(opts.name, updated);
+        refreshedByName.set(opts.name, updated);
         return updated;
       }
 

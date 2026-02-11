@@ -14,6 +14,8 @@ export default function PostSalesPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hoursDraftByTask, setHoursDraftByTask] = useState<Record<string, string>>({});
+  const [savingHoursTaskId, setSavingHoursTaskId] = useState<string | null>(null);
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -157,6 +159,43 @@ export default function PostSalesPage() {
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
     },
     [api],
+  );
+
+  const readHoursDraft = useCallback(
+    (task: Task) => {
+      const draft = hoursDraftByTask[task.id];
+      if (draft !== undefined) return draft;
+      const hours = toTaskHours(task.timeSpentHours);
+      return hours === null ? '' : String(hours);
+    },
+    [hoursDraftByTask],
+  );
+
+  const handleSaveHours = useCallback(
+    async (task: Task) => {
+      const raw = readHoursDraft(task).trim();
+      const parsed = raw ? Number(raw) : 0;
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        setError('Hours must be a number >= 0');
+        return;
+      }
+      setSavingHoursTaskId(task.id);
+      setError(null);
+      try {
+        await api(`/tasks/${task.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ timeSpentHours: parsed }),
+        });
+        setTasks((prev) =>
+          prev.map((t) => (t.id === task.id ? { ...t, timeSpentHours: parsed } : t)),
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to save hours');
+      } finally {
+        setSavingHoursTaskId(null);
+      }
+    },
+    [api, readHoursDraft],
   );
 
   const setThisMonth = useCallback(() => {
@@ -338,6 +377,10 @@ export default function PostSalesPage() {
                           <p className="mt-1 text-xs text-slate-400">
                             {task.client ? getClientDisplayName(task.client) : 'No client'}
                           </p>
+                          {(() => {
+                            const hours = formatTaskHours(task.timeSpentHours);
+                            return hours ? <p className="mt-1 text-xs text-cyan-200">{hours}</p> : null;
+                          })()}
                         </div>
                         <button
                           type="button"
@@ -357,6 +400,27 @@ export default function PostSalesPage() {
                           <option value="IN_PROGRESS">In progress</option>
                           <option value="DONE">Done</option>
                         </select>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.25"
+                          value={readHoursDraft(task)}
+                          onChange={(e) =>
+                            setHoursDraftByTask((prev) => ({ ...prev, [task.id]: e.target.value }))
+                          }
+                          className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                          placeholder="Hours spent"
+                        />
+                        <button
+                          type="button"
+                          className="btn-secondary text-xs"
+                          onClick={() => void handleSaveHours(task)}
+                          disabled={savingHoursTaskId === task.id}
+                        >
+                          {savingHoursTaskId === task.id ? 'Saving...' : 'Save h'}
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -383,6 +447,10 @@ export default function PostSalesPage() {
                         {task.client ? getClientDisplayName(task.client) : 'No client'}
                         {getTaskIsoDueDate(task) ? ` · ${formatIsoDateShort(getTaskIsoDueDate(task)!)}` : ''}
                       </p>
+                      {(() => {
+                        const hours = formatTaskHours(task.timeSpentHours);
+                        return hours ? <p className="mt-1 text-xs text-cyan-200">{hours}</p> : null;
+                      })()}
                       <div className="mt-2 flex items-center gap-2">
                         <select
                           value={task.status}
@@ -418,6 +486,10 @@ export default function PostSalesPage() {
                         <p className="mt-1 text-xs text-slate-400">
                           {task.client ? getClientDisplayName(task.client) : 'No client'}
                         </p>
+                        {(() => {
+                          const hours = formatTaskHours(task.timeSpentHours);
+                          return hours ? <p className="mt-1 text-xs text-cyan-200">{hours}</p> : null;
+                        })()}
                       </div>
                     ))}
                     {tasksWithoutDueDate.length > 8 ? (
@@ -447,6 +519,7 @@ type Task = {
   title: string;
   status: TaskStatus;
   dueDate?: string | null;
+  timeSpentHours?: number | string | null;
   clientId?: string;
   client?: Client | null;
 };
@@ -455,6 +528,7 @@ type TaskCreateInput = {
   title: string;
   clientId: string;
   dueDate: string;
+  timeSpentHours?: number;
   status?: TaskStatus;
 };
 
@@ -466,6 +540,26 @@ function getTaskIsoDueDate(task: Task): string | null {
   const trimmed = task.dueDate.trim();
   if (!trimmed) return null;
   return trimmed.length >= 10 ? trimmed.slice(0, 10) : trimmed;
+}
+
+function toTaskHours(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  }
+  return null;
+}
+
+function formatTaskHours(value: unknown): string {
+  const hours = toTaskHours(value);
+  if (hours === null || hours <= 0) return '';
+  return `${hours.toLocaleString(undefined, { maximumFractionDigits: 2 })}h`;
 }
 
 function isoToUtcDate(iso: string): Date | null {
@@ -579,6 +673,7 @@ function TaskCreateCard({
   const [clientId, setClientId] = useState('');
   const [dueDate, setDueDate] = useState(defaultDueDate);
   const [status, setStatus] = useState<TaskStatus>('IN_PROGRESS');
+  const [timeSpentHours, setTimeSpentHours] = useState('');
   const [saving, setSaving] = useState(false);
   const lastDefaultRef = useRef(defaultDueDate);
 
@@ -595,10 +690,19 @@ function TaskCreateCard({
     if (disabled) return;
     setSaving(true);
     try {
-      await onSubmit({ title, clientId, dueDate, status });
+      const parsedHours = timeSpentHours.trim() ? Number(timeSpentHours) : undefined;
+      await onSubmit({
+        title,
+        clientId,
+        dueDate,
+        status,
+        timeSpentHours:
+          parsedHours !== undefined && Number.isFinite(parsedHours) && parsedHours >= 0 ? parsedHours : undefined,
+      });
       setTitle('');
       setClientId('');
       setStatus('IN_PROGRESS');
+      setTimeSpentHours('');
     } finally {
       setSaving(false);
     }
@@ -642,7 +746,7 @@ function TaskCreateCard({
           </select>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="text-sm text-slate-300">Due date</label>
             <input
@@ -666,6 +770,19 @@ function TaskCreateCard({
               <option value="IN_PROGRESS">In progress</option>
               <option value="DONE">Done</option>
             </select>
+          </div>
+          <div>
+            <label className="text-sm text-slate-300">Hours spent</label>
+            <input
+              type="number"
+              min="0"
+              step="0.25"
+              value={timeSpentHours}
+              onChange={(e) => setTimeSpentHours(e.target.value)}
+              className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+              placeholder="e.g. 1.5"
+              disabled={disabled || saving}
+            />
           </div>
         </div>
 

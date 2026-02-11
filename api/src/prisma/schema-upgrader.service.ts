@@ -12,6 +12,7 @@ export class SchemaUpgraderService {
     await this.ensureDealClientId();
     await this.ensureDealOwnerId();
     await this.ensureDealProposalFields();
+    await this.ensureTaskTimeTrackingFields();
     await this.ensureProductsSchema();
     await this.ensureClientProfileFields();
     await this.ensureSubscriptionsSchema();
@@ -169,6 +170,16 @@ export class SchemaUpgraderService {
       } catch {
         // Ignore permissions / already-added races.
       }
+    }
+  }
+
+  private async ensureTaskTimeTrackingFields() {
+    const hasTimeSpentHours = await this.columnExists('Task', 'timeSpentHours');
+    if (hasTimeSpentHours) return;
+    try {
+      await this.prisma.$executeRawUnsafe(`ALTER TABLE "Task" ADD COLUMN "timeSpentHours" DECIMAL(8,2);`);
+    } catch {
+      // Ignore permissions / already-added races.
     }
   }
 
@@ -369,6 +380,7 @@ export class SchemaUpgraderService {
   private async ensureTenantCrmSettingsFields() {
     const columns: Array<{ name: string; type: string }> = [
       { name: 'crmMode', type: `TEXT NOT NULL DEFAULT 'B2B'` },
+      { name: 'crmDisplayCurrency', type: `TEXT NOT NULL DEFAULT 'USD'` },
       { name: 'industry', type: 'TEXT' },
     ];
 

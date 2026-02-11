@@ -11,7 +11,6 @@ const nav = [
   { href: '/', labelKey: 'nav.dashboard' },
   { href: '/clients', labelKey: 'nav.clients' },
   { href: '/tasks', labelKey: 'nav.tasks' },
-  { href: '/invoices', labelKey: 'nav.invoices' },
   { href: '/crm', labelKey: 'nav.crm' },
   { href: '/post-sales', labelKey: 'nav.postSales' },
   { href: '/ia-pulse', labelKey: 'nav.iaPulse' },

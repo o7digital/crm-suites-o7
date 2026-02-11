@@ -8,6 +8,7 @@ Multi-tenant CRM dashboard MVP using **Next.js 15 + Tailwind** for the frontend 
 2) API
    - `cd api`
    - copy env: `cp .env.example .env` (adjust `DATABASE_URL`, `JWT_SECRET`)
+   - (optional, for IA Pulse) set `HF_API_KEY` (or `HF_TOKEN`) in `api/.env`
    - run migrations: `npx prisma migrate dev --name init`
    - start dev: `npm run start:dev` (serves on http://localhost:4000/api)
 3) Frontend
