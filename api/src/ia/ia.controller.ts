@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Get,
   InternalServerErrorException,
+  Logger,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -23,7 +25,25 @@ const IA_FAIL_HARD =
 @UseGuards(JwtAuthGuard)
 @Controller('ia')
 export class IaController {
+  private readonly logger = new Logger(IaController.name);
+
   constructor(private readonly hf: HfClientService) {}
+
+  @Get('diagnostics')
+  diagnostics() {
+    return {
+      build: 'ia-logs-v1',
+      timestamp: new Date().toISOString(),
+      nodeEnv: process.env.NODE_ENV || 'unknown',
+      iaFailHard: IA_FAIL_HARD,
+      models: {
+        sentiment: SENTIMENT_MODEL,
+        summary: SUMMARY_MODEL,
+        instruct: INSTRUCT_MODEL,
+      },
+      hf: this.hf.diagnostics(),
+    };
+  }
 
   @Post('sentiment')
   async sentiment(@Body() body: SentimentDto) {
@@ -40,6 +60,7 @@ export class IaController {
         confidence: score ?? 0,
       };
     } catch (err) {
+      this.logger.warn(`[sentiment] fallback used; message="${toErrorMessage(err)}"`);
       if (IA_FAIL_HARD) throw new InternalServerErrorException(toErrorMessage(err));
       return fallbackSentiment(body.text);
     }
@@ -57,6 +78,7 @@ export class IaController {
       const summaryText = extractSummaryText(output);
       return { summary: summaryText || fallbackSummary(body.text) };
     } catch (err) {
+      this.logger.warn(`[summary] fallback used; message="${toErrorMessage(err)}"`);
       if (IA_FAIL_HARD) throw new InternalServerErrorException(toErrorMessage(err));
       return { summary: fallbackSummary(body.text) };
     }
@@ -92,6 +114,7 @@ export class IaController {
       }
       return fallbackDraftEmail(body.leadName, body.leadContext);
     } catch (err) {
+      this.logger.warn(`[draft-email] fallback used; message="${toErrorMessage(err)}"`);
       if (IA_FAIL_HARD) throw new InternalServerErrorException(toErrorMessage(err));
       return fallbackDraftEmail(body.leadName, body.leadContext);
     }
@@ -119,6 +142,7 @@ export class IaController {
       const improved = extractGeneratedText(output).trim();
       return { improvedProposal: improved || fallbackImprovedProposal(body.proposalText) };
     } catch (err) {
+      this.logger.warn(`[improve-proposal] fallback used; message="${toErrorMessage(err)}"`);
       if (IA_FAIL_HARD) throw new InternalServerErrorException(toErrorMessage(err));
       return { improvedProposal: fallbackImprovedProposal(body.proposalText) };
     }

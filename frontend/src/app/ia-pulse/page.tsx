@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useIA } from '@/hooks/useIA';
@@ -22,12 +22,16 @@ import {
 export default function IaPulsePage() {
   const [text, setText] = useState('');
   const [leadName, setLeadName] = useState('');
+  const iaUiBuild = 'ia-ui-logs-v1';
+  const apiTarget =
+    process.env.NEXT_PUBLIC_API_ROOT || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
   const {
     analyzeLead,
     summarize,
     generateEmail,
     improveProposal,
+    fetchDiagnostics,
     reset,
     sentiment,
     summary,
@@ -41,7 +45,14 @@ export default function IaPulsePage() {
     errorSummary,
     errorEmail,
     errorImprove,
+    diagnostics,
+    loadingDiagnostics,
+    errorDiagnostics,
   } = useIA();
+
+  useEffect(() => {
+    void fetchDiagnostics().catch(() => undefined);
+  }, [fetchDiagnostics]);
 
   const canUseText = useMemo(() => text.trim().length > 0, [text]);
   const canGenerateEmail = useMemo(
@@ -72,6 +83,9 @@ export default function IaPulsePage() {
           </Heading>
           <Text color="whiteAlpha.700" mb={6}>
             Assistant commercial intelligent (sentiment, emails, devis, resumes)
+          </Text>
+          <Text color="whiteAlpha.500" fontSize="xs" mb={4}>
+            UI build: {iaUiBuild} · API target: {apiTarget}
           </Text>
 
           <Stack gap={4}>
@@ -135,14 +149,24 @@ export default function IaPulsePage() {
             </SimpleGrid>
 
             <Box display="flex" justifyContent="flex-end">
-              <Button
-                variant="outline"
-                borderColor="whiteAlpha.300"
-                onClick={clearAll}
-                borderRadius="xl"
-              >
-                Effacer tout
-              </Button>
+              <SimpleGrid columns={{ base: 1, sm: 2 }} gap={3}>
+                <Button
+                  variant="outline"
+                  borderColor="whiteAlpha.300"
+                  onClick={() => void fetchDiagnostics()}
+                  borderRadius="xl"
+                >
+                  {loadingDiagnostics ? <Spinner size="sm" /> : 'Diagnostic IA'}
+                </Button>
+                <Button
+                  variant="outline"
+                  borderColor="whiteAlpha.300"
+                  onClick={clearAll}
+                  borderRadius="xl"
+                >
+                  Effacer tout
+                </Button>
+              </SimpleGrid>
             </Box>
           </Stack>
 
@@ -162,9 +186,32 @@ export default function IaPulsePage() {
             </Alert.Root>
           ) : null}
 
+          {errorDiagnostics ? (
+            <Alert.Root status="warning" mt={4} borderRadius="md">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>Diagnostic IA</Alert.Title>
+                <Alert.Description>{errorDiagnostics}</Alert.Description>
+              </Alert.Content>
+            </Alert.Root>
+          ) : null}
+
           <Separator my={8} borderColor="whiteAlpha.200" />
 
           <Stack gap={6}>
+            {diagnostics ? (
+              <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
+                <Card.Body>
+                  <Heading size="sm" mb={2}>
+                    Diagnostic runtime
+                  </Heading>
+                  <Box as="pre" fontSize="xs" whiteSpace="pre-wrap">
+                    {JSON.stringify(diagnostics, null, 2)}
+                  </Box>
+                </Card.Body>
+              </Card.Root>
+            ) : null}
+
             {sentiment ? (
               <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
                 <Card.Body>

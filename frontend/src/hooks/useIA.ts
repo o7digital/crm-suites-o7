@@ -21,6 +21,24 @@ export type ImproveProposalResult = {
   improvedProposal: string;
 };
 
+export type IaDiagnostics = {
+  build: string;
+  timestamp: string;
+  nodeEnv: string;
+  iaFailHard: boolean;
+  models: {
+    sentiment: string;
+    summary: string;
+    instruct: string;
+  };
+  hf: {
+    baseUrl: string;
+    timeoutMs: number;
+    keySource: 'HF_API_KEY' | 'HF_TOKEN' | null;
+    hasKey: boolean;
+  };
+};
+
 function toErrorMessage(err: unknown): string {
   if (!err) return 'Unknown error';
   if (err instanceof Error) return err.message;
@@ -30,6 +48,12 @@ function toErrorMessage(err: unknown): string {
   } catch {
     return String(err);
   }
+}
+
+function logIADebug(scope: string, payload: Record<string, unknown>) {
+  const timestamp = new Date().toISOString();
+  // Console logs are useful to validate which runtime/build is active in production.
+  console.warn(`[IA DEBUG][${scope}] ${timestamp}`, payload);
 }
 
 function shouldUseLocalFallback(message: string): boolean {
@@ -133,6 +157,27 @@ export function useIA() {
   const [errorSummary, setErrorSummary] = useState<string | null>(null);
   const [errorEmail, setErrorEmail] = useState<string | null>(null);
   const [errorImprove, setErrorImprove] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<IaDiagnostics | null>(null);
+  const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
+  const [errorDiagnostics, setErrorDiagnostics] = useState<string | null>(null);
+
+  const fetchDiagnostics = useCallback(async () => {
+    setLoadingDiagnostics(true);
+    setErrorDiagnostics(null);
+    try {
+      const result = await api<IaDiagnostics>('/ia/diagnostics');
+      setDiagnostics(result);
+      logIADebug('diagnostics', result as unknown as Record<string, unknown>);
+      return result;
+    } catch (err) {
+      const message = toErrorMessage(err);
+      setErrorDiagnostics(message);
+      logIADebug('diagnostics-error', { message });
+      throw err;
+    } finally {
+      setLoadingDiagnostics(false);
+    }
+  }, [api]);
 
   const analyzeLead = useCallback(
     async (text: string) => {
@@ -147,7 +192,9 @@ export function useIA() {
         return result;
       } catch (err) {
         const message = toErrorMessage(err);
-        if (shouldUseLocalFallback(message)) {
+        const fallbackUsed = shouldUseLocalFallback(message);
+        logIADebug('sentiment-error', { message, fallbackUsed });
+        if (fallbackUsed) {
           const fallback = fallbackSentiment(text);
           setSentiment(fallback);
           setErrorSentiment(null);
@@ -175,7 +222,9 @@ export function useIA() {
         return result;
       } catch (err) {
         const message = toErrorMessage(err);
-        if (shouldUseLocalFallback(message)) {
+        const fallbackUsed = shouldUseLocalFallback(message);
+        logIADebug('summary-error', { message, fallbackUsed });
+        if (fallbackUsed) {
           const fallback = { summary: fallbackSummary(text) };
           setSummary(fallback);
           setErrorSummary(null);
@@ -203,7 +252,9 @@ export function useIA() {
         return result;
       } catch (err) {
         const message = toErrorMessage(err);
-        if (shouldUseLocalFallback(message)) {
+        const fallbackUsed = shouldUseLocalFallback(message);
+        logIADebug('draft-email-error', { message, fallbackUsed });
+        if (fallbackUsed) {
           const fallback = fallbackDraftEmail(leadName, leadContext);
           setDraftEmail(fallback);
           setErrorEmail(null);
@@ -231,7 +282,9 @@ export function useIA() {
         return result;
       } catch (err) {
         const message = toErrorMessage(err);
-        if (shouldUseLocalFallback(message)) {
+        const fallbackUsed = shouldUseLocalFallback(message);
+        logIADebug('improve-proposal-error', { message, fallbackUsed });
+        if (fallbackUsed) {
           const fallback = fallbackImprovedProposal(proposalText);
           setImprovedProposal(fallback);
           setErrorImprove(null);
@@ -255,10 +308,13 @@ export function useIA() {
     setErrorSummary(null);
     setErrorEmail(null);
     setErrorImprove(null);
+    setDiagnostics(null);
+    setErrorDiagnostics(null);
     setLoadingSentiment(false);
     setLoadingSummary(false);
     setLoadingEmail(false);
     setLoadingImprove(false);
+    setLoadingDiagnostics(false);
   }, []);
 
   return {
@@ -266,6 +322,7 @@ export function useIA() {
     summarize,
     generateEmail,
     improveProposal,
+    fetchDiagnostics,
     reset,
     sentiment,
     summary,
@@ -279,5 +336,8 @@ export function useIA() {
     errorSummary,
     errorEmail,
     errorImprove,
+    diagnostics,
+    loadingDiagnostics,
+    errorDiagnostics,
   };
 }

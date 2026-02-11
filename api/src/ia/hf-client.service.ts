@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 // HF deprecated `api-inference.huggingface.co` in late 2025.
 // The replacement for the legacy task-style API is:
@@ -41,6 +41,14 @@ function resolveBaseUrl(raw?: string): string {
 
 @Injectable()
 export class HfClientService {
+  private readonly logger = new Logger(HfClientService.name);
+
+  private apiKeySource(): 'HF_API_KEY' | 'HF_TOKEN' | null {
+    if ((process.env.HF_API_KEY || '').trim()) return 'HF_API_KEY';
+    if ((process.env.HF_TOKEN || '').trim()) return 'HF_TOKEN';
+    return null;
+  }
+
   private apiKey(): string {
     // HF docs now commonly refer to the token as `HF_TOKEN`; keep `HF_API_KEY`
     // for backward-compat and avoid breaking existing deployments.
@@ -69,12 +77,32 @@ export class HfClientService {
     return 90_000;
   }
 
+  diagnostics(): {
+    baseUrl: string;
+    timeoutMs: number;
+    keySource: 'HF_API_KEY' | 'HF_TOKEN' | null;
+    hasKey: boolean;
+  } {
+    const keySource = this.apiKeySource();
+    return {
+      baseUrl: this.baseUrl(),
+      timeoutMs: this.timeoutMs(),
+      keySource,
+      hasKey: Boolean(keySource),
+    };
+  }
+
   async callHuggingFace(model: string, payload: unknown): Promise<any> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs());
+    const baseUrl = this.baseUrl();
+    const startedAt = Date.now();
+    this.logger.log(
+      `HF request start model="${model}" baseUrl="${baseUrl}" timeoutMs=${this.timeoutMs()} keySource=${this.apiKeySource() ?? 'none'}`,
+    );
 
     try {
-      const res = await fetch(`${this.baseUrl()}/${model}`, {
+      const res = await fetch(`${baseUrl}/${model}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.apiKey()}`,
@@ -89,8 +117,15 @@ export class HfClientService {
       const raw = await res.text().catch(() => '');
 
       if (!res.ok) {
+        this.logger.warn(
+          `HF request failed model="${model}" status=${res.status} durationMs=${Date.now() - startedAt} body="${raw
+            .slice(0, 300)
+            .replace(/\s+/g, ' ')}"`,
+        );
         throw new Error(`HF Error: ${res.status} | ${raw.slice(0, 600)}`);
       }
+
+      this.logger.log(`HF request success model="${model}" status=${res.status} durationMs=${Date.now() - startedAt}`);
 
       try {
         return JSON.parse(raw);
@@ -99,8 +134,12 @@ export class HfClientService {
       }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
+        this.logger.error(`HF request timeout model="${model}" durationMs=${Date.now() - startedAt}`);
         throw new Error('HF request timed out');
       }
+      this.logger.error(
+        `HF request error model="${model}" durationMs=${Date.now() - startedAt} message="${err instanceof Error ? err.message : String(err)}"`,
+      );
       throw err;
     } finally {
       clearTimeout(timeout);
