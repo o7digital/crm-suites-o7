@@ -111,7 +111,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       payload.email ||
       'User';
     const tenantName = payload.user_metadata?.tenant_name;
-    return { userId: payload.sub, tenantId, email: payload.email, name, tenantName };
+    const inviteToken = payload.user_metadata?.invite_token;
+    return { userId: payload.sub, tenantId, email: payload.email, name, tenantName, inviteToken };
   }
 }
 

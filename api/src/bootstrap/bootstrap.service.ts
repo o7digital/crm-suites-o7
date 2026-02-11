@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
 
@@ -22,12 +23,40 @@ export class BootstrapService {
     // Assign OWNER to the first user of a tenant. Future users default to MEMBER.
     const existingUser = await this.prisma.user.findFirst({
       where: { id: user.userId, tenantId: user.tenantId },
-      select: { id: true },
+      select: { id: true, role: true },
     });
-    let role: 'OWNER' | 'MEMBER' = 'MEMBER';
+
+    const normalizedEmail = (user.email || '').trim().toLowerCase();
+    let pendingInvite:
+      | { id: string; role: 'OWNER' | 'ADMIN' | 'MEMBER' }
+      | null = null;
+    if (normalizedEmail) {
+      try {
+        pendingInvite = await this.prisma.userInvite.findFirst({
+          where: {
+            tenantId: user.tenantId,
+            status: 'PENDING',
+            OR: [
+              ...(user.inviteToken ? [{ token: user.inviteToken }] : []),
+              { email: { equals: normalizedEmail, mode: 'insensitive' } },
+            ],
+          },
+          select: { id: true, role: true },
+          orderBy: { createdAt: 'desc' },
+        });
+      } catch (err) {
+        // Invites table may be missing until migrations are applied; keep bootstrap resilient.
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError) || (err.code !== 'P2021' && err.code !== 'P2022')) {
+          throw err;
+        }
+      }
+    }
+
+    let role: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER';
     if (!existingUser) {
       const count = await this.prisma.user.count({ where: { tenantId: user.tenantId } });
       if (count === 0) role = 'OWNER';
+      else if (pendingInvite?.role) role = pendingInvite.role === 'OWNER' ? 'MEMBER' : pendingInvite.role;
     }
 
     await this.prisma.user.upsert({
@@ -35,6 +64,9 @@ export class BootstrapService {
       update: {
         email: user.email,
         name: meta.name || user.email || 'User',
+        ...(pendingInvite && existingUser?.role !== 'OWNER'
+          ? { role: pendingInvite.role === 'OWNER' ? 'ADMIN' : pendingInvite.role }
+          : {}),
       },
       create: {
         id: user.userId,
@@ -45,6 +77,23 @@ export class BootstrapService {
         tenantId: user.tenantId,
       },
     });
+
+    if (pendingInvite) {
+      try {
+        await this.prisma.userInvite.update({
+          where: { id: pendingInvite.id },
+          data: {
+            status: 'ACCEPTED',
+            acceptedAt: new Date(),
+            acceptedByUserId: user.userId,
+          },
+        });
+      } catch (err) {
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError) || (err.code !== 'P2021' && err.code !== 'P2022')) {
+          throw err;
+        }
+      }
+    }
 
     // If this tenant has no OWNER (ex: legacy data before roles), promote the current user.
     const ownerCount = await this.prisma.user.count({ where: { tenantId: user.tenantId, role: 'OWNER' } });

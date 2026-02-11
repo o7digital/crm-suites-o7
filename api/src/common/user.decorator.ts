@@ -6,6 +6,7 @@ export interface RequestUser {
   email: string;
   name?: string;
   tenantName?: string;
+  inviteToken?: string;
 }
 
 export const CurrentUser = createParamDecorator(

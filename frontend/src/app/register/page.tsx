@@ -29,6 +29,7 @@ function RegisterPageContent() {
   const inviteTenantName = (searchParams.get('tenantName') || '').trim();
   const inviteName = (searchParams.get('name') || '').trim();
   const inviteEmail = (searchParams.get('email') || '').trim();
+  const inviteToken = (searchParams.get('inviteToken') || '').trim();
   const isInvite = Boolean(inviteTenantId);
 
   const [tenantName, setTenantName] = useState('');
@@ -59,7 +60,14 @@ function RegisterPageContent() {
     setInfo(null);
     setLoading(true);
     try {
-      const result = await register({ tenantId: inviteTenantId || undefined, tenantName, name, email, password });
+      const result = await register({
+        tenantId: inviteTenantId || undefined,
+        tenantName,
+        name,
+        email,
+        password,
+        inviteToken: inviteToken || undefined,
+      });
       if (result === 'confirm') {
         setInfo(t('register.checkEmail'));
         return;

@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
 import { Prisma } from '@prisma/client';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { CreateUserInviteDto } from './dto/create-user-invite.dto';
 
 @Injectable()
 export class AdminService {
@@ -53,6 +54,123 @@ export class AdminService {
         updatedAt: true,
       },
     });
+  }
+
+  async listUserInvites(user: RequestUser) {
+    await this.ensureAdmin(user);
+    try {
+      return await this.prisma.userInvite.findMany({
+        where: { tenantId: user.tenantId, status: 'PENDING' },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          token: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  async createUserInvite(dto: CreateUserInviteDto, user: RequestUser) {
+    await this.ensureAdmin(user);
+
+    const email = dto.email.trim().toLowerCase();
+    if (!email) throw new BadRequestException('Email is required');
+    const name = dto.name?.trim() || null;
+    const role = dto.role || 'MEMBER';
+
+    try {
+      const existingMember = await this.prisma.user.findFirst({
+        where: { tenantId: user.tenantId, email },
+        select: { id: true },
+      });
+      if (existingMember) {
+        throw new BadRequestException('This email is already a workspace member.');
+      }
+
+      const existingPending = await this.prisma.userInvite.findFirst({
+        where: { tenantId: user.tenantId, email, status: 'PENDING' },
+        select: { id: true },
+      });
+
+      if (existingPending) {
+        return this.prisma.userInvite.update({
+          where: { id: existingPending.id },
+          data: {
+            name,
+            role,
+            token: randomUUID(),
+            invitedByUserId: user.userId,
+          },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            token: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
+      }
+
+      return this.prisma.userInvite.create({
+        data: {
+          tenantId: user.tenantId,
+          email,
+          name,
+          role,
+          token: randomUUID(),
+          invitedByUserId: user.userId,
+          status: 'PENDING',
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          token: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  async revokeUserInvite(id: string, user: RequestUser) {
+    await this.ensureAdmin(user);
+    try {
+      const existing = await this.prisma.userInvite.findFirst({
+        where: { id, tenantId: user.tenantId, status: 'PENDING' },
+        select: { id: true },
+      });
+      if (!existing) throw new NotFoundException('Invite not found');
+
+      return this.prisma.userInvite.update({
+        where: { id: existing.id },
+        data: { status: 'REVOKED' },
+        select: { id: true, status: true, updatedAt: true },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
   }
 
   async updateUserRole(userId: string, role: 'OWNER' | 'ADMIN' | 'MEMBER', user: RequestUser) {

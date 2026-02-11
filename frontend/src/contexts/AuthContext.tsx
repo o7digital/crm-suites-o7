@@ -23,6 +23,7 @@ type AuthContextValue = {
     name: string;
     email: string;
     password: string;
+    inviteToken?: string;
   }) => Promise<'signed-in' | 'confirm'>;
   logout: () => Promise<void>;
 };
@@ -143,7 +144,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const register = useCallback(
-    async (payload: { tenantId?: string; tenantName: string; name: string; email: string; password: string }) => {
+    async (payload: {
+      tenantId?: string;
+      tenantName: string;
+      name: string;
+      email: string;
+      password: string;
+      inviteToken?: string;
+    }) => {
       const tenantId = payload.tenantId || generateTenantId();
       const supabase = mustSupabase();
       const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined;
@@ -155,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             name: payload.name,
             tenant_id: tenantId,
             tenant_name: payload.tenantName,
+            invite_token: payload.inviteToken || undefined,
           },
           emailRedirectTo,
         },

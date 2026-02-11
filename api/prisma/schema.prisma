@@ -32,6 +32,7 @@ model Tenant {
   dealStageHistory DealStageHistory[]
   products Product[]
   dealItems DealItem[]
+  userInvites UserInvite[]
 }
 
 enum UserRole {
@@ -44,6 +45,12 @@ enum SubscriptionStatus {
   ACTIVE
   PAUSED
   CANCELED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
 }
 
 model User {
@@ -78,6 +85,26 @@ model Subscription {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+}
+
+model UserInvite {
+  id              String       @id @default(uuid())
+  tenantId        String
+  email           String
+  name            String?
+  role            UserRole     @default(MEMBER)
+  token           String       @unique
+  status          InviteStatus @default(PENDING)
+  invitedByUserId String?
+  acceptedByUserId String?
+  acceptedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([tenantId, email])
 }
 
 model Client {
