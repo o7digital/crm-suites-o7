@@ -40,6 +40,8 @@ export default function AdminUsersPage() {
   const [inviteName, setInviteName] = useState('');
   const [inviteRole, setInviteRole] = useState<'OWNER' | 'ADMIN' | 'MEMBER'>('ADMIN');
   const [savingInvite, setSavingInvite] = useState(false);
+  const [draftRoles, setDraftRoles] = useState<Record<string, User['role']>>({});
+  const [savingRoleUserId, setSavingRoleUserId] = useState<string | null>(null);
 
   const buildInviteLink = useCallback(
     (invite: { token: string; email: string; name: string | null }) => {
@@ -80,6 +82,16 @@ export default function AdminUsersPage() {
     if (!token) return;
     load();
   }, [token, load]);
+
+  useEffect(() => {
+    setDraftRoles((prev) => {
+      const next = { ...prev };
+      for (const user of users) {
+        if (!next[user.id]) next[user.id] = user.role;
+      }
+      return next;
+    });
+  }, [users]);
 
   useEffect(() => {
     if (!currentUser?.tenantId) return;
@@ -168,10 +180,20 @@ export default function AdminUsersPage() {
         body: JSON.stringify({ role }),
       });
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? { ...u, role: updated.role } : u)));
+      setDraftRoles((prev) => ({ ...prev, [updated.id]: updated.role }));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to update role';
       setError(message);
     }
+  };
+
+  const saveRole = async (id: string) => {
+    const nextRole = draftRoles[id];
+    const currentRole = users.find((u) => u.id === id)?.role;
+    if (!nextRole || !currentRole || nextRole === currentRole) return;
+    setSavingRoleUserId(id);
+    await updateRole(id, nextRole);
+    setSavingRoleUserId(null);
   };
 
   const canCreateInvite = useMemo(() => inviteEmail.trim().length > 0 && !savingInvite, [inviteEmail, savingInvite]);
@@ -239,7 +261,7 @@ export default function AdminUsersPage() {
             </div>
             <div className="flex items-end">
               <button type="button" className="btn-secondary w-full justify-center" disabled={!canCreateInvite} onClick={createInvite}>
-                {savingInvite ? 'Creating…' : 'Create invite'}
+                {savingInvite ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
@@ -313,17 +335,34 @@ export default function AdminUsersPage() {
                       <td className="py-2 font-medium">{u.name || '—'}</td>
                       <td className="py-2 text-slate-300">{u.email}</td>
                       <td className="py-2">
-                        <select
-                          value={u.role}
-                          onChange={(e) => updateRole(u.id, e.target.value as User['role'])}
-                          className="rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
-                          disabled={!currentUser || currentUser.id === u.id}
-                          title={currentUser?.id === u.id ? 'You cannot change your own role here.' : undefined}
-                        >
-                          <option value="OWNER">{t('adminUsers.roleOwner')}</option>
-                          <option value="ADMIN">{t('adminUsers.roleAdmin')}</option>
-                          <option value="MEMBER">{t('adminUsers.roleMember')}</option>
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={draftRoles[u.id] || u.role}
+                            onChange={(e) =>
+                              setDraftRoles((prev) => ({ ...prev, [u.id]: e.target.value as User['role'] }))
+                            }
+                            className="rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                            disabled={!currentUser || currentUser.id === u.id}
+                            title={currentUser?.id === u.id ? 'You cannot change your own role here.' : undefined}
+                          >
+                            <option value="OWNER">{t('adminUsers.roleOwner')}</option>
+                            <option value="ADMIN">{t('adminUsers.roleAdmin')}</option>
+                            <option value="MEMBER">{t('adminUsers.roleMember')}</option>
+                          </select>
+                          <button
+                            type="button"
+                            className="btn-secondary text-xs"
+                            onClick={() => void saveRole(u.id)}
+                            disabled={
+                              !currentUser ||
+                              currentUser.id === u.id ||
+                              (draftRoles[u.id] || u.role) === u.role ||
+                              savingRoleUserId === u.id
+                            }
+                          >
+                            {savingRoleUserId === u.id ? 'Saving…' : 'Save'}
+                          </button>
+                        </div>
                         {currentUser?.id === u.id ? (
                           <p className="mt-1 text-xs text-slate-500">Your role is managed by the workspace.</p>
                         ) : null}
