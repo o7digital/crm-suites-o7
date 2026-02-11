@@ -18,6 +18,7 @@ const SENTIMENT_MODEL = process.env.HF_SENTIMENT_MODEL || 'cardiffnlp/twitter-ro
 const SUMMARY_MODEL = process.env.HF_SUMMARY_MODEL || 'facebook/bart-large-cnn';
 // `tiiuae/falcon-7b-instruct` is often not available on HF Inference; keep this configurable.
 const INSTRUCT_MODEL = process.env.HF_INSTRUCT_MODEL || 'HuggingFaceTB/SmolLM3-3B';
+const WAIT_FOR_MODEL = String(process.env.HF_WAIT_FOR_MODEL || '').toLowerCase() === 'true';
 const IA_FAIL_HARD =
   process.env.NODE_ENV !== 'production' &&
   String(process.env.IA_FAIL_HARD || '').toLowerCase() === 'true';
@@ -41,6 +42,7 @@ export class IaController {
         summary: SUMMARY_MODEL,
         instruct: INSTRUCT_MODEL,
       },
+      waitForModel: WAIT_FOR_MODEL,
       hf: this.hf.diagnostics(),
     };
   }
@@ -50,7 +52,7 @@ export class IaController {
     try {
       const output: unknown = await this.hf.callHuggingFace(SENTIMENT_MODEL, {
         inputs: body.text,
-        options: { wait_for_model: true },
+        options: { wait_for_model: WAIT_FOR_MODEL },
       });
 
       const { label, score } = pickBestLabelScore(output);
@@ -72,7 +74,7 @@ export class IaController {
       const output: unknown = await this.hf.callHuggingFace(SUMMARY_MODEL, {
         inputs: body.text,
         parameters: { max_length: 150, min_length: 60 },
-        options: { wait_for_model: true },
+        options: { wait_for_model: WAIT_FOR_MODEL },
       });
 
       const summaryText = extractSummaryText(output);
@@ -103,7 +105,7 @@ export class IaController {
       const output: unknown = await this.hf.callHuggingFace(INSTRUCT_MODEL, {
         inputs: prompt,
         parameters: { max_new_tokens: 250, return_full_text: false },
-        options: { wait_for_model: true },
+        options: { wait_for_model: WAIT_FOR_MODEL },
       });
 
       const textOut = extractGeneratedText(output);
@@ -136,7 +138,7 @@ export class IaController {
       const output: unknown = await this.hf.callHuggingFace(INSTRUCT_MODEL, {
         inputs: prompt,
         parameters: { max_new_tokens: 350, return_full_text: false },
-        options: { wait_for_model: true },
+        options: { wait_for_model: WAIT_FOR_MODEL },
       });
 
       const improved = extractGeneratedText(output).trim();

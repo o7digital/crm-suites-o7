@@ -72,9 +72,9 @@ export class HfClientService {
   private timeoutMs(): number {
     const raw = process.env.HF_TIMEOUT_MS;
     const parsed = raw ? Number(raw) : NaN;
-    // Default: 90s. Can be slow when models need to load and `wait_for_model` is true.
+    // Default: 20s for responsive UX; override with HF_TIMEOUT_MS if needed.
     if (Number.isFinite(parsed) && parsed > 0) return parsed;
-    return 90_000;
+    return 20_000;
   }
 
   diagnostics(): {
