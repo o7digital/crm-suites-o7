@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
@@ -81,7 +81,7 @@ function toErrorMessage(err: unknown): string {
   }
 }
 
-export default function IaPulsePage() {
+function IaPulsePageContent() {
   const searchParams = useSearchParams();
   const prefilledDealId = searchParams.get('dealId') || '';
   const { token } = useAuth();
@@ -709,5 +709,13 @@ export default function IaPulsePage() {
         </Box>
       </AppShell>
     </Guard>
+  );
+}
+
+export default function IaPulsePage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-slate-300">Loading IA Pulse...</div>}>
+      <IaPulsePageContent />
+    </Suspense>
   );
 }
