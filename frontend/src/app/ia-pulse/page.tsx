@@ -6,7 +6,7 @@ import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '@/contexts/AuthContext';
 import { apiBaseForDisplay } from '@/lib/apiBase';
-import { useIA } from '@/hooks/useIA';
+import { useIA, type LeadAnalysisResult } from '@/hooks/useIA';
 import {
   Alert,
   Box,
@@ -82,6 +82,93 @@ function toErrorMessage(err: unknown): string {
   }
 }
 
+function normalizeContactName(raw: string): string {
+  const value = raw.trim();
+  if (!value) return 'client';
+  return value;
+}
+
+function buildCrmActionPlan(analysis: LeadAnalysisResult): string[] {
+  const baseActions = analysis.analysis.nextBestActions
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const uniqueActions = Array.from(new Set(baseActions));
+
+  const defaultActionsByOutcome: Record<'KEEP' | 'WON' | 'LOST', string[]> = {
+    KEEP: [
+      'Valider le perimetre et les priorites avec le client',
+      'Confirmer budget, delai et interlocuteurs decisionnaires',
+      'Programmer un point de suivi avec prochaine action datee',
+    ],
+    WON: [
+      'Confirmer accord final et lancer onboarding',
+      'Envoyer recap projet et planning de demarrage',
+      'Planifier kick-off avec les parties prenantes',
+    ],
+    LOST: [
+      'Documenter la raison de perte et les objections cles',
+      'Proposer une alternative ou une relance differenciee',
+      'Programmer une relance de reconquete a date fixe',
+    ],
+  };
+
+  const actions =
+    uniqueActions.length > 0
+      ? uniqueActions
+      : defaultActionsByOutcome[analysis.analysis.recommendedOutcome];
+
+  const dueSlots = ['Aujourd hui', 'J+1', 'J+3', 'J+7'];
+
+  return actions.slice(0, 4).map((action, index) => {
+    const due = dueSlots[index] || `J+${index * 2 + 1}`;
+    return `${index + 1}. [${due}] ${action}`;
+  });
+}
+
+function buildCrmEmailDraft(
+  analysis: LeadAnalysisResult,
+  contactName: string,
+  actionPlan: string[],
+): { subject: string; body: string } {
+  const compactPlan = actionPlan
+    .slice(0, 3)
+    .map((line) => `- ${line.replace(/^\d+\.\s*/, '')}`)
+    .join('\n');
+
+  return {
+    subject: `Suivi ${analysis.lead.dealTitle} - plan d action`,
+    body: [
+      `Bonjour ${contactName},`,
+      '',
+      `Merci pour notre echange concernant "${analysis.lead.dealTitle}".`,
+      'Voici le plan d action propose pour avancer rapidement :',
+      compactPlan || '- Valider les prochaines actions ensemble',
+      '',
+      'Pouvez-vous me confirmer vos disponibilites pour un point de 15 minutes ?',
+      '',
+      'Bien a vous,',
+    ].join('\n'),
+  };
+}
+
+function buildCrmWhatsappDraft(
+  analysis: LeadAnalysisResult,
+  contactName: string,
+  actionPlan: string[],
+): string {
+  const compactPlan = actionPlan
+    .slice(0, 2)
+    .map((line) => line.replace(/^\d+\.\s*/, ''))
+    .join(' | ');
+
+  return [
+    `Bonjour ${contactName},`,
+    `suite a notre echange sur "${analysis.lead.dealTitle}",`,
+    `je propose: ${compactPlan || 'valider les prochaines actions ensemble'}.`,
+    'On peut se caller 15 min cette semaine ?',
+  ].join(' ');
+}
+
 function IaPulsePageContent() {
   const searchParams = useSearchParams();
   const prefilledDealId = searchParams.get('dealId') || '';
@@ -102,6 +189,7 @@ function IaPulsePageContent() {
   const [errorCrm, setErrorCrm] = useState<string | null>(null);
   const [applyInfo, setApplyInfo] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [shareInfo, setShareInfo] = useState<string | null>(null);
   const [applyingRecommendation, setApplyingRecommendation] = useState(false);
 
   const {
@@ -251,11 +339,48 @@ function IaPulsePageContent() {
         }
       : null);
 
+  const crmActionPlan = useMemo(
+    () => (leadAnalysis ? buildCrmActionPlan(leadAnalysis) : []),
+    [leadAnalysis],
+  );
+
+  const crmContactName = useMemo(() => {
+    if (!leadAnalysis) return normalizeContactName(leadName);
+    return normalizeContactName(leadName || leadAnalysis.lead.clientName || leadAnalysis.lead.dealTitle || 'client');
+  }, [leadAnalysis, leadName]);
+
+  const crmEmailDraft = useMemo(
+    () => (leadAnalysis ? buildCrmEmailDraft(leadAnalysis, crmContactName, crmActionPlan) : null),
+    [crmActionPlan, crmContactName, leadAnalysis],
+  );
+
+  const crmWhatsappDraft = useMemo(
+    () => (leadAnalysis ? buildCrmWhatsappDraft(leadAnalysis, crmContactName, crmActionPlan) : ''),
+    [crmActionPlan, crmContactName, leadAnalysis],
+  );
+
+  const copyToClipboard = useCallback(async (value: string, label: string) => {
+    if (!value.trim()) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setShareInfo(`${label} copie dans le presse-papiers.`);
+    } catch {
+      setShareInfo(`Impossible de copier ${label.toLowerCase()}.`);
+    }
+  }, []);
+
+  const openWhatsApp = useCallback(() => {
+    if (!crmWhatsappDraft.trim()) return;
+    const url = `https://wa.me/?text=${encodeURIComponent(crmWhatsappDraft)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }, [crmWhatsappDraft]);
+
   const clearAll = () => {
     setText('');
     setLeadName('');
     setApplyInfo(null);
     setApplyError(null);
+    setShareInfo(null);
     reset();
   };
 
@@ -273,6 +398,7 @@ function IaPulsePageContent() {
     if (!dealId) return;
     setApplyInfo(null);
     setApplyError(null);
+    setShareInfo(null);
     try {
       const result = await analyzeCrmLead(dealId, text.trim() || undefined);
       setLeadName((prev) => {
@@ -623,6 +749,21 @@ function IaPulsePageContent() {
                     </Box>
                   ) : null}
 
+                  {crmActionPlan.length > 0 ? (
+                    <Box mt={3}>
+                      <Text fontWeight="semibold" mb={1}>
+                        Plan d action propose
+                      </Text>
+                      <Stack gap={1}>
+                        {crmActionPlan.map((step, index) => (
+                          <Text key={`${index}-${step}`} fontSize="sm" color="whiteAlpha.900">
+                            {step}
+                          </Text>
+                        ))}
+                      </Stack>
+                    </Box>
+                  ) : null}
+
                   <Box mt={4} display="flex" justifyContent="space-between" alignItems="center" gap={3}>
                     <Text fontSize="sm" color="whiteAlpha.700">
                       Recommendation: {leadAnalysis.analysis.recommendedOutcome}
@@ -642,6 +783,62 @@ function IaPulsePageContent() {
 
                   {applyInfo ? <Text mt={2} color="green.300">{applyInfo}</Text> : null}
                   {applyError ? <Text mt={2} color="red.300">{applyError}</Text> : null}
+                  {shareInfo ? <Text mt={2} color="green.300">{shareInfo}</Text> : null}
+
+                  {crmEmailDraft ? (
+                    <Card.Root mt={4} bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                      <Card.Body>
+                        <Heading size="xs" mb={2}>
+                          Email pret a envoyer
+                        </Heading>
+                        <Text fontSize="sm" fontWeight="semibold">
+                          Objet: {crmEmailDraft.subject}
+                        </Text>
+                        <Text mt={2} fontSize="sm" whiteSpace="pre-wrap" color="whiteAlpha.900">
+                          {crmEmailDraft.body}
+                        </Text>
+                        <Box mt={3} display="flex" justifyContent="flex-end">
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              void copyToClipboard(
+                                `Objet: ${crmEmailDraft.subject}\n\n${crmEmailDraft.body}`,
+                                'Email',
+                              )
+                            }
+                            borderRadius="lg"
+                          >
+                            Copier email
+                          </Button>
+                        </Box>
+                      </Card.Body>
+                    </Card.Root>
+                  ) : null}
+
+                  {crmWhatsappDraft ? (
+                    <Card.Root mt={3} bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                      <Card.Body>
+                        <Heading size="xs" mb={2}>
+                          WhatsApp pret a envoyer
+                        </Heading>
+                        <Text fontSize="sm" whiteSpace="pre-wrap" color="whiteAlpha.900">
+                          {crmWhatsappDraft}
+                        </Text>
+                        <SimpleGrid mt={3} columns={{ base: 1, sm: 2 }} gap={2}>
+                          <Button
+                            size="sm"
+                            onClick={() => void copyToClipboard(crmWhatsappDraft, 'WhatsApp')}
+                            borderRadius="lg"
+                          >
+                            Copier WhatsApp
+                          </Button>
+                          <Button size="sm" colorPalette="green" onClick={openWhatsApp} borderRadius="lg">
+                            Ouvrir WhatsApp
+                          </Button>
+                        </SimpleGrid>
+                      </Card.Body>
+                    </Card.Root>
+                  ) : null}
                 </Card.Body>
               </Card.Root>
             ) : null}
