@@ -24,6 +24,7 @@ type Stage = {
   status: 'OPEN' | 'WON' | 'LOST';
   pipelineId: string;
 };
+const STAGE_STATUSES: Stage['status'][] = ['OPEN', 'WON', 'LOST'];
 
 type Client = {
   id: string;
@@ -74,6 +75,19 @@ type TenantSettings = {
 
 const DEAL_CURRENCIES = ['USD', 'EUR', 'MXN', 'CAD'] as const;
 type DealCurrency = (typeof DEAL_CURRENCIES)[number];
+type WorkflowStageDraft = {
+  id: string;
+  name: string;
+  probabilityPct: string;
+  status: Stage['status'];
+};
+
+type NewStageDraft = {
+  name: string;
+  probabilityPct: string;
+  status: Stage['status'];
+  afterStageId: string;
+};
 
 function parseContactLine(input: string): { name?: string; email?: string } {
   const raw = (input || '').trim();
@@ -100,6 +114,19 @@ function toDateInputValue(value?: string | null) {
   if (!value) return '';
   if (typeof value === 'string' && value.length >= 10) return value.slice(0, 10);
   return '';
+}
+
+function toProbabilityPct(value?: number | null) {
+  const probability = Number(value);
+  if (!Number.isFinite(probability)) return '0';
+  return String(Math.round(probability * 100));
+}
+
+function parseProbabilityPct(value: string) {
+  const normalized = String(value || '').replace(',', '.').trim();
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) return null;
+  return parsed;
 }
 
 export default function CrmPage() {
@@ -171,6 +198,19 @@ export default function CrmPage() {
     pipelineId: '',
     stageId: '',
   });
+  const [showWorkflowModal, setShowWorkflowModal] = useState(false);
+  const [workflowPipelineName, setWorkflowPipelineName] = useState('');
+  const [workflowStageDrafts, setWorkflowStageDrafts] = useState<WorkflowStageDraft[]>([]);
+  const [newStageDraft, setNewStageDraft] = useState<NewStageDraft>({
+    name: '',
+    probabilityPct: '50',
+    status: 'OPEN',
+    afterStageId: '',
+  });
+  const [workflowSaving, setWorkflowSaving] = useState(false);
+  const [workflowAddingStage, setWorkflowAddingStage] = useState(false);
+  const [workflowError, setWorkflowError] = useState<string | null>(null);
+  const [workflowInfo, setWorkflowInfo] = useState<string | null>(null);
 
   useEffect(() => {
     if (!showModal) {
@@ -356,6 +396,10 @@ export default function CrmPage() {
     return [...stages].sort((a, b) => a.position - b.position);
   }, [stages]);
 
+  const selectedPipeline = useMemo(() => {
+    return pipelines.find((pipeline) => pipeline.id === pipelineId) || null;
+  }, [pipelineId, pipelines]);
+
   const stageStatusById = useMemo(() => {
     const map: Record<string, Stage['status']> = {};
     for (const stage of sortedStages) map[stage.id] = stage.status;
@@ -365,6 +409,40 @@ export default function CrmPage() {
   const openLeadsCount = useMemo(() => {
     return deals.reduce((sum, deal) => (stageStatusById[deal.stageId] === 'OPEN' ? sum + 1 : sum), 0);
   }, [deals, stageStatusById]);
+
+  const resetWorkflowEditor = (sourceStages: Stage[], afterStageId?: string) => {
+    const orderedStages = [...sourceStages].sort((a, b) => a.position - b.position);
+    setWorkflowStageDrafts(
+      orderedStages.map((stage) => ({
+        id: stage.id,
+        name: stage.name,
+        status: stage.status,
+        probabilityPct: toProbabilityPct(stage.probability),
+      })),
+    );
+
+    const preferredAfterStageId =
+      afterStageId && orderedStages.some((stage) => stage.id === afterStageId)
+        ? afterStageId
+        : orderedStages[orderedStages.length - 1]?.id || '';
+    const referenceStage =
+      orderedStages.find((stage) => stage.id === preferredAfterStageId) || orderedStages[orderedStages.length - 1];
+
+    setNewStageDraft({
+      name: '',
+      probabilityPct: toProbabilityPct(referenceStage?.probability ?? 0.5),
+      status: referenceStage?.status ?? 'OPEN',
+      afterStageId: preferredAfterStageId,
+    });
+  };
+
+  const openWorkflowEditor = (afterStageId?: string) => {
+    setWorkflowPipelineName(selectedPipeline?.name || '');
+    resetWorkflowEditor(sortedStages, afterStageId);
+    setWorkflowError(null);
+    setWorkflowInfo(null);
+    setShowWorkflowModal(true);
+  };
 
   useEffect(() => {
     if (!requestedStageId) return;
@@ -698,6 +776,141 @@ export default function CrmPage() {
     }
   };
 
+  const updateWorkflowStageDraft = (stageId: string, patch: Partial<WorkflowStageDraft>) => {
+    setWorkflowStageDrafts((prev) =>
+      prev.map((draft) => (draft.id === stageId ? { ...draft, ...patch } : draft)),
+    );
+  };
+
+  const handleSaveWorkflow = async () => {
+    if (!pipelineId) return;
+    setWorkflowSaving(true);
+    setWorkflowError(null);
+    setWorkflowInfo(null);
+
+    try {
+      const nextPipelineName = workflowPipelineName.trim();
+      if (!nextPipelineName) {
+        throw new Error('Workflow name is required');
+      }
+
+      if (selectedPipeline && nextPipelineName !== selectedPipeline.name) {
+        await api(`/pipelines/${pipelineId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: nextPipelineName }),
+        });
+        setPipelines((prev) =>
+          prev.map((pipeline) => (pipeline.id === pipelineId ? { ...pipeline, name: nextPipelineName } : pipeline)),
+        );
+      }
+
+      const existingById = new Map(sortedStages.map((stage) => [stage.id, stage]));
+      for (const draft of workflowStageDrafts) {
+        const name = draft.name.trim();
+        if (!name) throw new Error('Each stage needs a name');
+
+        const probabilityPct = parseProbabilityPct(draft.probabilityPct);
+        if (probabilityPct === null) throw new Error('Probability must be between 0 and 100');
+        const probability = probabilityPct / 100;
+
+        const current = existingById.get(draft.id);
+        if (!current) continue;
+        const changed =
+          current.name !== name ||
+          current.status !== draft.status ||
+          Math.abs((current.probability ?? 0) - probability) > 0.00001;
+        if (!changed) continue;
+
+        await api(`/stages/${draft.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            name,
+            status: draft.status,
+            probability,
+          }),
+        });
+      }
+
+      const refreshedStages = await api<Stage[]>(`/stages?pipelineId=${pipelineId}`);
+      setStages(refreshedStages);
+      setStagesByPipelineId((prev) => ({ ...prev, [pipelineId]: refreshedStages }));
+      resetWorkflowEditor(refreshedStages, newStageDraft.afterStageId || undefined);
+      setWorkflowInfo(t('common.saved'));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to save workflow';
+      setWorkflowError(message);
+    } finally {
+      setWorkflowSaving(false);
+    }
+  };
+
+  const handleCreateStageFromWorkflow = async () => {
+    if (!pipelineId) return;
+    const stageNameValue = newStageDraft.name.trim();
+    if (!stageNameValue) {
+      setWorkflowError('Stage name is required');
+      return;
+    }
+
+    const probabilityPct = parseProbabilityPct(newStageDraft.probabilityPct);
+    if (probabilityPct === null) {
+      setWorkflowError('Probability must be between 0 and 100');
+      return;
+    }
+
+    setWorkflowAddingStage(true);
+    setWorkflowError(null);
+    setWorkflowInfo(null);
+
+    try {
+      const created = await api<Stage>('/stages', {
+        method: 'POST',
+        body: JSON.stringify({
+          pipelineId,
+          name: stageNameValue,
+          status: newStageDraft.status,
+          probability: probabilityPct / 100,
+        }),
+      });
+
+      let refreshedStages = await api<Stage[]>(`/stages?pipelineId=${pipelineId}`);
+      const orderedStages = [...refreshedStages].sort((a, b) => a.position - b.position);
+      const createdStage = orderedStages.find((stage) => stage.id === created.id);
+
+      if (createdStage && newStageDraft.afterStageId) {
+        const withoutCreated = orderedStages.filter((stage) => stage.id !== createdStage.id);
+        const afterIndex = withoutCreated.findIndex((stage) => stage.id === newStageDraft.afterStageId);
+        if (afterIndex >= 0) {
+          const desiredOrder = [
+            ...withoutCreated.slice(0, afterIndex + 1),
+            createdStage,
+            ...withoutCreated.slice(afterIndex + 1),
+          ];
+          const hasChangedOrder = desiredOrder.some((stage, index) => stage.id !== orderedStages[index]?.id);
+          if (hasChangedOrder) {
+            await api('/stages/reorder', {
+              method: 'PATCH',
+              body: JSON.stringify({
+                items: desiredOrder.map((stage, position) => ({ id: stage.id, position })),
+              }),
+            });
+            refreshedStages = await api<Stage[]>(`/stages?pipelineId=${pipelineId}`);
+          }
+        }
+      }
+
+      setStages(refreshedStages);
+      setStagesByPipelineId((prev) => ({ ...prev, [pipelineId]: refreshedStages }));
+      resetWorkflowEditor(refreshedStages, created.id);
+      setWorkflowInfo('Stage added');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to add stage';
+      setWorkflowError(message);
+    } finally {
+      setWorkflowAddingStage(false);
+    }
+  };
+
   return (
     <Guard>
       <AppShell>
@@ -727,6 +940,9 @@ export default function CrmPage() {
                 </option>
               ))}
             </select>
+            <button className="btn-secondary text-sm" type="button" onClick={() => openWorkflowEditor()}>
+              {t('common.manage')} {t('tasks.section')}
+            </button>
             <button className="btn-primary" onClick={openCreateModal}>
               {t('crm.newDeal')}
             </button>
@@ -762,11 +978,202 @@ export default function CrmPage() {
                 onDealDragStart={() => {
                   lastDragAtRef.current = Date.now();
                 }}
+                onRequestAddStageAfter={(sourceStage) => openWorkflowEditor(sourceStage.id)}
                 highlighted={highlightStageId === stage.id}
               />
             ))}
           </div>
         </div>
+
+        {showWorkflowModal && (
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-10">
+            <div className="card flex w-full max-w-3xl max-h-[90vh] flex-col overflow-hidden p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold">
+                  {t('common.manage')} {t('tasks.section')}
+                </h2>
+                <button
+                  className="text-slate-400"
+                  onClick={() => {
+                    setShowWorkflowModal(false);
+                    setWorkflowError(null);
+                    setWorkflowInfo(null);
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
+                <label className="block text-sm text-slate-300">
+                  {t('crm.pipeline')}
+                  <input
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                    value={workflowPipelineName}
+                    onChange={(e) => setWorkflowPipelineName(e.target.value)}
+                  />
+                </label>
+
+                <div>
+                  <p className="text-sm text-slate-300">{t('tasks.section')}</p>
+                  <div className="mt-2 space-y-2">
+                    {workflowStageDrafts.map((draft) => (
+                      <div
+                        key={draft.id}
+                        className="grid gap-2 rounded-lg border border-white/10 bg-white/5 p-3 md:grid-cols-[1fr_150px_130px]"
+                      >
+                        <input
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                          value={draft.name}
+                          onChange={(e) =>
+                            updateWorkflowStageDraft(draft.id, {
+                              name: e.target.value,
+                            })
+                          }
+                        />
+                        <select
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                          value={draft.status}
+                          onChange={(e) =>
+                            updateWorkflowStageDraft(draft.id, {
+                              status: e.target.value as Stage['status'],
+                            })
+                          }
+                        >
+                          {STAGE_STATUSES.map((status) => (
+                            <option key={status} value={status}>
+                              {t(`stageStatus.${status}`)}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 pr-7 text-sm"
+                            value={draft.probabilityPct}
+                            onChange={(e) =>
+                              updateWorkflowStageDraft(draft.id, {
+                                probabilityPct: e.target.value,
+                              })
+                            }
+                          />
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                            %
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    {workflowStageDrafts.length === 0 ? (
+                      <p className="text-xs text-slate-500">{t('crm.noStagesShort')}</p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+                  <p className="text-sm font-semibold text-slate-100">+ {t('crm.stage')}</p>
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    <input
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                      placeholder={t('crm.stage')}
+                      value={newStageDraft.name}
+                      onChange={(e) =>
+                        setNewStageDraft((prev) => ({
+                          ...prev,
+                          name: e.target.value,
+                        }))
+                      }
+                    />
+                    <select
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                      value={newStageDraft.afterStageId}
+                      onChange={(e) =>
+                        setNewStageDraft((prev) => ({
+                          ...prev,
+                          afterStageId: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">At end</option>
+                      {workflowStageDrafts.map((draft) => (
+                        <option key={draft.id} value={draft.id}>
+                          {stageName(draft.name)}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                      value={newStageDraft.status}
+                      onChange={(e) =>
+                        setNewStageDraft((prev) => ({
+                          ...prev,
+                          status: e.target.value as Stage['status'],
+                        }))
+                      }
+                    >
+                      {STAGE_STATUSES.map((status) => (
+                        <option key={status} value={status}>
+                          {t(`stageStatus.${status}`)}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 pr-7 text-sm"
+                        value={newStageDraft.probabilityPct}
+                        onChange={(e) =>
+                          setNewStageDraft((prev) => ({
+                            ...prev,
+                            probabilityPct: e.target.value,
+                          }))
+                        }
+                      />
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                        %
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      className="btn-secondary"
+                      onClick={handleCreateStageFromWorkflow}
+                      disabled={workflowAddingStage || workflowSaving}
+                    >
+                      {workflowAddingStage ? t('common.saving') : `+ ${t('crm.stage')}`}
+                    </button>
+                  </div>
+                </div>
+
+                {workflowInfo ? <p className="text-sm text-emerald-200">{workflowInfo}</p> : null}
+                {workflowError ? <p className="text-sm text-red-200">{workflowError}</p> : null}
+              </div>
+
+              <div className="mt-6 flex items-center justify-end gap-2">
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    setShowWorkflowModal(false);
+                    setWorkflowError(null);
+                    setWorkflowInfo(null);
+                  }}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={handleSaveWorkflow}
+                  disabled={workflowSaving || workflowAddingStage}
+                >
+                  {workflowSaving ? t('common.saving') : t('common.save')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-10">
@@ -1141,6 +1548,7 @@ function StageColumn({
   onMoveDeal,
   onOpenDeal,
   onDealDragStart,
+  onRequestAddStageAfter,
   highlighted,
 }: {
   stage: Stage;
@@ -1151,6 +1559,7 @@ function StageColumn({
   onMoveDeal: (dealId: string, stageId: string) => void;
   onOpenDeal: (deal: Deal) => void;
   onDealDragStart: () => void;
+  onRequestAddStageAfter: (stage: Stage) => void;
   highlighted: boolean;
 }) {
   const { t, stageName } = useI18n();
@@ -1209,6 +1618,14 @@ function StageColumn({
           <div className="flex items-center gap-2">
             <h3 className="text-lg font-semibold">{stageName(stage.name)}</h3>
             <span className="text-xs text-slate-500">{Math.round((stage.probability ?? 0) * 100)}%</span>
+            <button
+              type="button"
+              className="rounded-full border border-white/15 px-2 py-0.5 text-xs text-slate-300 transition hover:border-cyan-300/60 hover:text-cyan-200"
+              title={`+ ${t('crm.stage')}`}
+              onClick={() => onRequestAddStageAfter(stage)}
+            >
+              +
+            </button>
           </div>
         </div>
         <div className="text-right">
