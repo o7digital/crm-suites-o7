@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '@/contexts/AuthContext';
+import { apiBaseForDisplay } from '@/lib/apiBase';
 import { useIA } from '@/hooks/useIA';
 import {
   Alert,
@@ -90,8 +91,7 @@ function IaPulsePageContent() {
   const [text, setText] = useState('');
   const [leadName, setLeadName] = useState('');
   const iaUiBuild = 'ia-ui-crm-lead-analysis-v1';
-  const apiTarget =
-    process.env.NEXT_PUBLIC_API_ROOT || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+  const apiTarget = apiBaseForDisplay();
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState('');

@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../lib/supabaseClient';
+import { API_BASE_URL } from '../lib/apiBase';
 
 type User = {
   id: string;
@@ -29,23 +30,6 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-function normalizeApiBase(raw?: string): string {
-  const value = (raw || '').trim();
-  if (!value) return '';
-  const trimmed = value.replace(/\/+$/, '');
-  if (trimmed.endsWith('/api')) return trimmed;
-  return `${trimmed}/api`;
-}
-
-// Supports:
-// - NEXT_PUBLIC_API_ROOT = https://my-backend (origin)
-// - NEXT_PUBLIC_API_ROOT = https://my-backend/api (full prefix)
-// - NEXT_PUBLIC_API_URL  = http://localhost:4000/api (legacy)
-const API_URL =
-  normalizeApiBase(process.env.NEXT_PUBLIC_API_ROOT) ||
-  normalizeApiBase(process.env.NEXT_PUBLIC_API_URL) ||
-  'http://localhost:4000/api';
 
 function generateTenantId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -98,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const bootstrapTenant = useCallback(async (accessToken: string) => {
-    await fetch(`${API_URL}/bootstrap`, {
+    await fetch(`${API_BASE_URL}/bootstrap`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -232,6 +216,7 @@ export function useApi(token: string | null) {
   return useMemo(() => {
     const authHeader: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
     return async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
+      const requestUrl = `${API_BASE_URL}${path}`;
       const headers: Record<string, string> = { ...authHeader };
       if (!(init?.body instanceof FormData)) {
         headers['Content-Type'] = 'application/json';
@@ -240,7 +225,7 @@ export function useApi(token: string | null) {
 
       // Avoid stale metrics when proxies/browsers cache API responses.
       const cache = init?.cache ?? 'no-store';
-      const res = await fetch(`${API_URL}${path}`, {
+      const res = await fetch(requestUrl, {
         ...init,
         headers,
         cache,
@@ -285,7 +270,7 @@ export function useApi(token: string | null) {
           // ignore parsing errors and fall through
         }
 
-        throw new Error(message || `Request failed (${res.status})`);
+        throw new Error(`${message || `Request failed (${res.status})`} [${res.status}] @ ${requestUrl}`);
       }
       const ct = res.headers.get('content-type');
       if (ct && ct.includes('text/csv')) {
