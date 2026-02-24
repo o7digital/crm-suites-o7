@@ -133,8 +133,9 @@ function IaPulsePageContent() {
   } = useIA();
 
   useEffect(() => {
+    if (!token) return;
     void fetchDiagnostics().catch(() => undefined);
-  }, [fetchDiagnostics]);
+  }, [fetchDiagnostics, token]);
 
   useEffect(() => {
     if (!token) return;
