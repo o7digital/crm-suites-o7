@@ -129,6 +129,39 @@ function parseProbabilityPct(value: string) {
   return parsed;
 }
 
+function formatDealsUsdTotal(
+  deals: Deal[],
+  fx: FxRatesSnapshot | null,
+  fxLoading: boolean,
+) {
+  const totals = deals.reduce<Record<string, number>>((acc, deal) => {
+    const currency = (deal.currency || 'USD').toUpperCase();
+    const value = Number(deal.value);
+    if (!Number.isFinite(value)) return acc;
+    acc[currency] = (acc[currency] || 0) + value;
+    return acc;
+  }, {});
+  const entries = Object.entries(totals);
+
+  if (entries.length === 0) return formatCurrencyTotal(0, 'USD');
+
+  const requiresConversion = entries.some(([currency]) => currency !== 'USD');
+  if (!requiresConversion) return formatCurrencyTotal(totals.USD ?? 0, 'USD');
+
+  if (!fx) return fxLoading ? 'USD …' : 'USD —';
+
+  const missing = entries
+    .map(([currency]) => currency)
+    .filter((currency) => convertCurrency(1, currency, 'USD', fx) === null);
+  if (missing.length > 0) return 'USD —';
+
+  const convertedTotal = entries.reduce((sum, [currency, value]) => {
+    const converted = convertCurrency(value, currency, 'USD', fx);
+    return converted === null ? sum : sum + converted;
+  }, 0);
+  return formatCurrencyTotal(convertedTotal, 'USD');
+}
+
 export default function CrmPage() {
   const { token } = useAuth();
   const api = useApi(token);
@@ -432,6 +465,14 @@ export default function CrmPage() {
   const lostDeals = useMemo(() => {
     return deals.filter((deal) => stageStatusById[deal.stageId] === 'LOST');
   }, [deals, stageStatusById]);
+
+  const wonTotalUsdLabel = useMemo(() => {
+    return formatDealsUsdTotal(wonDeals, fx, fxLoading);
+  }, [fx, fxLoading, wonDeals]);
+
+  const lostTotalUsdLabel = useMemo(() => {
+    return formatDealsUsdTotal(lostDeals, fx, fxLoading);
+  }, [fx, fxLoading, lostDeals]);
 
   const resetWorkflowEditor = (sourceStages: Stage[], afterStageId?: string) => {
     const orderedStages = [...sourceStages].sort((a, b) => a.position - b.position);
@@ -1060,9 +1101,14 @@ export default function CrmPage() {
           <div className="card p-4">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-slate-100">{t(`stageStatus.WON`)}</p>
-              <p className="text-xs text-slate-400">
-                {wonDeals.length} {t('crm.deals')}
-              </p>
+              <div className="text-right">
+                <p className="text-xs text-slate-400">
+                  {wonDeals.length} {t('crm.deals')}
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  {t('crm.total')} USD: {wonTotalUsdLabel}
+                </p>
+              </div>
             </div>
             <div className="mt-3 space-y-2">
               {wonDeals.map((deal) => (
@@ -1090,9 +1136,14 @@ export default function CrmPage() {
           <div className="card p-4">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-slate-100">{t(`stageStatus.LOST`)}</p>
-              <p className="text-xs text-slate-400">
-                {lostDeals.length} {t('crm.deals')}
-              </p>
+              <div className="text-right">
+                <p className="text-xs text-slate-400">
+                  {lostDeals.length} {t('crm.deals')}
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  {t('crm.total')} USD: {lostTotalUsdLabel}
+                </p>
+              </div>
             </div>
             <div className="mt-3 space-y-2">
               {lostDeals.map((deal) => (
@@ -1826,6 +1877,15 @@ function StageColumn({
                 {t('crm.closing')}: {new Date(deal.expectedCloseDate).toLocaleDateString()}
               </p>
             ) : null}
+            <div className="mt-1 flex justify-end">
+              <Link
+                href={`/ia-pulse?dealId=${deal.id}`}
+                className="text-[11px] text-cyan-200 hover:underline"
+                onClick={(event) => event.stopPropagation()}
+              >
+                IA Pulse
+              </Link>
+            </div>
             <p className="text-xs text-slate-400">
               {deal.currency} {Number(deal.value).toLocaleString()}
             </p>

@@ -21,6 +21,41 @@ export type ImproveProposalResult = {
   improvedProposal: string;
 };
 
+export type LeadAnalysisResult = {
+  lead: {
+    dealId: string;
+    dealTitle: string;
+    pipelineId: string;
+    pipelineName: string;
+    stageId: string;
+    stageName: string;
+    stageStatus: 'OPEN' | 'WON' | 'LOST';
+    stageProbability: number;
+    daysInStage: number;
+    expectedCloseDate: string | null;
+    daysToClose: number | null;
+    value: number;
+    currency: string;
+    valueUsd: number | null;
+    fxDate: string | null;
+    clientName: string | null;
+  };
+  analysis: {
+    score: number;
+    winProbability: number;
+    confidence: number;
+    lossRisk: 'LOW' | 'MEDIUM' | 'HIGH';
+    reasons: string[];
+    strengths: string[];
+    risks: string[];
+    nextBestActions: string[];
+    recommendedOutcome: 'KEEP' | 'WON' | 'LOST';
+    recommendedStageId: string | null;
+    recommendedStageName: string | null;
+    explanation: string;
+  };
+};
+
 export type IaDiagnostics = {
   build: string;
   timestamp: string;
@@ -147,16 +182,19 @@ export function useIA() {
   const [summary, setSummary] = useState<SummaryResult | null>(null);
   const [draftEmail, setDraftEmail] = useState<DraftEmailResult | null>(null);
   const [improvedProposal, setImprovedProposal] = useState<ImproveProposalResult | null>(null);
+  const [leadAnalysis, setLeadAnalysis] = useState<LeadAnalysisResult | null>(null);
 
   const [loadingSentiment, setLoadingSentiment] = useState(false);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [loadingEmail, setLoadingEmail] = useState(false);
   const [loadingImprove, setLoadingImprove] = useState(false);
+  const [loadingLeadAnalysis, setLoadingLeadAnalysis] = useState(false);
 
   const [errorSentiment, setErrorSentiment] = useState<string | null>(null);
   const [errorSummary, setErrorSummary] = useState<string | null>(null);
   const [errorEmail, setErrorEmail] = useState<string | null>(null);
   const [errorImprove, setErrorImprove] = useState<string | null>(null);
+  const [errorLeadAnalysis, setErrorLeadAnalysis] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<IaDiagnostics | null>(null);
   const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
   const [errorDiagnostics, setErrorDiagnostics] = useState<string | null>(null);
@@ -204,6 +242,31 @@ export function useIA() {
         throw err;
       } finally {
         setLoadingSentiment(false);
+      }
+    },
+    [api],
+  );
+
+  const analyzeCrmLead = useCallback(
+    async (dealId: string, context?: string) => {
+      setLoadingLeadAnalysis(true);
+      setErrorLeadAnalysis(null);
+      try {
+        const result = await api<LeadAnalysisResult>('/ia/lead-analysis', {
+          method: 'POST',
+          body: JSON.stringify({
+            dealId,
+            context: context?.trim() || undefined,
+          }),
+        });
+        setLeadAnalysis(result);
+        return result;
+      } catch (err) {
+        const message = toErrorMessage(err);
+        setErrorLeadAnalysis(message);
+        throw err;
+      } finally {
+        setLoadingLeadAnalysis(false);
       }
     },
     [api],
@@ -304,21 +367,25 @@ export function useIA() {
     setSummary(null);
     setDraftEmail(null);
     setImprovedProposal(null);
+    setLeadAnalysis(null);
     setErrorSentiment(null);
     setErrorSummary(null);
     setErrorEmail(null);
     setErrorImprove(null);
+    setErrorLeadAnalysis(null);
     setDiagnostics(null);
     setErrorDiagnostics(null);
     setLoadingSentiment(false);
     setLoadingSummary(false);
     setLoadingEmail(false);
     setLoadingImprove(false);
+    setLoadingLeadAnalysis(false);
     setLoadingDiagnostics(false);
   }, []);
 
   return {
     analyzeLead,
+    analyzeCrmLead,
     summarize,
     generateEmail,
     improveProposal,
@@ -328,14 +395,17 @@ export function useIA() {
     summary,
     draftEmail,
     improvedProposal,
+    leadAnalysis,
     loadingSentiment,
     loadingSummary,
     loadingEmail,
     loadingImprove,
+    loadingLeadAnalysis,
     errorSentiment,
     errorSummary,
     errorEmail,
     errorImprove,
+    errorLeadAnalysis,
     diagnostics,
     loadingDiagnostics,
     errorDiagnostics,
