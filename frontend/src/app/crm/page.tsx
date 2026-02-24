@@ -211,6 +211,7 @@ export default function CrmPage() {
   const [workflowAddingStage, setWorkflowAddingStage] = useState(false);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [workflowInfo, setWorkflowInfo] = useState<string | null>(null);
+  const [statusDropHover, setStatusDropHover] = useState<Stage['status'] | null>(null);
 
   useEffect(() => {
     if (!showModal) {
@@ -406,8 +407,30 @@ export default function CrmPage() {
     return map;
   }, [sortedStages]);
 
+  const stageNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const stage of sortedStages) map[stage.id] = stage.name;
+    return map;
+  }, [sortedStages]);
+
+  const firstWonStage = useMemo(() => {
+    return sortedStages.find((stage) => stage.status === 'WON') || null;
+  }, [sortedStages]);
+
+  const firstLostStage = useMemo(() => {
+    return sortedStages.find((stage) => stage.status === 'LOST') || null;
+  }, [sortedStages]);
+
   const openLeadsCount = useMemo(() => {
     return deals.reduce((sum, deal) => (stageStatusById[deal.stageId] === 'OPEN' ? sum + 1 : sum), 0);
+  }, [deals, stageStatusById]);
+
+  const wonDeals = useMemo(() => {
+    return deals.filter((deal) => stageStatusById[deal.stageId] === 'WON');
+  }, [deals, stageStatusById]);
+
+  const lostDeals = useMemo(() => {
+    return deals.filter((deal) => stageStatusById[deal.stageId] === 'LOST');
   }, [deals, stageStatusById]);
 
   const resetWorkflowEditor = (sourceStages: Stage[], afterStageId?: string) => {
@@ -776,6 +799,15 @@ export default function CrmPage() {
     }
   };
 
+  const handleDropDealToStatus = async (dealId: string, status: Stage['status']) => {
+    const targetStage = status === 'WON' ? firstWonStage : firstLostStage;
+    if (!targetStage) {
+      setError(`No ${status} stage available in this pipeline`);
+      return;
+    }
+    await handleMoveDeal(dealId, targetStage.id);
+  };
+
   const updateWorkflowStageDraft = (stageId: string, patch: Partial<WorkflowStageDraft>) => {
     setWorkflowStageDrafts((prev) =>
       prev.map((draft) => (draft.id === stageId ? { ...draft, ...patch } : draft)),
@@ -982,6 +1014,107 @@ export default function CrmPage() {
                 highlighted={highlightStageId === stage.id}
               />
             ))}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {(['WON', 'LOST'] as Stage['status'][]).map((status) => {
+            const targetStage = status === 'WON' ? firstWonStage : firstLostStage;
+            const isHover = statusDropHover === status;
+            return (
+              <div
+                key={status}
+                className={`rounded-xl border px-4 py-3 transition ${
+                  targetStage
+                    ? isHover
+                      ? 'border-cyan-300/60 bg-cyan-400/10'
+                      : 'border-white/15 bg-white/5'
+                    : 'border-white/10 bg-white/[0.03] opacity-70'
+                }`}
+                onDragOver={(event) => {
+                  if (!targetStage) return;
+                  event.preventDefault();
+                  setStatusDropHover(status);
+                }}
+                onDragLeave={() => {
+                  if (statusDropHover === status) setStatusDropHover(null);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setStatusDropHover(null);
+                  const dealId = event.dataTransfer.getData('text/plain');
+                  if (!dealId) return;
+                  handleDropDealToStatus(dealId, status);
+                }}
+              >
+                <p className="text-sm font-semibold text-slate-100">{t(`stageStatus.${status}`)}</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  {targetStage ? stageName(targetStage.name) : t('crm.noStagesShort')}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="card p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-100">{t(`stageStatus.WON`)}</p>
+              <p className="text-xs text-slate-400">
+                {wonDeals.length} {t('crm.deals')}
+              </p>
+            </div>
+            <div className="mt-3 space-y-2">
+              {wonDeals.map((deal) => (
+                <button
+                  key={deal.id}
+                  type="button"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:bg-white/10"
+                  onClick={() => openEditModal(deal)}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="truncate text-sm font-semibold">{deal.title}</p>
+                    <p className="text-xs text-slate-400">
+                      {deal.currency} {Number(deal.value).toLocaleString()}
+                    </p>
+                  </div>
+                  {stageNameById[deal.stageId] ? (
+                    <p className="mt-1 text-xs text-slate-500">{stageName(stageNameById[deal.stageId])}</p>
+                  ) : null}
+                </button>
+              ))}
+              {wonDeals.length === 0 ? <p className="text-xs text-slate-500">{t('crm.noDeals')}</p> : null}
+            </div>
+          </div>
+
+          <div className="card p-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-100">{t(`stageStatus.LOST`)}</p>
+              <p className="text-xs text-slate-400">
+                {lostDeals.length} {t('crm.deals')}
+              </p>
+            </div>
+            <div className="mt-3 space-y-2">
+              {lostDeals.map((deal) => (
+                <button
+                  key={deal.id}
+                  type="button"
+                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:bg-white/10"
+                  onClick={() => openEditModal(deal)}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="truncate text-sm font-semibold">{deal.title}</p>
+                    <p className="text-xs text-slate-400">
+                      {deal.currency} {Number(deal.value).toLocaleString()}
+                    </p>
+                  </div>
+                  {stageNameById[deal.stageId] ? (
+                    <p className="mt-1 text-xs text-slate-500">{stageName(stageNameById[deal.stageId])}</p>
+                  ) : null}
+                </button>
+              ))}
+              {lostDeals.length === 0 ? <p className="text-xs text-slate-500">{t('crm.noDeals')}</p> : null}
+            </div>
           </div>
         </div>
 
