@@ -563,6 +563,47 @@ function IaPulsePageContent() {
               </Card.Body>
             </Card.Root>
 
+            <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
+              <Card.Body>
+                <Heading size="sm" mb={2}>
+                  Gestion de pedidos
+                </Heading>
+                <Text fontSize="sm" color="whiteAlpha.800" mb={3}>
+                  Section dediee aux clients qui veulent administrer leurs pedidos, pagos et facturas depuis un seul
+                  espace.
+                </Text>
+
+                <SimpleGrid columns={{ base: 1, md: 3 }} gap={3}>
+                  <Box bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200" borderRadius="lg" p={3}>
+                    <Text fontSize="xs" color="whiteAlpha.600" mb={1}>
+                      PEDIDOS
+                    </Text>
+                    <Text fontSize="sm" color="whiteAlpha.900">
+                      Suivi du statut de commande, confirmation client et priorisation des livraisons.
+                    </Text>
+                  </Box>
+
+                  <Box bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200" borderRadius="lg" p={3}>
+                    <Text fontSize="xs" color="whiteAlpha.600" mb={1}>
+                      PAGOS
+                    </Text>
+                    <Text fontSize="sm" color="whiteAlpha.900">
+                      Controle des paiements recus, echeances et alertes de retard pour chaque compte client.
+                    </Text>
+                  </Box>
+
+                  <Box bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200" borderRadius="lg" p={3}>
+                    <Text fontSize="xs" color="whiteAlpha.600" mb={1}>
+                      FACTURAS
+                    </Text>
+                    <Text fontSize="sm" color="whiteAlpha.900">
+                      Acces rapide aux factures emises, suivi des statuts et preparation des relances.
+                    </Text>
+                  </Box>
+                </SimpleGrid>
+              </Card.Body>
+            </Card.Root>
+
             <Textarea
               placeholder="Contexte additionnel: derniers echanges, objections, notes call..."
               value={text}
