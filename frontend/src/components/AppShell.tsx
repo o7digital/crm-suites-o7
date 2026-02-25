@@ -13,6 +13,7 @@ const nav = [
   { href: '/tasks', labelKey: 'nav.tasks' },
   { href: '/crm', labelKey: 'nav.crm' },
   { href: '/post-sales', labelKey: 'nav.postSales' },
+  { href: '/orders', labelKey: 'nav.orders' },
   { href: '/ia-pulse', labelKey: 'nav.iaPulse' },
   { href: '/forecast', labelKey: 'nav.forecast' },
   { href: '/export', labelKey: 'nav.export' },
