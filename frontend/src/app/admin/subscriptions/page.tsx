@@ -30,6 +30,23 @@ type LinkDraft = {
   seats: number;
 };
 
+type PendingInvite = {
+  id: string;
+  email: string;
+  name?: string | null;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  token: string;
+  status: 'PENDING' | 'ACCEPTED' | 'REVOKED';
+  createdAt: string;
+  updatedAt: string;
+};
+
+type InviteDraft = {
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'MEMBER';
+};
+
 type SubscriptionPlan = 'TRIAL' | 'PULSE_BASIC' | 'PULSE_STANDARD' | 'PULSE_ADVANCED' | 'PULSE_ADVANCED_PLUS' | 'PULSE_TEAM';
 
 const DEFAULT_SEATS_BY_PLAN: Record<SubscriptionPlan, number> = {
@@ -39,6 +56,12 @@ const DEFAULT_SEATS_BY_PLAN: Record<SubscriptionPlan, number> = {
   PULSE_ADVANCED: 5,
   PULSE_ADVANCED_PLUS: 10,
   PULSE_TEAM: 20,
+};
+
+const DEFAULT_INVITE_DRAFT: InviteDraft = {
+  name: '',
+  email: '',
+  role: 'MEMBER',
 };
 
 export default function AdminSubscriptionsPage() {
@@ -54,6 +77,10 @@ export default function AdminSubscriptionsPage() {
   const [savingSubscriptionId, setSavingSubscriptionId] = useState<string | null>(null);
   const [editingSubscriptionId, setEditingSubscriptionId] = useState<string | null>(null);
   const [linkDraftsById, setLinkDraftsById] = useState<Record<string, LinkDraft>>({});
+  const [inviteDraftsById, setInviteDraftsById] = useState<Record<string, InviteDraft>>({});
+  const [pendingInvitesById, setPendingInvitesById] = useState<Record<string, PendingInvite[]>>({});
+  const [savingInviteSubscriptionId, setSavingInviteSubscriptionId] = useState<string | null>(null);
+  const [loadingInviteSubscriptionId, setLoadingInviteSubscriptionId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState('');
   const [contactFirstName, setContactFirstName] = useState('');
   const [contactLastName, setContactLastName] = useState('');
@@ -89,7 +116,7 @@ export default function AdminSubscriptionsPage() {
   }, []);
 
   const buildInviteUrl = useCallback(
-    (opts: { tenantId: string; tenantName: string; contactName?: string; contactEmail?: string }) => {
+    (opts: { tenantId: string; tenantName: string; contactName?: string; contactEmail?: string; inviteToken?: string }) => {
       if (!origin) return '';
       const params = new URLSearchParams({
         tenantId: opts.tenantId,
@@ -97,6 +124,7 @@ export default function AdminSubscriptionsPage() {
       });
       if (opts.contactName) params.set('name', opts.contactName);
       if (opts.contactEmail) params.set('email', opts.contactEmail);
+      if (opts.inviteToken) params.set('inviteToken', opts.inviteToken);
       return `${origin}/register?${params.toString()}`;
     },
     [origin],
@@ -145,6 +173,43 @@ export default function AdminSubscriptionsPage() {
     });
   }, []);
 
+  const getInviteDraft = useCallback(
+    (subscriptionId: string): InviteDraft => {
+      return inviteDraftsById[subscriptionId] || DEFAULT_INVITE_DRAFT;
+    },
+    [inviteDraftsById],
+  );
+
+  const updateInviteDraft = useCallback((subscriptionId: string, patch: Partial<InviteDraft>) => {
+    setInviteDraftsById((prev) => {
+      const current = prev[subscriptionId] || DEFAULT_INVITE_DRAFT;
+      return {
+        ...prev,
+        [subscriptionId]: {
+          ...current,
+          ...patch,
+        },
+      };
+    });
+  }, []);
+
+  const loadSubscriptionInvites = useCallback(
+    async (subscriptionId: string) => {
+      setLoadingInviteSubscriptionId(subscriptionId);
+      try {
+        const pending = await api<PendingInvite[]>(`/admin/subscriptions/${subscriptionId}/user-invites`);
+        setPendingInvitesById((prev) => ({ ...prev, [subscriptionId]: pending }));
+        setError(null);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to load invites';
+        setError(message);
+      } finally {
+        setLoadingInviteSubscriptionId((prev) => (prev === subscriptionId ? null : prev));
+      }
+    },
+    [api],
+  );
+
   const startEditingLink = useCallback(
     (sub: SubscriptionItem) => {
       setError(null);
@@ -157,13 +222,26 @@ export default function AdminSubscriptionsPage() {
           [sub.id]: getDefaultDraft(sub),
         };
       });
+      setInviteDraftsById((prev) => {
+        if (prev[sub.id]) return prev;
+        return {
+          ...prev,
+          [sub.id]: DEFAULT_INVITE_DRAFT,
+        };
+      });
+      void loadSubscriptionInvites(sub.id);
     },
-    [getDefaultDraft],
+    [getDefaultDraft, loadSubscriptionInvites],
   );
 
   const cancelEditingLink = useCallback((sub: SubscriptionItem) => {
     setEditingSubscriptionId((prev) => (prev === sub.id ? null : prev));
     setLinkDraftsById((prev) => {
+      const next = { ...prev };
+      delete next[sub.id];
+      return next;
+    });
+    setInviteDraftsById((prev) => {
       const next = { ...prev };
       delete next[sub.id];
       return next;
@@ -297,15 +375,64 @@ export default function AdminSubscriptionsPage() {
     await copyUrl(buildInviteUrlFromDraft(sub, draft));
   };
 
+  const createSubscriptionInvite = useCallback(
+    async (sub: SubscriptionItem) => {
+      const inviteDraft = getInviteDraft(sub.id);
+      const email = inviteDraft.email.trim();
+      if (!email) return;
+
+      setSavingInviteSubscriptionId(sub.id);
+      setError(null);
+      setInfo(null);
+
+      try {
+        const created = await api<PendingInvite>(`/admin/subscriptions/${sub.id}/user-invites`, {
+          method: 'POST',
+          body: JSON.stringify({
+            email,
+            name: inviteDraft.name.trim() || undefined,
+            role: inviteDraft.role,
+          }),
+        });
+
+        setPendingInvitesById((prev) => ({
+          ...prev,
+          [sub.id]: [created, ...(prev[sub.id] || []).filter((inv) => inv.id !== created.id)],
+        }));
+        setInviteDraftsById((prev) => ({
+          ...prev,
+          [sub.id]: DEFAULT_INVITE_DRAFT,
+        }));
+
+        const link = buildInviteUrl({
+          tenantId: sub.customerTenantId,
+          tenantName: getLinkDraft(sub).customerName.trim() || sub.customerName,
+          contactName: created.name || undefined,
+          contactEmail: created.email,
+          inviteToken: created.token,
+        });
+        await copyUrl(link);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to create invite';
+        setError(message);
+      } finally {
+        setSavingInviteSubscriptionId((prev) => (prev === sub.id ? null : prev));
+      }
+    },
+    [api, buildInviteUrl, copyUrl, getInviteDraft, getLinkDraft],
+  );
+
   const rows = useMemo(
     () =>
       items.map((sub) => ({
         ...sub,
         isEditing: editingSubscriptionId === sub.id,
         draft: getLinkDraft(sub),
+        inviteDraft: getInviteDraft(sub.id),
+        pendingInvites: pendingInvitesById[sub.id] || [],
         inviteUrl: buildInviteUrlFromDraft(sub, getLinkDraft(sub)),
       })),
-    [buildInviteUrlFromDraft, editingSubscriptionId, getLinkDraft, items],
+    [buildInviteUrlFromDraft, editingSubscriptionId, getInviteDraft, getLinkDraft, items, pendingInvitesById],
   );
 
   return (
@@ -600,6 +727,86 @@ export default function AdminSubscriptionsPage() {
                                   </option>
                                 ))}
                               </select>
+                            </div>
+                            <div className="mt-3 rounded-lg bg-black/20 p-3 ring-1 ring-white/10">
+                              <p className="text-xs font-semibold text-slate-100">{t('adminSubscriptions.invites.title')}</p>
+                              <p className="mt-1 text-xs text-slate-400">{t('adminSubscriptions.invites.subtitle')}</p>
+                              <div className="mt-2 grid gap-2 md:grid-cols-[1fr_1fr_140px_auto]">
+                                <input
+                                  className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                  value={sub.inviteDraft.name}
+                                  onChange={(e) => updateInviteDraft(sub.id, { name: e.target.value })}
+                                  placeholder={t('adminSubscriptions.invites.namePlaceholder')}
+                                />
+                                <input
+                                  className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                  value={sub.inviteDraft.email}
+                                  onChange={(e) => updateInviteDraft(sub.id, { email: e.target.value })}
+                                  placeholder={t('adminSubscriptions.invites.emailPlaceholder')}
+                                  type="email"
+                                />
+                                <select
+                                  className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                  value={sub.inviteDraft.role}
+                                  onChange={(e) =>
+                                    updateInviteDraft(sub.id, { role: (e.target.value as 'ADMIN' | 'MEMBER') || 'MEMBER' })
+                                  }
+                                >
+                                  <option value="MEMBER">{t('adminSubscriptions.invites.roleMember')}</option>
+                                  <option value="ADMIN">{t('adminSubscriptions.invites.roleAdmin')}</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  className="rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-100 ring-1 ring-emerald-300/40 hover:bg-emerald-500/30 disabled:opacity-50"
+                                  onClick={() => void createSubscriptionInvite(sub)}
+                                  disabled={savingInviteSubscriptionId === sub.id || !sub.inviteDraft.email.trim()}
+                                >
+                                  {savingInviteSubscriptionId === sub.id
+                                    ? t('adminSubscriptions.invites.inviting')
+                                    : t('adminSubscriptions.invites.inviteButton')}
+                                </button>
+                              </div>
+
+                              {loadingInviteSubscriptionId === sub.id ? (
+                                <p className="mt-2 text-xs text-slate-400">{t('adminSubscriptions.invites.loading')}</p>
+                              ) : null}
+
+                              {sub.pendingInvites.length > 0 ? (
+                                <div className="mt-2 space-y-2">
+                                  {sub.pendingInvites.map((invite) => {
+                                    const link = buildInviteUrl({
+                                      tenantId: sub.customerTenantId,
+                                      tenantName: sub.draft.customerName.trim() || sub.customerName,
+                                      contactName: invite.name || undefined,
+                                      contactEmail: invite.email,
+                                      inviteToken: invite.token,
+                                    });
+                                    return (
+                                      <div key={invite.id} className="rounded-lg bg-white/5 p-2 text-xs ring-1 ring-white/10">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <p className="text-slate-200">
+                                            {invite.name ? `${invite.name} · ` : ''}
+                                            {invite.email} ·{' '}
+                                            {invite.role === 'ADMIN'
+                                              ? t('adminSubscriptions.invites.roleAdmin')
+                                              : t('adminSubscriptions.invites.roleMember')}
+                                          </p>
+                                          <button
+                                            type="button"
+                                            className="rounded-lg bg-white/5 px-2 py-1 font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10"
+                                            onClick={() => void copyUrl(link)}
+                                            disabled={!link}
+                                          >
+                                            {t('adminSubscriptions.copyLink')}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <p className="mt-2 text-xs text-slate-500">{t('adminSubscriptions.invites.empty')}</p>
+                              )}
                             </div>
                             <div className="mt-3 flex flex-wrap gap-2">
                               <button

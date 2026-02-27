@@ -78,6 +78,93 @@ export class AdminService {
     }
   }
 
+  private async createUserInviteForTenant(dto: CreateUserInviteDto, tenantId: string, invitedByUserId: string) {
+    const email = dto.email.trim().toLowerCase();
+    if (!email) throw new BadRequestException('Email is required');
+    const name = dto.name?.trim() || null;
+    const role = dto.role === 'ADMIN' || dto.role === 'OWNER' || dto.role === 'MEMBER' ? dto.role : 'MEMBER';
+
+    try {
+      const existingMember = await this.prisma.user.findFirst({
+        where: { tenantId, email },
+        select: { id: true },
+      });
+      if (existingMember) {
+        throw new BadRequestException('This email is already a workspace member.');
+      }
+
+      const existingPending = await this.prisma.userInvite.findFirst({
+        where: { tenantId, email, status: 'PENDING' },
+        select: { id: true },
+      });
+
+      if (existingPending) {
+        return this.prisma.userInvite.update({
+          where: { id: existingPending.id },
+          data: {
+            name,
+            role,
+            token: randomUUID(),
+            invitedByUserId,
+          },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            token: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
+      }
+
+      await this.ensureInviteSeatCapacity(tenantId);
+
+      return this.prisma.userInvite.create({
+        data: {
+          tenantId,
+          email,
+          name,
+          role,
+          token: randomUUID(),
+          invitedByUserId,
+          status: 'PENDING',
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          token: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  private async getOwnedSubscription(id: string, ownerTenantId: string) {
+    try {
+      const existing = await this.prisma.subscription.findFirst({
+        where: { id, tenantId: ownerTenantId },
+        select: { id: true, customerTenantId: true },
+      });
+      if (!existing) throw new NotFoundException('Subscription not found');
+      return existing;
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
   async listUsers(user: RequestUser) {
     await this.ensureAdmin(user);
     return this.prisma.user.findMany({
@@ -120,76 +207,7 @@ export class AdminService {
 
   async createUserInvite(dto: CreateUserInviteDto, user: RequestUser) {
     await this.ensureAdmin(user);
-
-    const email = dto.email.trim().toLowerCase();
-    if (!email) throw new BadRequestException('Email is required');
-    const name = dto.name?.trim() || null;
-    const role = dto.role || 'MEMBER';
-
-    try {
-      const existingMember = await this.prisma.user.findFirst({
-        where: { tenantId: user.tenantId, email },
-        select: { id: true },
-      });
-      if (existingMember) {
-        throw new BadRequestException('This email is already a workspace member.');
-      }
-
-      const existingPending = await this.prisma.userInvite.findFirst({
-        where: { tenantId: user.tenantId, email, status: 'PENDING' },
-        select: { id: true },
-      });
-
-      if (existingPending) {
-        return this.prisma.userInvite.update({
-          where: { id: existingPending.id },
-          data: {
-            name,
-            role,
-            token: randomUUID(),
-            invitedByUserId: user.userId,
-          },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            role: true,
-            token: true,
-            status: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        });
-      }
-
-      await this.ensureInviteSeatCapacity(user.tenantId);
-
-      return this.prisma.userInvite.create({
-        data: {
-          tenantId: user.tenantId,
-          email,
-          name,
-          role,
-          token: randomUUID(),
-          invitedByUserId: user.userId,
-          status: 'PENDING',
-        },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          token: true,
-          status: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-    } catch (err) {
-      const mapped = this.mapSchemaError(err);
-      if (mapped) throw mapped;
-      throw err;
-    }
+    return this.createUserInviteForTenant(dto, user.tenantId, user.userId);
   }
 
   async revokeUserInvite(id: string, user: RequestUser) {
@@ -263,6 +281,37 @@ export class AdminService {
       if (mapped) throw mapped;
       throw err;
     }
+  }
+
+  async listSubscriptionUserInvites(id: string, user: RequestUser) {
+    await this.ensureAdmin(user);
+    const subscription = await this.getOwnedSubscription(id, user.tenantId);
+    try {
+      return await this.prisma.userInvite.findMany({
+        where: { tenantId: subscription.customerTenantId, status: 'PENDING' },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          token: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  async createSubscriptionUserInvite(id: string, dto: CreateUserInviteDto, user: RequestUser) {
+    await this.ensureAdmin(user);
+    const subscription = await this.getOwnedSubscription(id, user.tenantId);
+    return this.createUserInviteForTenant(dto, subscription.customerTenantId, user.userId);
   }
 
   async createSubscription(dto: CreateSubscriptionDto, user: RequestUser) {

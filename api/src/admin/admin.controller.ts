@@ -52,4 +52,18 @@ export class AdminController {
   updateSubscription(@Param('id') id: string, @Body() dto: UpdateSubscriptionDto, @CurrentUser() user: RequestUser) {
     return this.adminService.updateSubscription(id, dto, user);
   }
+
+  @Get('subscriptions/:id/user-invites')
+  listSubscriptionUserInvites(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.adminService.listSubscriptionUserInvites(id, user);
+  }
+
+  @Post('subscriptions/:id/user-invites')
+  createSubscriptionUserInvite(
+    @Param('id') id: string,
+    @Body() dto: CreateUserInviteDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.adminService.createSubscriptionUserInvite(id, dto, user);
+  }
 }
