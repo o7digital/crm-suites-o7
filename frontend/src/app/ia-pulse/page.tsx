@@ -1047,13 +1047,13 @@ function IaPulsePageContent() {
       setContractWarnings([]);
       setContractFileName(file.name);
       try {
-        const [contractText, templateText] = await Promise.all([
+        const [contractText, templateContent] = await Promise.all([
           file.text(),
           loadContractTemplate(contractSetup.templateHref),
         ]);
 
         const placeholders = contractSetup.fieldMappings.map((item) => item.placeholder);
-        const extractedByPlaceholder = extractContractValuesFromTemplate(templateText, contractText, placeholders);
+        const extractedByPlaceholder = extractContractValuesFromTemplate(templateContent, contractText, placeholders);
         const mappedFields: Partial<Record<ContractClientFieldKey, string>> = {};
         const warnings: string[] = [];
 
