@@ -47,6 +47,8 @@ type InviteDraft = {
   role: 'ADMIN' | 'MEMBER';
 };
 
+type CreateInviteRow = InviteDraft & { id: string };
+
 type SubscriptionPlan = 'TRIAL' | 'PULSE_BASIC' | 'PULSE_STANDARD' | 'PULSE_ADVANCED' | 'PULSE_ADVANCED_PLUS' | 'PULSE_TEAM';
 
 const DEFAULT_SEATS_BY_PLAN: Record<SubscriptionPlan, number> = {
@@ -63,6 +65,22 @@ const DEFAULT_INVITE_DRAFT: InviteDraft = {
   email: '',
   role: 'MEMBER',
 };
+
+function makeInviteRowId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `invite-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function createInviteRow(): CreateInviteRow {
+  return {
+    id: makeInviteRowId(),
+    name: '',
+    email: '',
+    role: 'MEMBER',
+  };
+}
 
 export default function AdminSubscriptionsPage() {
   const { token } = useAuth();
@@ -91,6 +109,7 @@ export default function AdminSubscriptionsPage() {
   const [industryOther, setIndustryOther] = useState('');
   const [plan, setPlan] = useState<SubscriptionPlan>('TRIAL');
   const [seats, setSeats] = useState(DEFAULT_SEATS_BY_PLAN.TRIAL);
+  const [createInviteRows, setCreateInviteRows] = useState<CreateInviteRow[]>(() => [createInviteRow()]);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -114,6 +133,13 @@ export default function AdminSubscriptionsPage() {
     if (typeof window === 'undefined') return;
     setOrigin(window.location.origin);
   }, []);
+
+  useEffect(() => {
+    setCreateInviteRows((prev) => {
+      if (prev.length <= seats) return prev;
+      return prev.slice(0, seats);
+    });
+  }, [seats]);
 
   const buildInviteUrl = useCallback(
     (opts: { tenantId: string; tenantName: string; contactName?: string; contactEmail?: string; inviteToken?: string }) => {
@@ -190,6 +216,32 @@ export default function AdminSubscriptionsPage() {
           ...patch,
         },
       };
+    });
+  }, []);
+
+  const updateCreateInviteRow = useCallback((rowId: string, patch: Partial<InviteDraft>) => {
+    setCreateInviteRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== rowId) return row;
+        return {
+          ...row,
+          ...patch,
+        };
+      }),
+    );
+  }, []);
+
+  const addCreateInviteRow = useCallback(() => {
+    setCreateInviteRows((prev) => {
+      if (prev.length >= seats) return prev;
+      return [...prev, createInviteRow()];
+    });
+  }, [seats]);
+
+  const removeCreateInviteRow = useCallback((rowId: string) => {
+    setCreateInviteRows((prev) => {
+      if (prev.length <= 1) return [createInviteRow()];
+      return prev.filter((row) => row.id !== rowId);
     });
   }, []);
 
@@ -320,6 +372,27 @@ export default function AdminSubscriptionsPage() {
     const industryValue = industryId === 'OTHER' ? industryOther.trim() : industryId;
     if (!name || !first || !last || !email || !industryValue) return;
 
+    const normalizedCreateInvites = createInviteRows
+      .map((row) => ({
+        name: row.name.trim(),
+        email: row.email.trim().toLowerCase(),
+        role: row.role,
+      }))
+      .filter((row) => row.email.length > 0);
+    if (normalizedCreateInvites.length > seats) {
+      setError(t('adminSubscriptions.createInvites.tooMany', { count: seats }));
+      return;
+    }
+
+    const uniqueEmails = new Set<string>();
+    for (const row of normalizedCreateInvites) {
+      if (uniqueEmails.has(row.email)) {
+        setError(t('adminSubscriptions.createInvites.duplicateEmail'));
+        return;
+      }
+      uniqueEmails.add(row.email);
+    }
+
     setCreating(true);
     try {
       const created = await api<SubscriptionItem>('/admin/subscriptions', {
@@ -335,6 +408,48 @@ export default function AdminSubscriptionsPage() {
           seats,
         }),
       });
+
+      let inviteSuccessCount = 0;
+      let inviteFailedCount = 0;
+      if (normalizedCreateInvites.length > 0) {
+        const inviteResults = await Promise.allSettled(
+          normalizedCreateInvites.map((row) =>
+            api<PendingInvite>(`/admin/subscriptions/${created.id}/user-invites`, {
+              method: 'POST',
+              body: JSON.stringify({
+                email: row.email,
+                name: row.name || undefined,
+                role: row.role,
+              }),
+            }),
+          ),
+        );
+
+        const successfulInvites = inviteResults
+          .filter((result): result is PromiseFulfilledResult<PendingInvite> => result.status === 'fulfilled')
+          .map((result) => result.value);
+        inviteSuccessCount = successfulInvites.length;
+        inviteFailedCount = inviteResults.length - inviteSuccessCount;
+
+        if (successfulInvites.length > 0) {
+          const links = successfulInvites.map((invite) =>
+            buildInviteUrl({
+              tenantId: created.customerTenantId,
+              tenantName: created.customerName,
+              contactName: invite.name || undefined,
+              contactEmail: invite.email,
+              inviteToken: invite.token,
+            }),
+          );
+          try {
+            await navigator.clipboard.writeText(links.join('\n'));
+            setInfo(t('adminSubscriptions.createInvites.copied', { count: inviteSuccessCount }));
+          } catch {
+            setInfo(t('adminSubscriptions.createInvites.created', { count: inviteSuccessCount }));
+          }
+        }
+      }
+
       setItems((prev) => [created, ...prev]);
       setCustomerName('');
       setContactFirstName('');
@@ -346,21 +461,26 @@ export default function AdminSubscriptionsPage() {
       setCrmModeLocked(false);
       setPlan('TRIAL');
       setSeats(DEFAULT_SEATS_BY_PLAN.TRIAL);
+      setCreateInviteRows([createInviteRow()]);
 
-      const contactName = [created.contactFirstName, created.contactLastName].filter(Boolean).join(' ').trim();
-      const url = buildInviteUrl({
-        tenantId: created.customerTenantId,
-        tenantName: created.customerName,
-        contactName: contactName || undefined,
-        contactEmail: created.contactEmail || undefined,
-      });
-      if (url) {
-        try {
-          await navigator.clipboard.writeText(url);
-          setInfo(t('adminSubscriptions.copied'));
-        } catch {
-          setInfo(t('adminSubscriptions.copyFailed'));
+      if (inviteSuccessCount === 0) {
+        const contactName = [created.contactFirstName, created.contactLastName].filter(Boolean).join(' ').trim();
+        const url = buildInviteUrl({
+          tenantId: created.customerTenantId,
+          tenantName: created.customerName,
+          contactName: contactName || undefined,
+          contactEmail: created.contactEmail || undefined,
+        });
+        if (url) {
+          try {
+            await navigator.clipboard.writeText(url);
+            setInfo(t('adminSubscriptions.copied'));
+          } catch {
+            setInfo(t('adminSubscriptions.copyFailed'));
+          }
         }
+      } else if (inviteFailedCount > 0) {
+        setError(t('adminSubscriptions.createInvites.partialError', { failed: inviteFailedCount }));
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to create subscription';
@@ -490,6 +610,56 @@ export default function AdminSubscriptionsPage() {
                   placeholder={t('adminSubscriptions.contactEmailPlaceholder')}
                   required
                 />
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-white/5 p-3 ring-1 ring-white/10">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-100">{t('adminSubscriptions.createInvites.title')}</p>
+                <button
+                  type="button"
+                  className="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10 disabled:opacity-50"
+                  onClick={addCreateInviteRow}
+                  disabled={createInviteRows.length >= seats}
+                >
+                  {t('adminSubscriptions.createInvites.addButton')}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">{t('adminSubscriptions.createInvites.subtitle')}</p>
+
+              <div className="mt-2 space-y-2">
+                {createInviteRows.map((row) => (
+                  <div key={row.id} className="grid gap-2 md:grid-cols-[1fr_1fr_140px_auto]">
+                    <input
+                      className="w-full rounded-lg bg-black/20 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                      value={row.name}
+                      onChange={(e) => updateCreateInviteRow(row.id, { name: e.target.value })}
+                      placeholder={t('adminSubscriptions.invites.namePlaceholder')}
+                    />
+                    <input
+                      className="w-full rounded-lg bg-black/20 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                      value={row.email}
+                      onChange={(e) => updateCreateInviteRow(row.id, { email: e.target.value })}
+                      placeholder={t('adminSubscriptions.invites.emailPlaceholder')}
+                      type="email"
+                    />
+                    <select
+                      className="w-full rounded-lg bg-black/20 px-3 py-2 text-sm text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                      value={row.role}
+                      onChange={(e) => updateCreateInviteRow(row.id, { role: (e.target.value as 'ADMIN' | 'MEMBER') || 'MEMBER' })}
+                    >
+                      <option value="MEMBER">{t('adminSubscriptions.invites.roleMember')}</option>
+                      <option value="ADMIN">{t('adminSubscriptions.invites.roleAdmin')}</option>
+                    </select>
+                    <button
+                      type="button"
+                      className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10"
+                      onClick={() => removeCreateInviteRow(row.id)}
+                    >
+                      {t('adminSubscriptions.createInvites.removeButton')}
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
 
