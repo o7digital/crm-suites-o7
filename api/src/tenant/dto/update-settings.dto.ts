@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateTenantSettingsDto {
   @IsOptional()
@@ -15,4 +15,8 @@ export class UpdateTenantSettingsDto {
   @IsString()
   @MaxLength(120)
   industry?: string | null;
+
+  @IsOptional()
+  @IsObject()
+  contractSetup?: Record<string, unknown> | null;
 }

@@ -20,19 +20,18 @@ export default function PostSalesPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
+  const [periodViewMode, setPeriodViewMode] = useState<PeriodViewMode>('MONTH');
+  const [periodAnchorDate, setPeriodAnchorDate] = useState('');
 
   useEffect(() => {
     // Initialize the agenda to the current month using UTC dates to avoid timezone shift issues.
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = now.getMonth();
-    const first = new Date(Date.UTC(y, m, 1));
-    const last = new Date(Date.UTC(y, m + 1, 0));
-    const firstIso = first.toISOString().slice(0, 10);
-    const lastIso = last.toISOString().slice(0, 10);
-    setStartDate(firstIso);
-    setEndDate(lastIso);
-    setSelectedDate(todayIsoUtcClamped(firstIso, lastIso));
+    const today = todayIsoUtc();
+    const monthRange = getRangeForPeriod(today, 'MONTH');
+    setPeriodViewMode('MONTH');
+    setPeriodAnchorDate(today);
+    setStartDate(monthRange.startIso);
+    setEndDate(monthRange.endIso);
+    setSelectedDate(todayIsoUtcClamped(monthRange.startIso, monthRange.endIso));
   }, []);
 
   const loadClients = useCallback(async () => {
@@ -65,8 +64,8 @@ export default function PostSalesPage() {
   const rangeValid = Boolean(startDate && endDate && startDate <= endDate);
   const rangeLabel = useMemo(() => {
     if (!rangeValid) return '';
-    return formatMonthRangeLabel(startDate, endDate);
-  }, [rangeValid, startDate, endDate]);
+    return formatActivePeriodLabel(periodViewMode, startDate, endDate);
+  }, [endDate, periodViewMode, rangeValid, startDate]);
 
   useEffect(() => {
     if (!rangeValid) return;
@@ -199,15 +198,43 @@ export default function PostSalesPage() {
   );
 
   const setThisMonth = useCallback(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = now.getMonth();
-    const firstIso = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
-    const lastIso = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
-    setStartDate(firstIso);
-    setEndDate(lastIso);
-    setSelectedDate(todayIsoUtcClamped(firstIso, lastIso));
+    const today = todayIsoUtc();
+    const monthRange = getRangeForPeriod(today, 'MONTH');
+    setPeriodViewMode('MONTH');
+    setPeriodAnchorDate(today);
+    setStartDate(monthRange.startIso);
+    setEndDate(monthRange.endIso);
+    setSelectedDate(todayIsoUtcClamped(monthRange.startIso, monthRange.endIso));
   }, []);
+
+  const setPeriodPreset = useCallback(
+    (mode: Exclude<PeriodViewMode, 'CUSTOM'>) => {
+      const anchor = selectedDate || periodAnchorDate || todayIsoUtc();
+      const next = getRangeForPeriod(anchor, mode);
+      setPeriodViewMode(mode);
+      setPeriodAnchorDate(anchor);
+      setStartDate(next.startIso);
+      setEndDate(next.endIso);
+      setSelectedDate(clampIsoToRange(anchor, next.startIso, next.endIso));
+    },
+    [periodAnchorDate, selectedDate],
+  );
+
+  const shiftPeriod = useCallback(
+    (direction: -1 | 1) => {
+      if (periodViewMode === 'CUSTOM') return;
+      const baseAnchor = periodAnchorDate || selectedDate || todayIsoUtc();
+      const shiftedAnchor = shiftPeriodAnchor(baseAnchor, periodViewMode, direction);
+      const next = getRangeForPeriod(shiftedAnchor, periodViewMode);
+      setPeriodAnchorDate(shiftedAnchor);
+      setStartDate(next.startIso);
+      setEndDate(next.endIso);
+      setSelectedDate(clampIsoToRange(shiftedAnchor, next.startIso, next.endIso));
+    },
+    [periodAnchorDate, periodViewMode, selectedDate],
+  );
+
+  const canShiftPeriod = periodViewMode !== 'CUSTOM';
 
   return (
     <Guard>
@@ -217,7 +244,57 @@ export default function PostSalesPage() {
             <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Post-Sales</p>
             <h1 className="text-3xl font-semibold">Customer Delivery and Operations</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
+              <button
+                className="rounded-lg px-2 py-1.5 text-sm text-slate-200 hover:bg-white/10 disabled:opacity-40"
+                onClick={() => shiftPeriod(-1)}
+                type="button"
+                disabled={!canShiftPeriod}
+                aria-label="Previous period"
+              >
+                ←
+              </button>
+              <button
+                className={[
+                  'rounded-lg px-3 py-1.5 text-sm font-semibold',
+                  periodViewMode === 'WEEK' ? 'bg-cyan-500/20 text-cyan-100' : 'text-slate-300 hover:bg-white/10',
+                ].join(' ')}
+                onClick={() => setPeriodPreset('WEEK')}
+                type="button"
+              >
+                Week
+              </button>
+              <button
+                className={[
+                  'rounded-lg px-3 py-1.5 text-sm font-semibold',
+                  periodViewMode === 'MONTH' ? 'bg-cyan-500/20 text-cyan-100' : 'text-slate-300 hover:bg-white/10',
+                ].join(' ')}
+                onClick={() => setPeriodPreset('MONTH')}
+                type="button"
+              >
+                Month
+              </button>
+              <button
+                className={[
+                  'rounded-lg px-3 py-1.5 text-sm font-semibold',
+                  periodViewMode === 'YEAR' ? 'bg-cyan-500/20 text-cyan-100' : 'text-slate-300 hover:bg-white/10',
+                ].join(' ')}
+                onClick={() => setPeriodPreset('YEAR')}
+                type="button"
+              >
+                Year
+              </button>
+              <button
+                className="rounded-lg px-2 py-1.5 text-sm text-slate-200 hover:bg-white/10 disabled:opacity-40"
+                onClick={() => shiftPeriod(1)}
+                type="button"
+                disabled={!canShiftPeriod}
+                aria-label="Next period"
+              >
+                →
+              </button>
+            </div>
             <button className="btn-secondary" onClick={setThisMonth} type="button">
               This month
             </button>
@@ -234,7 +311,12 @@ export default function PostSalesPage() {
               <input
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setStartDate(next);
+                  setPeriodViewMode('CUSTOM');
+                  if (next) setPeriodAnchorDate(next);
+                }}
                 className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
               />
             </div>
@@ -243,12 +325,19 @@ export default function PostSalesPage() {
               <input
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setEndDate(next);
+                  setPeriodViewMode('CUSTOM');
+                  if (startDate) setPeriodAnchorDate(startDate);
+                }}
                 className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
               />
             </div>
             <div className="md:col-span-4">
-              <div className="text-sm text-slate-300">Period</div>
+              <div className="text-sm text-slate-300">
+                Period {periodViewMode === 'CUSTOM' ? '(Custom)' : `(${periodViewMode.toLowerCase()})`}
+              </div>
               <div className="mt-1 rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-200 ring-1 ring-white/10">
                 {rangeValid ? rangeLabel : 'Select a valid date range'}
               </div>
@@ -303,7 +392,11 @@ export default function PostSalesPage() {
                       <button
                         key={iso}
                         type="button"
-                        onClick={() => (inRange ? setSelectedDate(iso) : undefined)}
+                        onClick={() => {
+                          if (!inRange) return;
+                          setSelectedDate(iso);
+                          setPeriodAnchorDate(iso);
+                        }}
                         disabled={!inRange}
                         className={[
                           'min-h-[92px] rounded-xl border px-2 py-2 text-left transition',
@@ -390,6 +483,21 @@ export default function PostSalesPage() {
                           Delete
                         </button>
                       </div>
+                      {(() => {
+                        const googleCalendarUrl = buildGoogleCalendarTaskUrl(task);
+                        return googleCalendarUrl ? (
+                          <div className="mt-2">
+                            <a
+                              href={googleCalendarUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-lg border border-cyan-400/30 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-500/10"
+                            >
+                              Google Calendar
+                            </a>
+                          </div>
+                        ) : null;
+                      })()}
                       <div className="mt-3 flex items-center gap-2">
                         <select
                           value={task.status}
@@ -447,6 +555,21 @@ export default function PostSalesPage() {
                         {task.client ? getClientDisplayName(task.client) : 'No client'}
                         {getTaskIsoDueDate(task) ? ` · ${formatIsoDateShort(getTaskIsoDueDate(task)!)}` : ''}
                       </p>
+                      {(() => {
+                        const googleCalendarUrl = buildGoogleCalendarTaskUrl(task);
+                        return googleCalendarUrl ? (
+                          <div className="mt-2">
+                            <a
+                              href={googleCalendarUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-lg border border-cyan-400/30 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-500/10"
+                            >
+                              Google Calendar
+                            </a>
+                          </div>
+                        ) : null;
+                      })()}
                       {(() => {
                         const hours = formatTaskHours(task.timeSpentHours);
                         return hours ? <p className="mt-1 text-xs text-cyan-200">{hours}</p> : null;
@@ -513,6 +636,7 @@ type Client = {
 };
 
 type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE';
+type PeriodViewMode = 'WEEK' | 'MONTH' | 'YEAR' | 'CUSTOM';
 
 type Task = {
   id: string;
@@ -576,6 +700,23 @@ function addDaysIso(iso: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+function addMonthsIso(iso: string, months: number): string {
+  const date = isoToUtcDate(iso);
+  if (!date) return iso;
+  const y = date.getUTCFullYear();
+  const m = date.getUTCMonth();
+  const d = date.getUTCDate();
+
+  const targetMonthDate = new Date(Date.UTC(y, m + months, 1));
+  const maxDay = new Date(Date.UTC(targetMonthDate.getUTCFullYear(), targetMonthDate.getUTCMonth() + 1, 0)).getUTCDate();
+  targetMonthDate.setUTCDate(Math.min(d, maxDay));
+  return targetMonthDate.toISOString().slice(0, 10);
+}
+
+function addYearsIso(iso: string, years: number): string {
+  return addMonthsIso(iso, years * 12);
+}
+
 function isoWeekdayMon1(iso: string): number {
   const date = isoToUtcDate(iso);
   if (!date) return 1;
@@ -618,6 +759,47 @@ function todayIsoUtcClamped(startIso: string, endIso: string): string {
   return today;
 }
 
+function clampIsoToRange(iso: string, startIso: string, endIso: string): string {
+  if (!iso) return startIso;
+  if (iso < startIso) return startIso;
+  if (iso > endIso) return endIso;
+  return iso;
+}
+
+function getRangeForPeriod(anchorIso: string, mode: Exclude<PeriodViewMode, 'CUSTOM'>): { startIso: string; endIso: string } {
+  const anchor = isoToUtcDate(anchorIso) ? anchorIso : todayIsoUtc();
+
+  if (mode === 'WEEK') {
+    return {
+      startIso: startOfWeekIso(anchor),
+      endIso: endOfWeekIso(anchor),
+    };
+  }
+
+  if (mode === 'MONTH') {
+    const anchorDate = isoToUtcDate(anchor)!;
+    const y = anchorDate.getUTCFullYear();
+    const m = anchorDate.getUTCMonth();
+    return {
+      startIso: new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10),
+      endIso: new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10),
+    };
+  }
+
+  const anchorDate = isoToUtcDate(anchor)!;
+  const y = anchorDate.getUTCFullYear();
+  return {
+    startIso: `${y}-01-01`,
+    endIso: `${y}-12-31`,
+  };
+}
+
+function shiftPeriodAnchor(anchorIso: string, mode: Exclude<PeriodViewMode, 'CUSTOM'>, direction: -1 | 1): string {
+  if (mode === 'WEEK') return addDaysIso(anchorIso, direction * 7);
+  if (mode === 'MONTH') return addMonthsIso(anchorIso, direction);
+  return addYearsIso(anchorIso, direction);
+}
+
 function formatIsoDatePretty(iso: string): string {
   const date = isoToUtcDate(iso);
   if (!date) return iso;
@@ -647,7 +829,7 @@ function formatIsoMonthShort(iso: string): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', timeZone: 'UTC' }).format(date);
 }
 
-function formatMonthRangeLabel(startIso: string, endIso: string): string {
+function formatDateRangeLabel(startIso: string, endIso: string): string {
   const start = isoToUtcDate(startIso);
   const end = isoToUtcDate(endIso);
   if (!start || !end) return `${startIso} - ${endIso}`;
@@ -656,6 +838,47 @@ function formatMonthRangeLabel(startIso: string, endIso: string): string {
   const fmtLong = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
   if (sameMonth) return fmtMonth.format(start);
   return `${fmtLong.format(start)} - ${fmtLong.format(end)}`;
+}
+
+function formatActivePeriodLabel(mode: PeriodViewMode, startIso: string, endIso: string): string {
+  if (mode === 'WEEK') {
+    const start = isoToUtcDate(startIso);
+    const end = isoToUtcDate(endIso);
+    if (!start || !end) return formatDateRangeLabel(startIso, endIso);
+    const fmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    return `Week: ${fmt.format(start)} - ${fmt.format(end)}`;
+  }
+
+  if (mode === 'YEAR') {
+    const start = isoToUtcDate(startIso);
+    if (!start) return formatDateRangeLabel(startIso, endIso);
+    return String(start.getUTCFullYear());
+  }
+
+  return formatDateRangeLabel(startIso, endIso);
+}
+
+function isoToGoogleDate(iso: string): string {
+  return iso.replaceAll('-', '');
+}
+
+function buildGoogleCalendarTaskUrl(task: Task): string | null {
+  const dueIso = getTaskIsoDueDate(task);
+  if (!dueIso) return null;
+  const nextIso = addDaysIso(dueIso, 1);
+  const detailsLines = [
+    'Post-Sales task from CRM',
+    `Status: ${task.status}`,
+    task.client ? `Client: ${getClientDisplayName(task.client)}` : '',
+  ].filter(Boolean);
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: task.title || 'Post-Sales Task',
+    dates: `${isoToGoogleDate(dueIso)}/${isoToGoogleDate(nextIso)}`,
+    details: detailsLines.join('\n'),
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 function TaskCreateCard({

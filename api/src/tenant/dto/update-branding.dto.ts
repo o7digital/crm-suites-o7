@@ -4,8 +4,8 @@ import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 export class UpdateBrandingDto {
   @IsOptional()
   @IsString()
-  // Data URL (base64) can be large; keep a reasonable limit.
-  @MaxLength(400_000)
+  // 800 KB image files become ~1.1 MB once base64-encoded in a data URL.
+  @MaxLength(1_200_000)
   logoDataUrl?: string | null;
 
   @IsOptional()
@@ -18,4 +18,3 @@ export class UpdateBrandingDto {
   @Matches(/^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/, { message: 'accentColor2 must be a valid hex color' })
   accentColor2?: string | null;
 }
-

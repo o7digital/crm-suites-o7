@@ -1,8 +1,10 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
+import { useApi, useAuth } from '../../contexts/AuthContext';
 
 const tiles = [
   { href: '/admin/users', title: 'Users', description: 'Manage workspace members and permissions.' },
@@ -16,7 +18,39 @@ const tiles = [
   { href: '/admin/contracts', title: 'Contracts', description: 'Templates and variable fields (Pipedrive-style).' },
 ] as const;
 
+type AdminContextResponse = {
+  isCustomerWorkspace?: boolean;
+};
+
 export default function AdminHomePage() {
+  const { token } = useAuth();
+  const api = useApi(token);
+  const [hideSubscriptionsTile, setHideSubscriptionsTile] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+
+    api<AdminContextResponse>('/admin/context', { method: 'GET' })
+      .then((data) => {
+        if (!active) return;
+        setHideSubscriptionsTile(Boolean(data?.isCustomerWorkspace));
+      })
+      .catch(() => {
+        if (!active) return;
+        setHideSubscriptionsTile(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [api, token]);
+
+  const visibleTiles = useMemo(
+    () => (hideSubscriptionsTile ? tiles.filter((tile) => tile.href !== '/admin/subscriptions') : tiles),
+    [hideSubscriptionsTile],
+  );
+
   return (
     <Guard>
       <AppShell>
@@ -26,7 +60,7 @@ export default function AdminHomePage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {tiles.map((tile) => (
+          {visibleTiles.map((tile) => (
             <Link key={tile.href} href={tile.href} className="card group p-5 hover:bg-white/5 transition">
               <p className="text-lg font-semibold">{tile.title}</p>
               <p className="mt-2 text-sm text-slate-400">{tile.description}</p>

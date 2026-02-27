@@ -245,6 +245,16 @@ export default function CrmPage() {
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [workflowInfo, setWorkflowInfo] = useState<string | null>(null);
   const [statusDropHover, setStatusDropHover] = useState<Stage['status'] | null>(null);
+  const newStageNameValue = newStageDraft.name.trim();
+  const newStageProbabilityValue = parseProbabilityPct(newStageDraft.probabilityPct);
+  const workflowAddStageValidationError = !pipelineId
+    ? 'Select a pipeline first'
+    : !newStageNameValue
+      ? 'Stage name is required'
+      : newStageProbabilityValue === null
+        ? 'Probability must be between 0 and 100'
+        : null;
+  const canCreateWorkflowStage = !workflowAddStageValidationError && !workflowAddingStage && !workflowSaving;
 
   useEffect(() => {
     if (!showModal) {
@@ -856,7 +866,10 @@ export default function CrmPage() {
   };
 
   const handleSaveWorkflow = async () => {
-    if (!pipelineId) return;
+    if (!pipelineId) {
+      setWorkflowError('Select a pipeline first');
+      return;
+    }
     setWorkflowSaving(true);
     setWorkflowError(null);
     setWorkflowInfo(null);
@@ -918,16 +931,8 @@ export default function CrmPage() {
   };
 
   const handleCreateStageFromWorkflow = async () => {
-    if (!pipelineId) return;
-    const stageNameValue = newStageDraft.name.trim();
-    if (!stageNameValue) {
-      setWorkflowError('Stage name is required');
-      return;
-    }
-
-    const probabilityPct = parseProbabilityPct(newStageDraft.probabilityPct);
-    if (probabilityPct === null) {
-      setWorkflowError('Probability must be between 0 and 100');
+    if (workflowAddStageValidationError) {
+      setWorkflowError(workflowAddStageValidationError);
       return;
     }
 
@@ -940,9 +945,9 @@ export default function CrmPage() {
         method: 'POST',
         body: JSON.stringify({
           pipelineId,
-          name: stageNameValue,
+          name: newStageNameValue,
           status: newStageDraft.status,
-          probability: probabilityPct / 100,
+          probability: (newStageProbabilityValue as number) / 100,
         }),
       });
 
@@ -1178,6 +1183,7 @@ export default function CrmPage() {
                 </h2>
                 <button
                   className="text-slate-400"
+                  type="button"
                   onClick={() => {
                     setShowWorkflowModal(false);
                     setWorkflowError(null);
@@ -1324,12 +1330,16 @@ export default function CrmPage() {
                   <div className="mt-3 flex justify-end">
                     <button
                       className="btn-secondary"
+                      type="button"
                       onClick={handleCreateStageFromWorkflow}
-                      disabled={workflowAddingStage || workflowSaving}
+                      disabled={!canCreateWorkflowStage}
                     >
                       {workflowAddingStage ? t('common.saving') : `+ ${t('crm.stage')}`}
                     </button>
                   </div>
+                  {workflowAddStageValidationError ? (
+                    <p className="mt-2 text-xs text-slate-400">{workflowAddStageValidationError}</p>
+                  ) : null}
                 </div>
 
                 {workflowInfo ? <p className="text-sm text-emerald-200">{workflowInfo}</p> : null}
@@ -1339,6 +1349,7 @@ export default function CrmPage() {
               <div className="mt-6 flex items-center justify-end gap-2">
                 <button
                   className="btn-secondary"
+                  type="button"
                   onClick={() => {
                     setShowWorkflowModal(false);
                     setWorkflowError(null);
@@ -1349,6 +1360,7 @@ export default function CrmPage() {
                 </button>
                 <button
                   className="btn-primary"
+                  type="button"
                   onClick={handleSaveWorkflow}
                   disabled={workflowSaving || workflowAddingStage}
                 >

@@ -13,6 +13,11 @@ import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
+  @Get('context')
+  getContext(@CurrentUser() user: RequestUser) {
+    return this.adminService.getContext(user);
+  }
+
   @Get('users')
   listUsers(@CurrentUser() user: RequestUser) {
     return this.adminService.listUsers(user);

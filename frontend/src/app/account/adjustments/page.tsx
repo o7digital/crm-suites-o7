@@ -37,7 +37,7 @@ export default function AccountAdjustmentsPage() {
     setSkinInfo(null);
     if (!file) return;
 
-    const maxBytes = 250 * 1024;
+    const maxBytes = 800 * 1024;
     if (file.size > maxBytes) {
       setSkinError(t('account.skin.logoTooLarge'));
       return;

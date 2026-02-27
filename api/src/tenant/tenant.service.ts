@@ -5,10 +5,47 @@ import { RequestUser } from '../common/user.decorator';
 import { UpdateBrandingDto } from './dto/update-branding.dto';
 import { UpdateTenantSettingsDto } from './dto/update-settings.dto';
 
+type ContractClientFieldKey =
+  | 'firstName'
+  | 'name'
+  | 'function'
+  | 'companySector'
+  | 'email'
+  | 'phone'
+  | 'company'
+  | 'website'
+  | 'address'
+  | 'taxId'
+  | 'notes';
+
+type ContractFieldMapping = {
+  placeholder: string;
+  clientField: ContractClientFieldKey;
+  label?: string;
+};
+
+type ContractSetup = {
+  templateHref: string;
+  fieldMappings: ContractFieldMapping[];
+};
+
 @Injectable()
 export class TenantService {
   constructor(private prisma: PrismaService) {}
   private readonly crmDisplayCurrencies = ['USD', 'EUR', 'MXN', 'CAD'] as const;
+  private readonly allowedContractClientFields = new Set<ContractClientFieldKey>([
+    'firstName',
+    'name',
+    'function',
+    'companySector',
+    'email',
+    'phone',
+    'company',
+    'website',
+    'address',
+    'taxId',
+    'notes',
+  ]);
 
   private mapSchemaError(err: unknown): ServiceUnavailableException | null {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -41,6 +78,45 @@ export class TenantService {
     if (role !== 'OWNER' && role !== 'ADMIN') {
       throw new ForbiddenException('Admin access required');
     }
+  }
+
+  private sanitizeContractSetup(raw: unknown): ContractSetup | null | undefined {
+    if (raw === undefined) return undefined;
+    if (raw === null) return null;
+    if (typeof raw !== 'object') return null;
+
+    const obj = raw as Record<string, unknown>;
+    const templateHref = String(obj.templateHref || '').trim();
+    if (!templateHref) return null;
+    if (templateHref.length > 240) return null;
+
+    const rawMappings = Array.isArray(obj.fieldMappings) ? obj.fieldMappings : [];
+    const fieldMappings: ContractFieldMapping[] = [];
+    const seenPlaceholders = new Set<string>();
+
+    for (const entry of rawMappings) {
+      if (!entry || typeof entry !== 'object') continue;
+      const item = entry as Record<string, unknown>;
+      const placeholder = String(item.placeholder || '').trim();
+      const clientField = String(item.clientField || '').trim() as ContractClientFieldKey;
+      const labelRaw = String(item.label || '').trim();
+
+      if (!/^[a-zA-Z0-9_]{1,80}$/.test(placeholder)) continue;
+      if (!this.allowedContractClientFields.has(clientField)) continue;
+      if (seenPlaceholders.has(placeholder)) continue;
+
+      seenPlaceholders.add(placeholder);
+      fieldMappings.push({
+        placeholder,
+        clientField,
+        ...(labelRaw ? { label: labelRaw.slice(0, 120) } : {}),
+      });
+    }
+
+    return {
+      templateHref,
+      fieldMappings,
+    };
   }
 
   async getBranding(user: RequestUser) {
@@ -109,13 +185,22 @@ export class TenantService {
     try {
       const tenant = await this.prisma.tenant.findFirst({
         where: { id: user.tenantId },
-        select: { id: true, name: true, crmMode: true, crmDisplayCurrency: true, industry: true, updatedAt: true },
+        select: {
+          id: true,
+          name: true,
+          crmMode: true,
+          crmDisplayCurrency: true,
+          industry: true,
+          contractSetup: true,
+          updatedAt: true,
+        },
       });
       if (!tenant) throw new NotFoundException('Tenant not found');
       const currency = String(tenant.crmDisplayCurrency || 'USD').toUpperCase();
       const crmDisplayCurrency = this.crmDisplayCurrencies.includes(currency as (typeof this.crmDisplayCurrencies)[number])
         ? (currency as (typeof this.crmDisplayCurrencies)[number])
         : 'USD';
+      const contractSetup = this.sanitizeContractSetup(tenant.contractSetup);
       return {
         tenantId: tenant.id,
         tenantName: tenant.name,
@@ -123,6 +208,7 @@ export class TenantService {
           crmMode: (tenant.crmMode || 'B2B') as 'B2B' | 'B2C',
           crmDisplayCurrency,
           industry: tenant.industry ?? null,
+          contractSetup: contractSetup ?? null,
         },
         updatedAt: tenant.updatedAt,
       };
@@ -147,6 +233,7 @@ export class TenantService {
     const nextCrmDisplayCurrency = dto.crmDisplayCurrency
       ? String(dto.crmDisplayCurrency).toUpperCase()
       : undefined;
+    const nextContractSetup = this.sanitizeContractSetup(dto.contractSetup);
 
     try {
       const updated = await this.prisma.tenant.update({
@@ -155,8 +242,24 @@ export class TenantService {
           crmMode: nextCrmMode,
           crmDisplayCurrency: nextCrmDisplayCurrency,
           industry: normalize(dto.industry),
+          ...(nextContractSetup !== undefined
+            ? {
+                contractSetup:
+                  nextContractSetup === null
+                    ? Prisma.DbNull
+                    : (nextContractSetup as Prisma.InputJsonValue),
+              }
+            : {}),
         },
-        select: { id: true, name: true, crmMode: true, crmDisplayCurrency: true, industry: true, updatedAt: true },
+        select: {
+          id: true,
+          name: true,
+          crmMode: true,
+          crmDisplayCurrency: true,
+          industry: true,
+          contractSetup: true,
+          updatedAt: true,
+        },
       });
 
       // Keep pipeline default aligned with the tenant mode when possible.
@@ -166,6 +269,7 @@ export class TenantService {
       const crmDisplayCurrency = this.crmDisplayCurrencies.includes(currency as (typeof this.crmDisplayCurrencies)[number])
         ? (currency as (typeof this.crmDisplayCurrencies)[number])
         : 'USD';
+      const contractSetup = this.sanitizeContractSetup(updated.contractSetup);
 
       return {
         tenantId: updated.id,
@@ -174,6 +278,7 @@ export class TenantService {
           crmMode: (updated.crmMode || 'B2B') as 'B2B' | 'B2C',
           crmDisplayCurrency,
           industry: updated.industry ?? null,
+          contractSetup: contractSetup ?? null,
         },
         updatedAt: updated.updatedAt,
       };

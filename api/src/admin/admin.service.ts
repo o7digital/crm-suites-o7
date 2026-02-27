@@ -11,6 +11,35 @@ import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 export class AdminService {
   constructor(private prisma: PrismaService) {}
 
+  private async getSubscriptionWorkspaceContext(tenantId: string) {
+    try {
+      const [ownedSubscription, linkedAsCustomer] = await Promise.all([
+        this.prisma.subscription.findFirst({
+          where: { tenantId },
+          select: { id: true },
+        }),
+        this.prisma.subscription.findFirst({
+          where: { customerTenantId: tenantId },
+          select: { id: true },
+        }),
+      ]);
+
+      const ownsSubscriptions = Boolean(ownedSubscription);
+      const isCustomerTenant = Boolean(linkedAsCustomer);
+      const canManageSubscriptions = ownsSubscriptions || !isCustomerTenant;
+
+      return {
+        ownsSubscriptions,
+        isCustomerTenant,
+        canManageSubscriptions,
+      };
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
   private mapSchemaError(err: unknown): ServiceUnavailableException | null {
     if (err instanceof Prisma.PrismaClientKnownRequestError) {
       // Common Prisma codes when tables/columns are missing because migrations haven't run yet.
@@ -39,6 +68,15 @@ export class AdminService {
     if (dbUser.role !== 'OWNER' && dbUser.role !== 'ADMIN') {
       throw new ForbiddenException('Admin access required');
     }
+  }
+
+  private async ensureSubscriptionManager(user: RequestUser) {
+    await this.ensureAdmin(user);
+    const context = await this.getSubscriptionWorkspaceContext(user.tenantId);
+    if (!context.canManageSubscriptions) {
+      throw new ForbiddenException('Subscription management is restricted to owner workspaces');
+    }
+    return context;
   }
 
   private async getCustomerSeatLimit(tenantId: string): Promise<number | null> {
@@ -255,8 +293,19 @@ export class AdminService {
     });
   }
 
-  async listSubscriptions(user: RequestUser) {
+  async getContext(user: RequestUser) {
     await this.ensureAdmin(user);
+    const context = await this.getSubscriptionWorkspaceContext(user.tenantId);
+    return {
+      isCustomerWorkspace: context.isCustomerTenant && !context.ownsSubscriptions,
+      canManageSubscriptions: context.canManageSubscriptions,
+      ownsSubscriptions: context.ownsSubscriptions,
+      isCustomerTenant: context.isCustomerTenant,
+    };
+  }
+
+  async listSubscriptions(user: RequestUser) {
+    await this.ensureSubscriptionManager(user);
     try {
       return await this.prisma.subscription.findMany({
         where: { tenantId: user.tenantId },
@@ -284,7 +333,7 @@ export class AdminService {
   }
 
   async listSubscriptionUserInvites(id: string, user: RequestUser) {
-    await this.ensureAdmin(user);
+    await this.ensureSubscriptionManager(user);
     const subscription = await this.getOwnedSubscription(id, user.tenantId);
     try {
       return await this.prisma.userInvite.findMany({
@@ -309,13 +358,13 @@ export class AdminService {
   }
 
   async createSubscriptionUserInvite(id: string, dto: CreateUserInviteDto, user: RequestUser) {
-    await this.ensureAdmin(user);
+    await this.ensureSubscriptionManager(user);
     const subscription = await this.getOwnedSubscription(id, user.tenantId);
     return this.createUserInviteForTenant(dto, subscription.customerTenantId, user.userId);
   }
 
   async createSubscription(dto: CreateSubscriptionDto, user: RequestUser) {
-    await this.ensureAdmin(user);
+    await this.ensureSubscriptionManager(user);
     const trimmed = dto.customerName.trim();
     if (!trimmed) throw new BadRequestException('Customer name is required');
 
@@ -416,7 +465,7 @@ export class AdminService {
   }
 
   async updateSubscription(id: string, dto: UpdateSubscriptionDto, user: RequestUser) {
-    await this.ensureAdmin(user);
+    await this.ensureSubscriptionManager(user);
 
     const hasChanges =
       dto.customerName !== undefined ||
