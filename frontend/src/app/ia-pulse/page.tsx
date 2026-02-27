@@ -5,8 +5,10 @@ import { useSearchParams } from 'next/navigation';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '@/contexts/AuthContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { apiBaseForDisplay } from '@/lib/apiBase';
 import { useIA, type LeadAnalysisResult } from '@/hooks/useIA';
+import type { LanguageCode } from '@/i18n/types';
 import {
   Alert,
   Box,
@@ -94,6 +96,442 @@ type ContractSetup = {
   fieldMappings: ContractFieldMapping[];
 };
 
+type IaPulseLocale = {
+  subtitle: string;
+  sourceCrm: string;
+  pipeline: string;
+  leadCrm: string;
+  selectPipeline: string;
+  selectLead: string;
+  analyzeCrmLead: string;
+  contractHeading: string;
+  contractSubtitle: string;
+  templateSetup: string;
+  placeholdersMapped: string;
+  missingContractSetup: string;
+  openContractSetup: string;
+  uploadContract: string;
+  applyToCrmClient: string;
+  file: string;
+  orderManagement: string;
+  orderManagementSubtitle: string;
+  orders: string;
+  payments: string;
+  invoices: string;
+  ordersDescription: string;
+  paymentsDescription: string;
+  invoicesDescription: string;
+  additionalContextPlaceholder: string;
+  leadNamePlaceholder: string;
+  analyzeText: string;
+  summarize: string;
+  generateEmail: string;
+  improveProposal: string;
+  aiDiagnostics: string;
+  clearAll: string;
+  error: string;
+  crmLeadAnalysis: string;
+  score: string;
+  winProbability: string;
+  risk: string;
+  nextBestActions: string;
+  reasons: string;
+  proposedActionPlan: string;
+  recommendation: string;
+  deal: string;
+  stage: string;
+  status: string;
+  value: string;
+  client: string;
+  na: string;
+  applyRecommendation: string;
+  emailReadyToSend: string;
+  subject: string;
+  copyEmail: string;
+  whatsappReadyToSend: string;
+  copyWhatsapp: string;
+  openWhatsapp: string;
+  runtimeDiagnostics: string;
+  sentimentAnalysis: string;
+  summary: string;
+  generatedEmail: string;
+  improvedProposal: string;
+  copiedToClipboard: string;
+  unableToCopy: string;
+  stageApplied: string;
+  configureContractSetupFirst: string;
+  warningNoValueExtracted: string;
+  warningPlaceholderUnresolved: string;
+  contractLoadedNoValues: string;
+  contractParsedFields: string;
+  clientFieldsUpdated: string;
+  emailLabel: string;
+  whatsappLabel: string;
+  emailSubjectTemplate: string;
+  emailGreeting: string;
+  emailThanksTemplate: string;
+  emailPlanIntro: string;
+  emailPlanFallback: string;
+  emailAvailability: string;
+  emailRegards: string;
+  whatsappGreeting: string;
+  whatsappAfterDiscussionTemplate: string;
+  whatsappSuggestTemplate: string;
+  whatsappPlanFallback: string;
+  whatsappClose: string;
+  dueSlots: string[];
+  defaultActionsByOutcome: Record<'KEEP' | 'WON' | 'LOST', string[]>;
+  contractFieldLabels: Record<ContractClientFieldKey, string>;
+};
+
+const IA_PULSE_LOCALE: Record<LanguageCode, IaPulseLocale> = {
+  en: {
+    subtitle: 'Smart CRM lead analysis (score, risks, next-action and stage recommendations)',
+    sourceCrm: 'Source CRM',
+    pipeline: 'Pipeline',
+    leadCrm: 'Lead CRM',
+    selectPipeline: 'Select pipeline',
+    selectLead: 'Select lead',
+    analyzeCrmLead: 'Analyze CRM lead',
+    contractHeading: 'Client contract (phase 1 to phase 2)',
+    contractSubtitle: 'Phase 1: upload the completed client contract. Phase 2: client fields mapped in Admin appear automatically.',
+    templateSetup: 'Template setup',
+    placeholdersMapped: '{count} placeholders mapped in Admin.',
+    missingContractSetup: 'Missing setup. Configure field mapping first in Admin -> Parameters -> Customers.',
+    openContractSetup: 'Open contract setup',
+    uploadContract: 'Upload contract',
+    applyToCrmClient: 'Apply to CRM client',
+    file: 'File',
+    orderManagement: 'Order management',
+    orderManagementSubtitle: 'Dedicated section for clients who want to manage orders, payments, and invoices in one place.',
+    orders: 'ORDERS',
+    payments: 'PAYMENTS',
+    invoices: 'INVOICES',
+    ordersDescription: 'Track order status, client confirmation, and delivery priorities.',
+    paymentsDescription: 'Monitor received payments, due dates, and late-payment alerts for each client account.',
+    invoicesDescription: 'Quick access to issued invoices, status tracking, and reminders preparation.',
+    additionalContextPlaceholder: 'Additional context: latest exchanges, objections, call notes...',
+    leadNamePlaceholder: 'Lead name (for emails)',
+    analyzeText: 'Analyze text',
+    summarize: 'Summarize',
+    generateEmail: 'Generate email',
+    improveProposal: 'Improve proposal',
+    aiDiagnostics: 'AI diagnostics',
+    clearAll: 'Clear all',
+    error: 'Error',
+    crmLeadAnalysis: 'CRM lead analysis',
+    score: 'Score',
+    winProbability: 'Win Probability',
+    risk: 'Risk',
+    nextBestActions: 'Next Best Actions',
+    reasons: 'Reasons',
+    proposedActionPlan: 'Proposed action plan',
+    recommendation: 'Recommendation',
+    deal: 'Deal',
+    stage: 'Stage',
+    status: 'Status',
+    value: 'Value',
+    client: 'Client',
+    na: 'N/A',
+    applyRecommendation: 'Apply recommendation',
+    emailReadyToSend: 'Email ready to send',
+    subject: 'Subject',
+    copyEmail: 'Copy email',
+    whatsappReadyToSend: 'WhatsApp ready to send',
+    copyWhatsapp: 'Copy WhatsApp',
+    openWhatsapp: 'Open WhatsApp',
+    runtimeDiagnostics: 'Runtime diagnostics',
+    sentimentAnalysis: 'Sentiment analysis',
+    summary: 'Summary',
+    generatedEmail: 'Generated email',
+    improvedProposal: 'Improved proposal',
+    copiedToClipboard: '{label} copied to clipboard.',
+    unableToCopy: 'Unable to copy {label}.',
+    stageApplied: 'Stage applied: {stage}',
+    configureContractSetupFirst: 'Configure contract setup in Admin > Parameters > Customers first.',
+    warningNoValueExtracted: 'No value extracted for {{placeholder}}',
+    warningPlaceholderUnresolved: 'Placeholder {{placeholder}} appears unresolved in contract',
+    contractLoadedNoValues: 'Contract loaded, but no mapped values were detected.',
+    contractParsedFields: 'Contract parsed: {count} client fields extracted.',
+    clientFieldsUpdated: 'Client fields updated from contract extraction.',
+    emailLabel: 'Email',
+    whatsappLabel: 'WhatsApp',
+    emailSubjectTemplate: 'Follow-up {deal} - action plan',
+    emailGreeting: 'Hello {name},',
+    emailThanksTemplate: 'Thanks for our discussion regarding "{deal}".',
+    emailPlanIntro: 'Here is the proposed action plan to move forward quickly:',
+    emailPlanFallback: 'Validate next actions together',
+    emailAvailability: 'Could you confirm your availability for a 15-minute check-in?',
+    emailRegards: 'Best regards,',
+    whatsappGreeting: 'Hello {name},',
+    whatsappAfterDiscussionTemplate: 'following our discussion on "{deal}",',
+    whatsappSuggestTemplate: 'I suggest: {plan}.',
+    whatsappPlanFallback: 'validating next actions together',
+    whatsappClose: 'Can we schedule 15 min this week?',
+    dueSlots: ['Today', 'D+1', 'D+3', 'D+7'],
+    defaultActionsByOutcome: {
+      KEEP: [
+        'Validate scope and priorities with the client',
+        'Confirm budget, timeline, and decision makers',
+        'Schedule a follow-up with a dated next action',
+      ],
+      WON: [
+        'Confirm final agreement and launch onboarding',
+        'Send project recap and kickoff timeline',
+        'Plan kickoff with key stakeholders',
+      ],
+      LOST: [
+        'Document loss reasons and key objections',
+        'Propose an alternative or differentiated follow-up',
+        'Schedule a win-back follow-up at a fixed date',
+      ],
+    },
+    contractFieldLabels: {
+      firstName: 'First name',
+      name: 'Last name',
+      function: 'Role',
+      companySector: 'Industry',
+      email: 'Email',
+      phone: 'Phone',
+      company: 'Company',
+      website: 'Website',
+      address: 'Address',
+      taxId: 'Tax ID / RFC',
+      notes: 'Notes',
+    },
+  },
+  fr: {
+    subtitle: 'Analyse intelligente des leads CRM (score, risques, recommandations de next action et d etape)',
+    sourceCrm: 'Source CRM',
+    pipeline: 'Pipeline',
+    leadCrm: 'Lead CRM',
+    selectPipeline: 'Selectionner pipeline',
+    selectLead: 'Selectionner lead',
+    analyzeCrmLead: 'Analyser lead CRM',
+    contractHeading: 'Contrat client (phase 1 vers phase 2)',
+    contractSubtitle: 'Phase 1: chargez le contrat client rempli. Phase 2: les champs client mappes en Admin apparaissent automatiquement.',
+    templateSetup: 'Template setup',
+    placeholdersMapped: '{count} placeholders mapped in Admin.',
+    missingContractSetup: 'Setup manquant. Configurez d abord le mapping dans Admin -> Parameters -> Customers.',
+    openContractSetup: 'Ouvrir setup contrat',
+    uploadContract: 'Charger contrat',
+    applyToCrmClient: 'Appliquer au client CRM',
+    file: 'Fichier',
+    orderManagement: 'Gestion de pedidos',
+    orderManagementSubtitle: 'Section dediee aux clients qui veulent administrer leurs pedidos, pagos et facturas depuis un seul espace.',
+    orders: 'PEDIDOS',
+    payments: 'PAGOS',
+    invoices: 'FACTURAS',
+    ordersDescription: 'Suivi du statut de commande, confirmation client et priorisation des livraisons.',
+    paymentsDescription: 'Controle des paiements recus, echeances et alertes de retard pour chaque compte client.',
+    invoicesDescription: 'Acces rapide aux factures emises, suivi des statuts et preparation des relances.',
+    additionalContextPlaceholder: 'Contexte additionnel: derniers echanges, objections, notes call...',
+    leadNamePlaceholder: 'Nom du lead (pour les emails)',
+    analyzeText: 'Analyser texte',
+    summarize: 'Resumer',
+    generateEmail: 'Generer email',
+    improveProposal: 'Ameliorer devis',
+    aiDiagnostics: 'Diagnostic IA',
+    clearAll: 'Effacer tout',
+    error: 'Erreur',
+    crmLeadAnalysis: 'Analyse lead CRM',
+    score: 'Score',
+    winProbability: 'Win Probability',
+    risk: 'Risk',
+    nextBestActions: 'Next Best Actions',
+    reasons: 'Raisons',
+    proposedActionPlan: 'Plan d action propose',
+    recommendation: 'Recommendation',
+    deal: 'Deal',
+    stage: 'Stage',
+    status: 'Status',
+    value: 'Value',
+    client: 'Client',
+    na: 'N/A',
+    applyRecommendation: 'Appliquer recommandation',
+    emailReadyToSend: 'Email pret a envoyer',
+    subject: 'Objet',
+    copyEmail: 'Copier email',
+    whatsappReadyToSend: 'WhatsApp pret a envoyer',
+    copyWhatsapp: 'Copier WhatsApp',
+    openWhatsapp: 'Ouvrir WhatsApp',
+    runtimeDiagnostics: 'Diagnostic runtime',
+    sentimentAnalysis: 'Analyse de sentiment',
+    summary: 'Resume',
+    generatedEmail: 'Email genere',
+    improvedProposal: 'Proposition amelioree',
+    copiedToClipboard: '{label} copie dans le presse-papiers.',
+    unableToCopy: 'Impossible de copier {label}.',
+    stageApplied: 'Etape appliquee: {stage}',
+    configureContractSetupFirst: 'Configure contract setup in Admin > Parameters > Customers first.',
+    warningNoValueExtracted: 'No value extracted for {{placeholder}}',
+    warningPlaceholderUnresolved: 'Placeholder {{placeholder}} appears unresolved in contract',
+    contractLoadedNoValues: 'Contract loaded, but no mapped values were detected.',
+    contractParsedFields: 'Contract parsed: {count} client fields extracted.',
+    clientFieldsUpdated: 'Client fields updated from contract extraction.',
+    emailLabel: 'Email',
+    whatsappLabel: 'WhatsApp',
+    emailSubjectTemplate: 'Suivi {deal} - plan d action',
+    emailGreeting: 'Bonjour {name},',
+    emailThanksTemplate: 'Merci pour notre echange concernant "{deal}".',
+    emailPlanIntro: 'Voici le plan d action propose pour avancer rapidement :',
+    emailPlanFallback: 'Valider les prochaines actions ensemble',
+    emailAvailability: 'Pouvez-vous me confirmer vos disponibilites pour un point de 15 minutes ?',
+    emailRegards: 'Bien a vous,',
+    whatsappGreeting: 'Bonjour {name},',
+    whatsappAfterDiscussionTemplate: 'suite a notre echange sur "{deal}",',
+    whatsappSuggestTemplate: 'je propose: {plan}.',
+    whatsappPlanFallback: 'valider les prochaines actions ensemble',
+    whatsappClose: 'On peut se caller 15 min cette semaine ?',
+    dueSlots: ['Aujourd hui', 'J+1', 'J+3', 'J+7'],
+    defaultActionsByOutcome: {
+      KEEP: [
+        'Valider le perimetre et les priorites avec le client',
+        'Confirmer budget, delai et interlocuteurs decisionnaires',
+        'Programmer un point de suivi avec prochaine action datee',
+      ],
+      WON: [
+        'Confirmer accord final et lancer onboarding',
+        'Envoyer recap projet et planning de demarrage',
+        'Planifier kick-off avec les parties prenantes',
+      ],
+      LOST: [
+        'Documenter la raison de perte et les objections cles',
+        'Proposer une alternative ou une relance differenciee',
+        'Programmer une relance de reconquete a date fixe',
+      ],
+    },
+    contractFieldLabels: {
+      firstName: 'Prenom',
+      name: 'Nom',
+      function: 'Fonction',
+      companySector: 'Secteur',
+      email: 'Email',
+      phone: 'Telephone',
+      company: 'Entreprise',
+      website: 'Site web',
+      address: 'Adresse',
+      taxId: 'Tax ID / RFC',
+      notes: 'Notes',
+    },
+  },
+  es: {
+    subtitle: 'Analisis inteligente de leads CRM (score, riesgos, recomendaciones de siguiente accion y etapa)',
+    sourceCrm: 'Origen CRM',
+    pipeline: 'Pipeline',
+    leadCrm: 'Lead CRM',
+    selectPipeline: 'Seleccionar pipeline',
+    selectLead: 'Seleccionar lead',
+    analyzeCrmLead: 'Analizar lead CRM',
+    contractHeading: 'Contrato cliente (fase 1 hacia fase 2)',
+    contractSubtitle: 'Fase 1: carga el contrato cliente completado. Fase 2: los campos cliente mapeados en Admin aparecen automaticamente.',
+    templateSetup: 'Configuracion de plantilla',
+    placeholdersMapped: '{count} placeholders mapeados en Admin.',
+    missingContractSetup: 'Falta setup. Configura primero el mapping en Admin -> Parameters -> Customers.',
+    openContractSetup: 'Abrir setup contrato',
+    uploadContract: 'Cargar contrato',
+    applyToCrmClient: 'Aplicar al cliente CRM',
+    file: 'Archivo',
+    orderManagement: 'Gestion de pedidos',
+    orderManagementSubtitle: 'Seccion dedicada a clientes que quieren administrar pedidos, pagos y facturas desde un solo espacio.',
+    orders: 'PEDIDOS',
+    payments: 'PAGOS',
+    invoices: 'FACTURAS',
+    ordersDescription: 'Seguimiento del estado del pedido, confirmacion del cliente y priorizacion de entregas.',
+    paymentsDescription: 'Control de pagos recibidos, vencimientos y alertas de retraso por cuenta cliente.',
+    invoicesDescription: 'Acceso rapido a facturas emitidas, seguimiento de estados y preparacion de recordatorios.',
+    additionalContextPlaceholder: 'Contexto adicional: ultimos intercambios, objeciones, notas de llamada...',
+    leadNamePlaceholder: 'Nombre del lead (para emails)',
+    analyzeText: 'Analizar texto',
+    summarize: 'Resumir',
+    generateEmail: 'Generar email',
+    improveProposal: 'Mejorar propuesta',
+    aiDiagnostics: 'Diagnostico IA',
+    clearAll: 'Limpiar todo',
+    error: 'Error',
+    crmLeadAnalysis: 'Analisis lead CRM',
+    score: 'Puntuacion',
+    winProbability: 'Probabilidad de cierre',
+    risk: 'Riesgo',
+    nextBestActions: 'Siguientes mejores acciones',
+    reasons: 'Razones',
+    proposedActionPlan: 'Plan de accion propuesto',
+    recommendation: 'Recomendacion',
+    deal: 'Deal',
+    stage: 'Etapa',
+    status: 'Estado',
+    value: 'Valor',
+    client: 'Cliente',
+    na: 'N/D',
+    applyRecommendation: 'Aplicar recomendacion',
+    emailReadyToSend: 'Email listo para enviar',
+    subject: 'Asunto',
+    copyEmail: 'Copiar email',
+    whatsappReadyToSend: 'WhatsApp listo para enviar',
+    copyWhatsapp: 'Copiar WhatsApp',
+    openWhatsapp: 'Abrir WhatsApp',
+    runtimeDiagnostics: 'Diagnostico runtime',
+    sentimentAnalysis: 'Analisis de sentimiento',
+    summary: 'Resumen',
+    generatedEmail: 'Email generado',
+    improvedProposal: 'Propuesta mejorada',
+    copiedToClipboard: '{label} copiado al portapapeles.',
+    unableToCopy: 'No se pudo copiar {label}.',
+    stageApplied: 'Etapa aplicada: {stage}',
+    configureContractSetupFirst: 'Configura primero el setup de contrato en Admin > Parameters > Customers.',
+    warningNoValueExtracted: 'No se extrajo valor para {{placeholder}}',
+    warningPlaceholderUnresolved: 'El placeholder {{placeholder}} parece no resuelto en el contrato',
+    contractLoadedNoValues: 'Contrato cargado, pero no se detectaron valores mapeados.',
+    contractParsedFields: 'Contrato analizado: {count} campos cliente extraidos.',
+    clientFieldsUpdated: 'Campos cliente actualizados desde la extraccion del contrato.',
+    emailLabel: 'Email',
+    whatsappLabel: 'WhatsApp',
+    emailSubjectTemplate: 'Seguimiento {deal} - plan de accion',
+    emailGreeting: 'Hola {name},',
+    emailThanksTemplate: 'Gracias por nuestra conversacion sobre "{deal}".',
+    emailPlanIntro: 'Aqui tienes el plan de accion propuesto para avanzar rapido:',
+    emailPlanFallback: 'Validar siguientes acciones juntos',
+    emailAvailability: 'Puedes confirmar disponibilidad para un punto de 15 minutos?',
+    emailRegards: 'Saludos,',
+    whatsappGreeting: 'Hola {name},',
+    whatsappAfterDiscussionTemplate: 'despues de nuestra conversacion sobre "{deal}",',
+    whatsappSuggestTemplate: 'propongo: {plan}.',
+    whatsappPlanFallback: 'validar siguientes acciones juntos',
+    whatsappClose: 'Podemos agendar 15 min esta semana?',
+    dueSlots: ['Hoy', 'D+1', 'D+3', 'D+7'],
+    defaultActionsByOutcome: {
+      KEEP: [
+        'Validar alcance y prioridades con el cliente',
+        'Confirmar presupuesto, plazos y decisores',
+        'Programar seguimiento con proxima accion fechada',
+      ],
+      WON: [
+        'Confirmar acuerdo final e iniciar onboarding',
+        'Enviar resumen del proyecto y calendario de arranque',
+        'Planificar kick-off con las partes clave',
+      ],
+      LOST: [
+        'Documentar razones de perdida y objeciones clave',
+        'Proponer alternativa o relanzamiento diferenciado',
+        'Programar seguimiento de reconquista con fecha fija',
+      ],
+    },
+    contractFieldLabels: {
+      firstName: 'Nombre',
+      name: 'Apellido',
+      function: 'Cargo',
+      companySector: 'Sector',
+      email: 'Email',
+      phone: 'Telefono',
+      company: 'Empresa',
+      website: 'Sitio web',
+      address: 'Direccion',
+      taxId: 'Tax ID / RFC',
+      notes: 'Notas',
+    },
+  },
+};
+
 function getClientLabel(client?: Client | null): string {
   if (!client) return '';
   const parts = [client.firstName, client.name]
@@ -104,19 +542,13 @@ function getClientLabel(client?: Client | null): string {
   return String(client.name || '').trim();
 }
 
-const CONTRACT_CLIENT_FIELD_LABELS: Record<ContractClientFieldKey, string> = {
-  firstName: 'Prenom',
-  name: 'Nom',
-  function: 'Fonction',
-  companySector: 'Secteur',
-  email: 'Email',
-  phone: 'Telephone',
-  company: 'Entreprise',
-  website: 'Site web',
-  address: 'Adresse',
-  taxId: 'Tax ID / RFC',
-  notes: 'Notes',
-};
+function templateText(raw: string, params?: Record<string, string | number>): string {
+  if (!params) return raw;
+  return raw.replace(/\{(\w+)\}/g, (_, key: string) => {
+    const value = params[key];
+    return value === undefined || value === null ? '' : String(value);
+  });
+}
 
 function toErrorMessage(err: unknown): string {
   if (!err) return 'Unknown error';
@@ -187,39 +619,19 @@ function extractContractValuesFromTemplate(
   return output;
 }
 
-function buildCrmActionPlan(analysis: LeadAnalysisResult): string[] {
+function buildCrmActionPlan(analysis: LeadAnalysisResult, locale: IaPulseLocale): string[] {
   const baseActions = analysis.analysis.nextBestActions
     .map((item) => item.trim())
     .filter(Boolean);
   const uniqueActions = Array.from(new Set(baseActions));
 
-  const defaultActionsByOutcome: Record<'KEEP' | 'WON' | 'LOST', string[]> = {
-    KEEP: [
-      'Valider le perimetre et les priorites avec le client',
-      'Confirmer budget, delai et interlocuteurs decisionnaires',
-      'Programmer un point de suivi avec prochaine action datee',
-    ],
-    WON: [
-      'Confirmer accord final et lancer onboarding',
-      'Envoyer recap projet et planning de demarrage',
-      'Planifier kick-off avec les parties prenantes',
-    ],
-    LOST: [
-      'Documenter la raison de perte et les objections cles',
-      'Proposer une alternative ou une relance differenciee',
-      'Programmer une relance de reconquete a date fixe',
-    ],
-  };
-
   const actions =
     uniqueActions.length > 0
       ? uniqueActions
-      : defaultActionsByOutcome[analysis.analysis.recommendedOutcome];
-
-  const dueSlots = ['Aujourd hui', 'J+1', 'J+3', 'J+7'];
+      : locale.defaultActionsByOutcome[analysis.analysis.recommendedOutcome];
 
   return actions.slice(0, 4).map((action, index) => {
-    const due = dueSlots[index] || `J+${index * 2 + 1}`;
+    const due = locale.dueSlots[index] || `D+${index * 2 + 1}`;
     return `${index + 1}. [${due}] ${action}`;
   });
 }
@@ -228,6 +640,7 @@ function buildCrmEmailDraft(
   analysis: LeadAnalysisResult,
   contactName: string,
   actionPlan: string[],
+  locale: IaPulseLocale,
 ): { subject: string; body: string } {
   const compactPlan = actionPlan
     .slice(0, 3)
@@ -235,17 +648,17 @@ function buildCrmEmailDraft(
     .join('\n');
 
   return {
-    subject: `Suivi ${analysis.lead.dealTitle} - plan d action`,
+    subject: templateText(locale.emailSubjectTemplate, { deal: analysis.lead.dealTitle }),
     body: [
-      `Bonjour ${contactName},`,
+      templateText(locale.emailGreeting, { name: contactName }),
       '',
-      `Merci pour notre echange concernant "${analysis.lead.dealTitle}".`,
-      'Voici le plan d action propose pour avancer rapidement :',
-      compactPlan || '- Valider les prochaines actions ensemble',
+      templateText(locale.emailThanksTemplate, { deal: analysis.lead.dealTitle }),
+      locale.emailPlanIntro,
+      compactPlan || `- ${locale.emailPlanFallback}`,
       '',
-      'Pouvez-vous me confirmer vos disponibilites pour un point de 15 minutes ?',
+      locale.emailAvailability,
       '',
-      'Bien a vous,',
+      locale.emailRegards,
     ].join('\n'),
   };
 }
@@ -254,6 +667,7 @@ function buildCrmWhatsappDraft(
   analysis: LeadAnalysisResult,
   contactName: string,
   actionPlan: string[],
+  locale: IaPulseLocale,
 ): string {
   const compactPlan = actionPlan
     .slice(0, 2)
@@ -261,10 +675,10 @@ function buildCrmWhatsappDraft(
     .join(' | ');
 
   return [
-    `Bonjour ${contactName},`,
-    `suite a notre echange sur "${analysis.lead.dealTitle}",`,
-    `je propose: ${compactPlan || 'valider les prochaines actions ensemble'}.`,
-    'On peut se caller 15 min cette semaine ?',
+    templateText(locale.whatsappGreeting, { name: contactName }),
+    templateText(locale.whatsappAfterDiscussionTemplate, { deal: analysis.lead.dealTitle }),
+    templateText(locale.whatsappSuggestTemplate, { plan: compactPlan || locale.whatsappPlanFallback }),
+    locale.whatsappClose,
   ].join(' ');
 }
 
@@ -272,7 +686,9 @@ function IaPulsePageContent() {
   const searchParams = useSearchParams();
   const prefilledDealId = searchParams.get('dealId') || '';
   const { token } = useAuth();
+  const { language } = useI18n();
   const api = useApi(token);
+  const locale = useMemo(() => IA_PULSE_LOCALE[language] || IA_PULSE_LOCALE.en, [language]);
 
   const [text, setText] = useState('');
   const [leadName, setLeadName] = useState('');
@@ -480,8 +896,8 @@ function IaPulsePageContent() {
       : null);
 
   const crmActionPlan = useMemo(
-    () => (leadAnalysis ? buildCrmActionPlan(leadAnalysis) : []),
-    [leadAnalysis],
+    () => (leadAnalysis ? buildCrmActionPlan(leadAnalysis, locale) : []),
+    [leadAnalysis, locale],
   );
 
   const crmContactName = useMemo(() => {
@@ -490,24 +906,24 @@ function IaPulsePageContent() {
   }, [leadAnalysis, leadName]);
 
   const crmEmailDraft = useMemo(
-    () => (leadAnalysis ? buildCrmEmailDraft(leadAnalysis, crmContactName, crmActionPlan) : null),
-    [crmActionPlan, crmContactName, leadAnalysis],
+    () => (leadAnalysis ? buildCrmEmailDraft(leadAnalysis, crmContactName, crmActionPlan, locale) : null),
+    [crmActionPlan, crmContactName, leadAnalysis, locale],
   );
 
   const crmWhatsappDraft = useMemo(
-    () => (leadAnalysis ? buildCrmWhatsappDraft(leadAnalysis, crmContactName, crmActionPlan) : ''),
-    [crmActionPlan, crmContactName, leadAnalysis],
+    () => (leadAnalysis ? buildCrmWhatsappDraft(leadAnalysis, crmContactName, crmActionPlan, locale) : ''),
+    [crmActionPlan, crmContactName, leadAnalysis, locale],
   );
 
   const copyToClipboard = useCallback(async (value: string, label: string) => {
     if (!value.trim()) return;
     try {
       await navigator.clipboard.writeText(value);
-      setShareInfo(`${label} copie dans le presse-papiers.`);
+      setShareInfo(templateText(locale.copiedToClipboard, { label }));
     } catch {
-      setShareInfo(`Impossible de copier ${label.toLowerCase()}.`);
+      setShareInfo(templateText(locale.unableToCopy, { label: label.toLowerCase() }));
     }
-  }, []);
+  }, [locale.copiedToClipboard, locale.unableToCopy]);
 
   const openWhatsApp = useCallback(() => {
     if (!crmWhatsappDraft.trim()) return;
@@ -576,7 +992,9 @@ function IaPulsePageContent() {
       });
 
       setApplyInfo(
-        `Etape appliquee: ${leadAnalysis.analysis.recommendedStageName || leadAnalysis.analysis.recommendedStageId}`,
+        templateText(locale.stageApplied, {
+          stage: leadAnalysis.analysis.recommendedStageName || leadAnalysis.analysis.recommendedStageId,
+        }),
       );
 
       await loadPipelineContext(leadAnalysis.lead.pipelineId, leadAnalysis.lead.dealId);
@@ -619,7 +1037,7 @@ function IaPulsePageContent() {
   const handleContractFileSelected = useCallback(
     async (file: File) => {
       if (!contractSetup?.templateHref || contractSetup.fieldMappings.length === 0) {
-        setContractError('Configure contract setup in Admin > Parameters > Customers first.');
+        setContractError(locale.configureContractSetupFirst);
         return;
       }
 
@@ -642,11 +1060,11 @@ function IaPulsePageContent() {
         for (const mapItem of contractSetup.fieldMappings) {
           const rawValue = String(extractedByPlaceholder[mapItem.placeholder] || '').trim();
           if (!rawValue) {
-            warnings.push(`No value extracted for {{${mapItem.placeholder}}}`);
+            warnings.push(templateText(locale.warningNoValueExtracted, { placeholder: mapItem.placeholder }));
             continue;
           }
           if (rawValue.includes('{{') && rawValue.includes('}}')) {
-            warnings.push(`Placeholder {{${mapItem.placeholder}}} appears unresolved in contract`);
+            warnings.push(templateText(locale.warningPlaceholderUnresolved, { placeholder: mapItem.placeholder }));
             continue;
           }
           if (!mappedFields[mapItem.clientField]) {
@@ -668,9 +1086,9 @@ function IaPulsePageContent() {
         }
 
         if (Object.keys(mappedFields).length === 0) {
-          setContractInfo('Contract loaded, but no mapped values were detected.');
+          setContractInfo(locale.contractLoadedNoValues);
         } else {
-          setContractInfo(`Contract parsed: ${Object.keys(mappedFields).length} client fields extracted.`);
+          setContractInfo(templateText(locale.contractParsedFields, { count: Object.keys(mappedFields).length }));
         }
       } catch (err) {
         setContractExtraction({});
@@ -680,7 +1098,7 @@ function IaPulsePageContent() {
         setLoadingContractExtraction(false);
       }
     },
-    [contractSetup, loadContractTemplate],
+    [contractSetup, loadContractTemplate, locale.configureContractSetupFirst, locale.contractLoadedNoValues, locale.contractParsedFields, locale.warningNoValueExtracted, locale.warningPlaceholderUnresolved],
   );
 
   const canApplyContractToClient = Boolean(selectedDealClientId) && extractedFieldEntries.length > 0;
@@ -713,13 +1131,13 @@ function IaPulsePageContent() {
         }),
       );
 
-      setContractInfo('Client fields updated from contract extraction.');
+      setContractInfo(locale.clientFieldsUpdated);
     } catch (err) {
       setContractError(toErrorMessage(err));
     } finally {
       setApplyingContractFields(false);
     }
-  }, [api, extractedFieldEntries, selectedDeal?.id, selectedDealClientId]);
+  }, [api, extractedFieldEntries, locale.clientFieldsUpdated, selectedDeal?.id, selectedDealClientId]);
 
   return (
     <Guard>
@@ -729,7 +1147,7 @@ function IaPulsePageContent() {
             o7 IA Pulse
           </Heading>
           <Text color="whiteAlpha.700" mb={6}>
-            Analyse intelligente des leads CRM (score, risques, recommandations de next action et d etape)
+            {locale.subtitle}
           </Text>
           <Text color="whiteAlpha.500" fontSize="xs" mb={4}>
             UI build: {iaUiBuild} · API target: {apiTarget}
@@ -739,12 +1157,12 @@ function IaPulsePageContent() {
             <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
               <Card.Body>
                 <Heading size="sm" mb={3}>
-                  Source CRM
+                  {locale.sourceCrm}
                 </Heading>
                 <SimpleGrid columns={{ base: 1, md: 2 }} gap={3}>
                   <Box>
                     <Text fontSize="sm" color="whiteAlpha.800" mb={1}>
-                      Pipeline
+                      {locale.pipeline}
                     </Text>
                     <select
                       value={pipelineId}
@@ -763,7 +1181,7 @@ function IaPulsePageContent() {
                         padding: '0.5rem 0.75rem',
                       }}
                     >
-                      <option value="">Selectionner pipeline</option>
+                      <option value="">{locale.selectPipeline}</option>
                       {pipelines.map((pipeline) => (
                         <option key={pipeline.id} value={pipeline.id}>
                           {pipeline.name}
@@ -774,7 +1192,7 @@ function IaPulsePageContent() {
 
                   <Box>
                     <Text fontSize="sm" color="whiteAlpha.800" mb={1}>
-                      Lead CRM
+                      {locale.leadCrm}
                     </Text>
                     <select
                       value={dealId}
@@ -795,7 +1213,7 @@ function IaPulsePageContent() {
                         padding: '0.5rem 0.75rem',
                       }}
                     >
-                      <option value="">Selectionner lead</option>
+                      <option value="">{locale.selectLead}</option>
                       {deals.map((deal) => {
                         const stage = stageById[deal.stageId] || deal.stage;
                         return (
@@ -811,10 +1229,10 @@ function IaPulsePageContent() {
 
                 {selectedDeal ? (
                   <Text mt={3} fontSize="xs" color="whiteAlpha.700">
-                    Deal: {selectedDeal.title} · Stage: {selectedDealStage?.name || selectedDeal.stageId} · Status:{' '}
-                    {selectedDealStage?.status || selectedDeal.stage?.status || 'OPEN'} · Value:{' '}
+                    {locale.deal}: {selectedDeal.title} · {locale.stage}: {selectedDealStage?.name || selectedDeal.stageId} · {locale.status}:{' '}
+                    {selectedDealStage?.status || selectedDeal.stage?.status || 'OPEN'} · {locale.value}:{' '}
                     {(selectedDeal.currency || 'USD').toUpperCase()} {Number(selectedDeal.value || 0).toLocaleString()}
-                    {selectedDeal.client ? ` · Client: ${getClientLabel(selectedDeal.client) || 'N/A'}` : ''}
+                    {selectedDeal.client ? ` · ${locale.client}: ${getClientLabel(selectedDeal.client) || locale.na}` : ''}
                   </Text>
                 ) : null}
 
@@ -825,7 +1243,7 @@ function IaPulsePageContent() {
                     onClick={() => void handleAnalyzeSelectedLead()}
                     borderRadius="xl"
                   >
-                    {loadingLeadAnalysis ? <Spinner size="sm" /> : 'Analyser lead CRM'}
+                    {loadingLeadAnalysis ? <Spinner size="sm" /> : locale.analyzeCrmLead}
                   </Button>
                 </Box>
 
@@ -844,10 +1262,10 @@ function IaPulsePageContent() {
             <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
               <Card.Body>
                 <Heading size="sm" mb={2}>
-                  Contrat client (phase 1 vers phase 2)
+                  {locale.contractHeading}
                 </Heading>
                 <Text fontSize="sm" color="whiteAlpha.800" mb={3}>
-                  Phase 1: chargez le contrat client rempli. Phase 2: les champs client mappes en Admin apparaissent automatiquement.
+                  {locale.contractSubtitle}
                 </Text>
 
                 <input
@@ -865,25 +1283,25 @@ function IaPulsePageContent() {
                 {contractSetup?.templateHref ? (
                   <Box mb={3} p={3} borderRadius="md" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                     <Text fontSize="xs" color="whiteAlpha.600">
-                      Template setup
+                      {locale.templateSetup}
                     </Text>
                     <Text fontSize="sm" color="whiteAlpha.900">
                       {contractSetup.templateHref}
                     </Text>
                     <Text mt={1} fontSize="xs" color="whiteAlpha.600">
-                      {contractSetup.fieldMappings.length} placeholders mapped in Admin.
+                      {templateText(locale.placeholdersMapped, { count: contractSetup.fieldMappings.length })}
                     </Text>
                   </Box>
                 ) : (
                   <Box mb={3} p={3} borderRadius="md" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                     <Text fontSize="sm" color="amber.200">
-                      Setup manquant. Configurez d abord le mapping dans Admin → Parameters → Customers.
+                      {locale.missingContractSetup}
                     </Text>
                     <a
                       href="/admin/parameters/customers"
                       className="mt-2 inline-block text-xs text-cyan-300 underline"
                     >
-                      Ouvrir setup contrat
+                      {locale.openContractSetup}
                     </a>
                   </Box>
                 )}
@@ -895,7 +1313,7 @@ function IaPulsePageContent() {
                     borderRadius="xl"
                     disabled={!contractSetup || loadingContractExtraction || applyingContractFields}
                   >
-                    {loadingContractExtraction ? <Spinner size="sm" /> : 'Charger contrat'}
+                    {loadingContractExtraction ? <Spinner size="sm" /> : locale.uploadContract}
                   </Button>
                   <Button
                     colorPalette="green"
@@ -903,13 +1321,13 @@ function IaPulsePageContent() {
                     borderRadius="xl"
                     disabled={!canApplyContractToClient || applyingContractFields || loadingContractExtraction}
                   >
-                    {applyingContractFields ? <Spinner size="sm" /> : 'Appliquer au client CRM'}
+                    {applyingContractFields ? <Spinner size="sm" /> : locale.applyToCrmClient}
                   </Button>
                 </Box>
 
                 {contractFileName ? (
                   <Text mt={2} fontSize="xs" color="whiteAlpha.600">
-                    Fichier: {contractFileName}
+                    {locale.file}: {contractFileName}
                   </Text>
                 ) : null}
 
@@ -917,7 +1335,7 @@ function IaPulsePageContent() {
                   <SimpleGrid mt={3} columns={{ base: 1, md: 2 }} gap={2}>
                     {extractedFieldEntries.map(([field, value]) => {
                       const mapping = contractSetup?.fieldMappings.find((item) => item.clientField === field);
-                      const label = mapping?.label?.trim() || CONTRACT_CLIENT_FIELD_LABELS[field] || field;
+                      const label = mapping?.label?.trim() || locale.contractFieldLabels[field] || field;
                       return (
                         <Box
                           key={field}
@@ -965,38 +1383,37 @@ function IaPulsePageContent() {
             <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
               <Card.Body>
                 <Heading size="sm" mb={2}>
-                  Gestion de pedidos
+                  {locale.orderManagement}
                 </Heading>
                 <Text fontSize="sm" color="whiteAlpha.800" mb={3}>
-                  Section dediee aux clients qui veulent administrer leurs pedidos, pagos et facturas depuis un seul
-                  espace.
+                  {locale.orderManagementSubtitle}
                 </Text>
 
                 <SimpleGrid columns={{ base: 1, md: 3 }} gap={3}>
                   <Box bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200" borderRadius="lg" p={3}>
                     <Text fontSize="xs" color="whiteAlpha.600" mb={1}>
-                      PEDIDOS
+                      {locale.orders}
                     </Text>
                     <Text fontSize="sm" color="whiteAlpha.900">
-                      Suivi du statut de commande, confirmation client et priorisation des livraisons.
+                      {locale.ordersDescription}
                     </Text>
                   </Box>
 
                   <Box bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200" borderRadius="lg" p={3}>
                     <Text fontSize="xs" color="whiteAlpha.600" mb={1}>
-                      PAGOS
+                      {locale.payments}
                     </Text>
                     <Text fontSize="sm" color="whiteAlpha.900">
-                      Controle des paiements recus, echeances et alertes de retard pour chaque compte client.
+                      {locale.paymentsDescription}
                     </Text>
                   </Box>
 
                   <Box bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200" borderRadius="lg" p={3}>
                     <Text fontSize="xs" color="whiteAlpha.600" mb={1}>
-                      FACTURAS
+                      {locale.invoices}
                     </Text>
                     <Text fontSize="sm" color="whiteAlpha.900">
-                      Acces rapide aux factures emises, suivi des statuts et preparation des relances.
+                      {locale.invoicesDescription}
                     </Text>
                   </Box>
                 </SimpleGrid>
@@ -1004,7 +1421,7 @@ function IaPulsePageContent() {
             </Card.Root>
 
             <Textarea
-              placeholder="Contexte additionnel: derniers echanges, objections, notes call..."
+              placeholder={locale.additionalContextPlaceholder}
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={6}
@@ -1015,7 +1432,7 @@ function IaPulsePageContent() {
             />
 
             <Input
-              placeholder="Nom du lead (pour les emails)"
+              placeholder={locale.leadNamePlaceholder}
               value={leadName}
               onChange={(e) => setLeadName(e.target.value)}
               bg="whiteAlpha.50"
@@ -1031,7 +1448,7 @@ function IaPulsePageContent() {
                 onClick={() => void analyzeLead(text.trim())}
                 borderRadius="xl"
               >
-                {loadingSentiment ? <Spinner size="sm" /> : 'Analyser texte'}
+                {loadingSentiment ? <Spinner size="sm" /> : locale.analyzeText}
               </Button>
 
               <Button
@@ -1040,7 +1457,7 @@ function IaPulsePageContent() {
                 onClick={() => void summarize(text.trim())}
                 borderRadius="xl"
               >
-                {loadingSummary ? <Spinner size="sm" /> : 'Resumer'}
+                {loadingSummary ? <Spinner size="sm" /> : locale.summarize}
               </Button>
 
               <Button
@@ -1049,7 +1466,7 @@ function IaPulsePageContent() {
                 onClick={() => void generateEmail(leadName.trim(), text.trim())}
                 borderRadius="xl"
               >
-                {loadingEmail ? <Spinner size="sm" /> : 'Generer email'}
+                {loadingEmail ? <Spinner size="sm" /> : locale.generateEmail}
               </Button>
 
               <Button
@@ -1058,7 +1475,7 @@ function IaPulsePageContent() {
                 onClick={() => void improveProposal(text.trim())}
                 borderRadius="xl"
               >
-                {loadingImprove ? <Spinner size="sm" /> : 'Ameliorer devis'}
+                {loadingImprove ? <Spinner size="sm" /> : locale.improveProposal}
               </Button>
             </SimpleGrid>
 
@@ -1070,7 +1487,7 @@ function IaPulsePageContent() {
                   onClick={() => void fetchDiagnostics()}
                   borderRadius="xl"
                 >
-                  {loadingDiagnostics ? <Spinner size="sm" /> : 'Diagnostic IA'}
+                  {loadingDiagnostics ? <Spinner size="sm" /> : locale.aiDiagnostics}
                 </Button>
                 <Button
                   variant="outline"
@@ -1078,7 +1495,7 @@ function IaPulsePageContent() {
                   onClick={clearAll}
                   borderRadius="xl"
                 >
-                  Effacer tout
+                  {locale.clearAll}
                 </Button>
               </SimpleGrid>
             </Box>
@@ -1088,7 +1505,7 @@ function IaPulsePageContent() {
             <Alert.Root status="error" mt={6} borderRadius="md">
               <Alert.Indicator />
               <Alert.Content>
-                <Alert.Title>Erreur</Alert.Title>
+                <Alert.Title>{locale.error}</Alert.Title>
                 <Alert.Description>
                   <Box mt={1}>
                     {errors.map((message, idx) => (
@@ -1104,7 +1521,7 @@ function IaPulsePageContent() {
             <Alert.Root status="warning" mt={4} borderRadius="md">
               <Alert.Indicator />
               <Alert.Content>
-                <Alert.Title>Diagnostic IA</Alert.Title>
+                <Alert.Title>{locale.aiDiagnostics}</Alert.Title>
                 <Alert.Description>{errorDiagnostics}</Alert.Description>
               </Alert.Content>
             </Alert.Root>
@@ -1117,13 +1534,13 @@ function IaPulsePageContent() {
               <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
                 <Card.Body>
                   <Heading size="sm" mb={3}>
-                    Analyse lead CRM
+                    {locale.crmLeadAnalysis}
                   </Heading>
 
                   <SimpleGrid columns={{ base: 1, md: 3 }} gap={3}>
                     <Box>
                       <Text fontSize="xs" color="whiteAlpha.600">
-                        Score
+                        {locale.score}
                       </Text>
                       <Text fontSize="2xl" fontWeight="bold">
                         {leadAnalysis.analysis.score}/100
@@ -1131,7 +1548,7 @@ function IaPulsePageContent() {
                     </Box>
                     <Box>
                       <Text fontSize="xs" color="whiteAlpha.600">
-                        Win Probability
+                        {locale.winProbability}
                       </Text>
                       <Text fontSize="2xl" fontWeight="bold">
                         {Math.round(leadAnalysis.analysis.winProbability * 100)}%
@@ -1139,7 +1556,7 @@ function IaPulsePageContent() {
                     </Box>
                     <Box>
                       <Text fontSize="xs" color="whiteAlpha.600">
-                        Risk
+                        {locale.risk}
                       </Text>
                       <Text fontSize="2xl" fontWeight="bold">
                         {leadAnalysis.analysis.lossRisk}
@@ -1162,7 +1579,7 @@ function IaPulsePageContent() {
                   {leadAnalysis.analysis.reasons.length > 0 ? (
                     <Box mt={3}>
                       <Text fontWeight="semibold" mb={1}>
-                        Raisons
+                        {locale.reasons}
                       </Text>
                       <Stack gap={1}>
                         {leadAnalysis.analysis.reasons.map((reason) => (
@@ -1177,7 +1594,7 @@ function IaPulsePageContent() {
                   {leadAnalysis.analysis.nextBestActions.length > 0 ? (
                     <Box mt={3}>
                       <Text fontWeight="semibold" mb={1}>
-                        Next Best Actions
+                        {locale.nextBestActions}
                       </Text>
                       <Stack gap={1}>
                         {leadAnalysis.analysis.nextBestActions.map((action) => (
@@ -1192,7 +1609,7 @@ function IaPulsePageContent() {
                   {crmActionPlan.length > 0 ? (
                     <Box mt={3}>
                       <Text fontWeight="semibold" mb={1}>
-                        Plan d action propose
+                        {locale.proposedActionPlan}
                       </Text>
                       <Stack gap={1}>
                         {crmActionPlan.map((step, index) => (
@@ -1206,7 +1623,7 @@ function IaPulsePageContent() {
 
                   <Box mt={4} display="flex" justifyContent="space-between" alignItems="center" gap={3}>
                     <Text fontSize="sm" color="whiteAlpha.700">
-                      Recommendation: {leadAnalysis.analysis.recommendedOutcome}
+                      {locale.recommendation}: {leadAnalysis.analysis.recommendedOutcome}
                       {leadAnalysis.analysis.recommendedStageName
                         ? ` → ${leadAnalysis.analysis.recommendedStageName}`
                         : ''}
@@ -1217,7 +1634,7 @@ function IaPulsePageContent() {
                       disabled={!canApplyRecommendation || applyingRecommendation}
                       borderRadius="xl"
                     >
-                      {applyingRecommendation ? <Spinner size="sm" /> : 'Appliquer recommandation'}
+                      {applyingRecommendation ? <Spinner size="sm" /> : locale.applyRecommendation}
                     </Button>
                   </Box>
 
@@ -1229,10 +1646,10 @@ function IaPulsePageContent() {
                     <Card.Root mt={4} bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                       <Card.Body>
                         <Heading size="xs" mb={2}>
-                          Email pret a envoyer
+                          {locale.emailReadyToSend}
                         </Heading>
                         <Text fontSize="sm" fontWeight="semibold">
-                          Objet: {crmEmailDraft.subject}
+                          {locale.subject}: {crmEmailDraft.subject}
                         </Text>
                         <Text mt={2} fontSize="sm" whiteSpace="pre-wrap" color="whiteAlpha.900">
                           {crmEmailDraft.body}
@@ -1242,13 +1659,13 @@ function IaPulsePageContent() {
                             size="sm"
                             onClick={() =>
                               void copyToClipboard(
-                                `Objet: ${crmEmailDraft.subject}\n\n${crmEmailDraft.body}`,
-                                'Email',
+                                `${locale.subject}: ${crmEmailDraft.subject}\n\n${crmEmailDraft.body}`,
+                                locale.emailLabel,
                               )
                             }
                             borderRadius="lg"
                           >
-                            Copier email
+                            {locale.copyEmail}
                           </Button>
                         </Box>
                       </Card.Body>
@@ -1259,7 +1676,7 @@ function IaPulsePageContent() {
                     <Card.Root mt={3} bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                       <Card.Body>
                         <Heading size="xs" mb={2}>
-                          WhatsApp pret a envoyer
+                          {locale.whatsappReadyToSend}
                         </Heading>
                         <Text fontSize="sm" whiteSpace="pre-wrap" color="whiteAlpha.900">
                           {crmWhatsappDraft}
@@ -1267,13 +1684,13 @@ function IaPulsePageContent() {
                         <SimpleGrid mt={3} columns={{ base: 1, sm: 2 }} gap={2}>
                           <Button
                             size="sm"
-                            onClick={() => void copyToClipboard(crmWhatsappDraft, 'WhatsApp')}
+                            onClick={() => void copyToClipboard(crmWhatsappDraft, locale.whatsappLabel)}
                             borderRadius="lg"
                           >
-                            Copier WhatsApp
+                            {locale.copyWhatsapp}
                           </Button>
                           <Button size="sm" colorPalette="green" onClick={openWhatsApp} borderRadius="lg">
-                            Ouvrir WhatsApp
+                            {locale.openWhatsapp}
                           </Button>
                         </SimpleGrid>
                       </Card.Body>
@@ -1287,7 +1704,7 @@ function IaPulsePageContent() {
               <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
                 <Card.Body>
                   <Heading size="sm" mb={2}>
-                    Diagnostic runtime
+                    {locale.runtimeDiagnostics}
                   </Heading>
                   <Box as="pre" fontSize="xs" whiteSpace="pre-wrap">
                     {JSON.stringify(diagnostics, null, 2)}
@@ -1300,7 +1717,7 @@ function IaPulsePageContent() {
               <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
                 <Card.Body>
                   <Heading size="sm" mb={2}>
-                    Analyse de sentiment
+                    {locale.sentimentAnalysis}
                   </Heading>
                   <Box as="pre" fontSize="sm" whiteSpace="pre-wrap">
                     {JSON.stringify(sentiment, null, 2)}
@@ -1313,7 +1730,7 @@ function IaPulsePageContent() {
               <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
                 <Card.Body>
                   <Heading size="sm" mb={2}>
-                    Resume
+                    {locale.summary}
                   </Heading>
                   <Text whiteSpace="pre-wrap">{summary.summary}</Text>
                 </Card.Body>
@@ -1324,9 +1741,9 @@ function IaPulsePageContent() {
               <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
                 <Card.Body>
                   <Heading size="sm" mb={2}>
-                    Email genere
+                    {locale.generatedEmail}
                   </Heading>
-                  <Text fontWeight="bold">Objet :</Text>
+                  <Text fontWeight="bold">{locale.subject}:</Text>
                   <Text mb={3}>{draftEmail.subject || '—'}</Text>
                   <Text whiteSpace="pre-wrap">{draftEmail.body || '—'}</Text>
                 </Card.Body>
@@ -1337,7 +1754,7 @@ function IaPulsePageContent() {
               <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
                 <Card.Body>
                   <Heading size="sm" mb={2}>
-                    Proposition amelioree
+                    {locale.improvedProposal}
                   </Heading>
                   <Text whiteSpace="pre-wrap">{improvedProposal.improvedProposal}</Text>
                 </Card.Body>
