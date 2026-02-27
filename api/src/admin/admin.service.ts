@@ -5,6 +5,7 @@ import { RequestUser } from '../common/user.decorator';
 import { Prisma } from '@prisma/client';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { CreateUserInviteDto } from './dto/create-user-invite.dto';
+import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 
 @Injectable()
 export class AdminService {
@@ -37,6 +38,43 @@ export class AdminService {
     if (!dbUser) throw new NotFoundException('User not found');
     if (dbUser.role !== 'OWNER' && dbUser.role !== 'ADMIN') {
       throw new ForbiddenException('Admin access required');
+    }
+  }
+
+  private async getCustomerSeatLimit(tenantId: string): Promise<number | null> {
+    try {
+      const activeSubscription = await this.prisma.subscription.findFirst({
+        where: { customerTenantId: tenantId, status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
+        select: { seats: true },
+      });
+      if (!activeSubscription) return null;
+      return Math.max(1, activeSubscription.seats || 1);
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  private async ensureInviteSeatCapacity(tenantId: string) {
+    const seatLimit = await this.getCustomerSeatLimit(tenantId);
+    if (seatLimit === null) return;
+
+    try {
+      const [memberCount, pendingInvites] = await Promise.all([
+        this.prisma.user.count({ where: { tenantId } }),
+        this.prisma.userInvite.count({ where: { tenantId, status: 'PENDING' } }),
+      ]);
+      if (memberCount + pendingInvites >= seatLimit) {
+        throw new BadRequestException(
+          `User limit reached (${seatLimit}). Increase subscription users before sending another invite.`,
+        );
+      }
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
     }
   }
 
@@ -123,6 +161,8 @@ export class AdminService {
           },
         });
       }
+
+      await this.ensureInviteSeatCapacity(user.tenantId);
 
       return this.prisma.userInvite.create({
         data: {
@@ -252,6 +292,9 @@ export class AdminService {
             : 'TRIAL';
 
         const deriveSeats = () => {
+          if (typeof dto.seats === 'number') {
+            return Math.min(30, Math.max(1, dto.seats));
+          }
           switch (plan) {
             case 'PULSE_BASIC':
               return 1;
@@ -261,10 +304,8 @@ export class AdminService {
               return 5;
             case 'PULSE_ADVANCED_PLUS':
               return 10;
-            case 'PULSE_TEAM': {
-              const requested = typeof dto.seats === 'number' ? dto.seats : 20;
-              return Math.min(30, Math.max(11, requested));
-            }
+            case 'PULSE_TEAM':
+              return 20;
             case 'TRIAL':
             default:
               return 1;
@@ -301,6 +342,76 @@ export class AdminService {
             plan,
             seats,
             trialEndsAt,
+          },
+          select: {
+            id: true,
+            customerName: true,
+            customerTenantId: true,
+            contactFirstName: true,
+            contactLastName: true,
+            contactEmail: true,
+            plan: true,
+            seats: true,
+            trialEndsAt: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  async updateSubscription(id: string, dto: UpdateSubscriptionDto, user: RequestUser) {
+    await this.ensureAdmin(user);
+
+    const hasChanges =
+      dto.customerName !== undefined ||
+      dto.contactFirstName !== undefined ||
+      dto.contactLastName !== undefined ||
+      dto.contactEmail !== undefined ||
+      dto.seats !== undefined;
+    if (!hasChanges) throw new BadRequestException('No fields provided');
+
+    const normalize = (value: string | null | undefined) => {
+      if (value === null) return null;
+      if (value === undefined) return undefined;
+      const v = value.trim();
+      return v ? v : null;
+    };
+
+    const trimmedCustomerName = dto.customerName?.trim();
+    if (dto.customerName !== undefined && !trimmedCustomerName) {
+      throw new BadRequestException('Customer name is required');
+    }
+
+    try {
+      const existing = await this.prisma.subscription.findFirst({
+        where: { id, tenantId: user.tenantId },
+        select: { id: true, customerTenantId: true },
+      });
+      if (!existing) throw new NotFoundException('Subscription not found');
+
+      return await this.prisma.$transaction(async (tx) => {
+        if (trimmedCustomerName) {
+          await tx.tenant.updateMany({
+            where: { id: existing.customerTenantId },
+            data: { name: trimmedCustomerName },
+          });
+        }
+
+        return tx.subscription.update({
+          where: { id: existing.id },
+          data: {
+            customerName: trimmedCustomerName || undefined,
+            contactFirstName: normalize(dto.contactFirstName),
+            contactLastName: normalize(dto.contactLastName),
+            contactEmail: normalize(dto.contactEmail),
+            seats: typeof dto.seats === 'number' ? Math.min(30, Math.max(1, dto.seats)) : undefined,
           },
           select: {
             id: true,

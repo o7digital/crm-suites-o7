@@ -7,6 +7,40 @@ import { useApi, useAuth } from '../../../contexts/AuthContext';
 import { useI18n } from '../../../contexts/I18nContext';
 import { industryGroups, industryLabel, industryRecommendedMode } from '../../../lib/industries';
 
+type SubscriptionItem = {
+  id: string;
+  customerName: string;
+  customerTenantId: string;
+  contactFirstName?: string | null;
+  contactLastName?: string | null;
+  contactEmail?: string | null;
+  plan?: string | null;
+  seats?: number | null;
+  trialEndsAt?: string | null;
+  status: 'ACTIVE' | 'PAUSED' | 'CANCELED';
+  createdAt: string;
+  updatedAt: string;
+};
+
+type LinkDraft = {
+  customerName: string;
+  contactFirstName: string;
+  contactLastName: string;
+  contactEmail: string;
+  seats: number;
+};
+
+type SubscriptionPlan = 'TRIAL' | 'PULSE_BASIC' | 'PULSE_STANDARD' | 'PULSE_ADVANCED' | 'PULSE_ADVANCED_PLUS' | 'PULSE_TEAM';
+
+const DEFAULT_SEATS_BY_PLAN: Record<SubscriptionPlan, number> = {
+  TRIAL: 1,
+  PULSE_BASIC: 1,
+  PULSE_STANDARD: 3,
+  PULSE_ADVANCED: 5,
+  PULSE_ADVANCED_PLUS: 10,
+  PULSE_TEAM: 20,
+};
+
 export default function AdminSubscriptionsPage() {
   const { token } = useAuth();
   const api = useApi(token);
@@ -14,24 +48,12 @@ export default function AdminSubscriptionsPage() {
   const INDUSTRY_GROUPS = industryGroups();
 
   const [origin, setOrigin] = useState('');
-  const [items, setItems] = useState<
-    Array<{
-      id: string;
-      customerName: string;
-      customerTenantId: string;
-      contactFirstName?: string | null;
-      contactLastName?: string | null;
-      contactEmail?: string | null;
-      plan?: string | null;
-      seats?: number | null;
-      trialEndsAt?: string | null;
-      status: 'ACTIVE' | 'PAUSED' | 'CANCELED';
-      createdAt: string;
-      updatedAt: string;
-    }>
-  >([]);
+  const [items, setItems] = useState<SubscriptionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [savingSubscriptionId, setSavingSubscriptionId] = useState<string | null>(null);
+  const [editingSubscriptionId, setEditingSubscriptionId] = useState<string | null>(null);
+  const [linkDraftsById, setLinkDraftsById] = useState<Record<string, LinkDraft>>({});
   const [customerName, setCustomerName] = useState('');
   const [contactFirstName, setContactFirstName] = useState('');
   const [contactLastName, setContactLastName] = useState('');
@@ -40,10 +62,8 @@ export default function AdminSubscriptionsPage() {
   const [crmModeLocked, setCrmModeLocked] = useState(false);
   const [industryId, setIndustryId] = useState('');
   const [industryOther, setIndustryOther] = useState('');
-  const [plan, setPlan] = useState<
-    'TRIAL' | 'PULSE_BASIC' | 'PULSE_STANDARD' | 'PULSE_ADVANCED' | 'PULSE_ADVANCED_PLUS' | 'PULSE_TEAM'
-  >('TRIAL');
-  const [teamSeats, setTeamSeats] = useState(20);
+  const [plan, setPlan] = useState<SubscriptionPlan>('TRIAL');
+  const [seats, setSeats] = useState(DEFAULT_SEATS_BY_PLAN.TRIAL);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -82,6 +102,135 @@ export default function AdminSubscriptionsPage() {
     [origin],
   );
 
+  const getDefaultDraft = useCallback((sub: SubscriptionItem): LinkDraft => {
+    return {
+      customerName: sub.customerName || '',
+      contactFirstName: sub.contactFirstName || '',
+      contactLastName: sub.contactLastName || '',
+      contactEmail: sub.contactEmail || '',
+      seats: Math.min(30, Math.max(1, sub.seats || 1)),
+    };
+  }, []);
+
+  const getLinkDraft = useCallback(
+    (sub: SubscriptionItem): LinkDraft => {
+      return linkDraftsById[sub.id] || getDefaultDraft(sub);
+    },
+    [getDefaultDraft, linkDraftsById],
+  );
+
+  const buildInviteUrlFromDraft = useCallback(
+    (sub: SubscriptionItem, draft: LinkDraft) => {
+      const contactName = [draft.contactFirstName, draft.contactLastName].filter(Boolean).join(' ').trim();
+      return buildInviteUrl({
+        tenantId: sub.customerTenantId,
+        tenantName: draft.customerName.trim() || sub.customerName,
+        contactName: contactName || undefined,
+        contactEmail: draft.contactEmail.trim() || undefined,
+      });
+    },
+    [buildInviteUrl],
+  );
+
+  const updateLinkDraft = useCallback((subscriptionId: string, patch: Partial<LinkDraft>) => {
+    setLinkDraftsById((prev) => {
+      const current = prev[subscriptionId] || { customerName: '', contactFirstName: '', contactLastName: '', contactEmail: '', seats: 1 };
+      return {
+        ...prev,
+        [subscriptionId]: {
+          ...current,
+          ...patch,
+        },
+      };
+    });
+  }, []);
+
+  const startEditingLink = useCallback(
+    (sub: SubscriptionItem) => {
+      setError(null);
+      setInfo(null);
+      setEditingSubscriptionId(sub.id);
+      setLinkDraftsById((prev) => {
+        if (prev[sub.id]) return prev;
+        return {
+          ...prev,
+          [sub.id]: getDefaultDraft(sub),
+        };
+      });
+    },
+    [getDefaultDraft],
+  );
+
+  const cancelEditingLink = useCallback((sub: SubscriptionItem) => {
+    setEditingSubscriptionId((prev) => (prev === sub.id ? null : prev));
+    setLinkDraftsById((prev) => {
+      const next = { ...prev };
+      delete next[sub.id];
+      return next;
+    });
+  }, []);
+
+  const copyUrl = useCallback(
+    async (url: string) => {
+      if (!url) return;
+      setInfo(null);
+      setError(null);
+      try {
+        await navigator.clipboard.writeText(url);
+        setInfo(t('adminSubscriptions.copied'));
+      } catch {
+        setInfo(t('adminSubscriptions.copyFailed'));
+      }
+    },
+    [t],
+  );
+
+  const saveSubscriptionLinkData = useCallback(
+    async (sub: SubscriptionItem) => {
+      const draft = getLinkDraft(sub);
+      const nextCustomerName = draft.customerName.trim();
+      if (!nextCustomerName) {
+        setError(t('adminSubscriptions.customerNameRequired'));
+        return;
+      }
+
+      setSavingSubscriptionId(sub.id);
+      setError(null);
+      setInfo(null);
+
+      try {
+        const updated = await api<SubscriptionItem>(`/admin/subscriptions/${sub.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            customerName: nextCustomerName,
+            contactFirstName: draft.contactFirstName.trim() || null,
+            contactLastName: draft.contactLastName.trim() || null,
+            contactEmail: draft.contactEmail.trim() || null,
+            seats: draft.seats,
+          }),
+        });
+
+        setItems((prev) => prev.map((row) => (row.id === sub.id ? updated : row)));
+        setEditingSubscriptionId(null);
+        setLinkDraftsById((prev) => {
+          const next = { ...prev };
+          delete next[sub.id];
+          return next;
+        });
+
+        const updatedDraft = getDefaultDraft(updated);
+        await copyUrl(buildInviteUrlFromDraft(updated, updatedDraft));
+        setInfo(t('adminSubscriptions.updatedAndCopied'));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to update subscription';
+        setError(message);
+      } finally {
+        setSavingSubscriptionId(null);
+      }
+    },
+    [api, buildInviteUrlFromDraft, copyUrl, getDefaultDraft, getLinkDraft, t],
+  );
+
   const create = async (e: FormEvent) => {
     e.preventDefault();
     setInfo(null);
@@ -95,7 +244,7 @@ export default function AdminSubscriptionsPage() {
 
     setCreating(true);
     try {
-      const created = await api<(typeof items)[number]>('/admin/subscriptions', {
+      const created = await api<SubscriptionItem>('/admin/subscriptions', {
         method: 'POST',
         body: JSON.stringify({
           customerName: name,
@@ -105,7 +254,7 @@ export default function AdminSubscriptionsPage() {
           crmMode,
           industry: industryValue,
           plan,
-          seats: plan === 'PULSE_TEAM' ? teamSeats : undefined,
+          seats,
         }),
       });
       setItems((prev) => [created, ...prev]);
@@ -118,7 +267,7 @@ export default function AdminSubscriptionsPage() {
       setCrmMode('B2B');
       setCrmModeLocked(false);
       setPlan('TRIAL');
-      setTeamSeats(20);
+      setSeats(DEFAULT_SEATS_BY_PLAN.TRIAL);
 
       const contactName = [created.contactFirstName, created.contactLastName].filter(Boolean).join(' ').trim();
       const url = buildInviteUrl({
@@ -143,37 +292,20 @@ export default function AdminSubscriptionsPage() {
     }
   };
 
-  const copyInvite = async (sub: (typeof items)[number]) => {
-    setInfo(null);
-    setError(null);
-    const contactName = [sub.contactFirstName, sub.contactLastName].filter(Boolean).join(' ').trim();
-    const url = buildInviteUrl({
-      tenantId: sub.customerTenantId,
-      tenantName: sub.customerName,
-      contactName: contactName || undefined,
-      contactEmail: sub.contactEmail || undefined,
-    });
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      setInfo(t('adminSubscriptions.copied'));
-    } catch {
-      setInfo(t('adminSubscriptions.copyFailed'));
-    }
+  const copyInvite = async (sub: SubscriptionItem) => {
+    const draft = getLinkDraft(sub);
+    await copyUrl(buildInviteUrlFromDraft(sub, draft));
   };
 
   const rows = useMemo(
     () =>
       items.map((sub) => ({
         ...sub,
-        inviteUrl: buildInviteUrl({
-          tenantId: sub.customerTenantId,
-          tenantName: sub.customerName,
-          contactName: [sub.contactFirstName, sub.contactLastName].filter(Boolean).join(' ').trim() || undefined,
-          contactEmail: sub.contactEmail || undefined,
-        }),
+        isEditing: editingSubscriptionId === sub.id,
+        draft: getLinkDraft(sub),
+        inviteUrl: buildInviteUrlFromDraft(sub, getLinkDraft(sub)),
       })),
-    [buildInviteUrl, items],
+    [buildInviteUrlFromDraft, editingSubscriptionId, getLinkDraft, items],
   );
 
   return (
@@ -234,44 +366,40 @@ export default function AdminSubscriptionsPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-[1.4fr_220px_1fr_auto] lg:items-end">
+            <div className="grid gap-3 lg:grid-cols-[1.2fr_180px_220px_1fr_auto] lg:items-end">
               <div>
                 <label className="text-sm text-slate-300">{t('adminSubscriptions.plan')}</label>
-                <div className="mt-1 grid gap-2 sm:grid-cols-2">
-                  <select
-                    className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
-                    value={plan}
-                    onChange={(e) =>
-                      setPlan(
-                        e.target.value as typeof plan,
-                      )
-                    }
-                  >
-                    <option value="TRIAL">{t('adminSubscriptions.planTrial')}</option>
-                    <option value="PULSE_BASIC">{t('adminSubscriptions.planBasic')}</option>
-                    <option value="PULSE_STANDARD">{t('adminSubscriptions.planStandard')}</option>
-                    <option value="PULSE_ADVANCED">{t('adminSubscriptions.planAdvanced')}</option>
-                    <option value="PULSE_ADVANCED_PLUS">{t('adminSubscriptions.planAdvancedPlus')}</option>
-                    <option value="PULSE_TEAM">{t('adminSubscriptions.planTeam')}</option>
-                  </select>
-
-                  {plan === 'PULSE_TEAM' ? (
-                    <select
-                      className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
-                      value={teamSeats}
-                      onChange={(e) => setTeamSeats(Number(e.target.value))}
-                      aria-label={t('adminSubscriptions.seats')}
-                    >
-                      {Array.from({ length: 20 }, (_, i) => 11 + i).map((n) => (
-                        <option key={n} value={n}>
-                          {n} {t('adminSubscriptions.users')}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="hidden sm:block" />
-                  )}
-                </div>
+                <select
+                  className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                  value={plan}
+                  onChange={(e) => {
+                    const nextPlan = e.target.value as SubscriptionPlan;
+                    setPlan(nextPlan);
+                    setSeats(DEFAULT_SEATS_BY_PLAN[nextPlan]);
+                  }}
+                >
+                  <option value="TRIAL">{t('adminSubscriptions.planTrial')}</option>
+                  <option value="PULSE_BASIC">{t('adminSubscriptions.planBasic')}</option>
+                  <option value="PULSE_STANDARD">{t('adminSubscriptions.planStandard')}</option>
+                  <option value="PULSE_ADVANCED">{t('adminSubscriptions.planAdvanced')}</option>
+                  <option value="PULSE_ADVANCED_PLUS">{t('adminSubscriptions.planAdvancedPlus')}</option>
+                  <option value="PULSE_TEAM">{t('adminSubscriptions.planTeam')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm text-slate-300">{t('adminSubscriptions.seats')}</label>
+                <select
+                  className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                  value={seats}
+                  onChange={(e) => setSeats(Number(e.target.value))}
+                  aria-label={t('adminSubscriptions.seats')}
+                >
+                  {Array.from({ length: 30 }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>
+                      {n} {t('adminSubscriptions.users')}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="text-sm text-slate-300">{t('adminSubscriptions.crmMode')}</label>
@@ -399,7 +527,7 @@ export default function AdminSubscriptionsPage() {
                                   : sub.plan === 'PULSE_TEAM'
                                     ? t('adminSubscriptions.planTeam')
                                     : t('adminSubscriptions.planTrial')}
-                          {sub.plan === 'PULSE_TEAM' && sub.seats ? ` · ${sub.seats} ${t('adminSubscriptions.users')}` : ''}
+                          {sub.seats ? ` · ${sub.seats} ${t('adminSubscriptions.users')}` : ''}
                         </p>
                         {sub.plan === 'TRIAL' && sub.trialEndsAt ? (
                           <p className="mt-1 text-xs text-slate-400">
@@ -410,15 +538,91 @@ export default function AdminSubscriptionsPage() {
                         ) : null}
                       </td>
                       <td className="py-3">
-                        <button
-                          type="button"
-                          className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10 disabled:opacity-50"
-                          onClick={() => copyInvite(sub)}
-                          disabled={!sub.inviteUrl}
-                        >
-                          {t('adminSubscriptions.copyLink')}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10 disabled:opacity-50"
+                            onClick={() => void copyInvite(sub)}
+                            disabled={!sub.inviteUrl}
+                          >
+                            {t('adminSubscriptions.copyLink')}
+                          </button>
+                          {!sub.isEditing ? (
+                            <button
+                              type="button"
+                              className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10"
+                              onClick={() => startEditingLink(sub)}
+                            >
+                              {t('adminSubscriptions.editLink')}
+                            </button>
+                          ) : null}
+                        </div>
                         <p className="mt-2 break-all font-mono text-xs text-slate-300">{sub.inviteUrl || '—'}</p>
+
+                        {sub.isEditing ? (
+                          <div className="mt-3 rounded-lg bg-white/5 p-3 ring-1 ring-white/10">
+                            <p className="text-xs font-semibold text-slate-200">{t('adminSubscriptions.editLinkTitle')}</p>
+                            <div className="mt-2 grid gap-2 md:grid-cols-2">
+                              <input
+                                className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                value={sub.draft.customerName}
+                                onChange={(e) => updateLinkDraft(sub.id, { customerName: e.target.value })}
+                                placeholder={t('adminSubscriptions.customerNamePlaceholder')}
+                              />
+                              <input
+                                className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                value={sub.draft.contactEmail}
+                                onChange={(e) => updateLinkDraft(sub.id, { contactEmail: e.target.value })}
+                                placeholder={t('adminSubscriptions.contactEmailPlaceholder')}
+                                type="email"
+                              />
+                              <input
+                                className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                value={sub.draft.contactFirstName}
+                                onChange={(e) => updateLinkDraft(sub.id, { contactFirstName: e.target.value })}
+                                placeholder={t('adminSubscriptions.contactFirstNamePlaceholder')}
+                              />
+                              <input
+                                className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                value={sub.draft.contactLastName}
+                                onChange={(e) => updateLinkDraft(sub.id, { contactLastName: e.target.value })}
+                                placeholder={t('adminSubscriptions.contactLastNamePlaceholder')}
+                              />
+                              <select
+                                className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                value={sub.draft.seats}
+                                onChange={(e) => updateLinkDraft(sub.id, { seats: Number(e.target.value) })}
+                                aria-label={t('adminSubscriptions.seats')}
+                              >
+                                {Array.from({ length: 30 }, (_, i) => i + 1).map((n) => (
+                                  <option key={n} value={n}>
+                                    {n} {t('adminSubscriptions.users')}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                className="rounded-lg bg-cyan-500/20 px-3 py-1.5 text-xs font-semibold text-cyan-100 ring-1 ring-cyan-300/40 hover:bg-cyan-500/30 disabled:opacity-50"
+                                onClick={() => void saveSubscriptionLinkData(sub)}
+                                disabled={savingSubscriptionId === sub.id}
+                              >
+                                {savingSubscriptionId === sub.id
+                                  ? t('adminSubscriptions.saving')
+                                  : t('adminSubscriptions.saveLinkData')}
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-lg bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 ring-1 ring-white/10 hover:bg-white/10"
+                                onClick={() => cancelEditingLink(sub)}
+                                disabled={savingSubscriptionId === sub.id}
+                              >
+                                {t('adminSubscriptions.cancel')}
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
                       </td>
                       <td className="py-3 text-slate-400">{new Date(sub.createdAt).toLocaleDateString()}</td>
                     </tr>

@@ -81,13 +81,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('user', JSON.stringify(mappedUser));
   }, []);
 
-  const bootstrapTenant = useCallback(async (accessToken: string) => {
-    await fetch(`${API_BASE_URL}/bootstrap`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }).catch(() => undefined);
+  const bootstrapTenant = useCallback(async (accessToken: string, opts?: { ignoreErrors?: boolean }) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/bootstrap`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      if (res.ok) return;
+      if (opts?.ignoreErrors) return;
+
+      let extractedMessage = '';
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        try {
+          const payload = (await res.json()) as { message?: string | string[]; error?: string };
+          if (typeof payload.message === 'string' && payload.message.trim()) extractedMessage = payload.message.trim();
+          if (Array.isArray(payload.message) && payload.message.length > 0) {
+            const joined = payload.message.filter((x) => typeof x === 'string').join('; ');
+            if (joined) extractedMessage = joined;
+          }
+          if (!extractedMessage && typeof payload.error === 'string' && payload.error.trim()) {
+            extractedMessage = payload.error.trim();
+          }
+        } catch {
+          // Fallback below if payload parsing fails.
+        }
+      }
+      throw new Error(extractedMessage || 'Unable to bootstrap workspace');
+    } catch (err) {
+      if (opts?.ignoreErrors) return;
+      throw err instanceof Error ? err : new Error('Unable to bootstrap workspace');
+    }
   }, []);
 
   useEffect(() => {
@@ -103,7 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const session = data.session;
       if (session) {
         // Keep tenant bootstrap up-to-date for existing sessions (new pipelines/stages, etc.).
-        await bootstrapTenant(session.access_token);
+        await bootstrapTenant(session.access_token, { ignoreErrors: true });
         syncSession(session);
       }
       setLoading(false);

@@ -5,6 +5,7 @@ import type { RequestUser } from '../common/user.decorator';
 import { AdminService } from './admin.service';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { CreateUserInviteDto } from './dto/create-user-invite.dto';
+import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -45,5 +46,10 @@ export class AdminController {
   @Post('subscriptions')
   createSubscription(@Body() dto: CreateSubscriptionDto, @CurrentUser() user: RequestUser) {
     return this.adminService.createSubscription(dto, user);
+  }
+
+  @Patch('subscriptions/:id')
+  updateSubscription(@Param('id') id: string, @Body() dto: UpdateSubscriptionDto, @CurrentUser() user: RequestUser) {
+    return this.adminService.updateSubscription(id, dto, user);
   }
 }

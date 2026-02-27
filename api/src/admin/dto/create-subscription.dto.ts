@@ -26,7 +26,7 @@ export class CreateSubscriptionDto {
   @IsIn(['TRIAL', 'PULSE_BASIC', 'PULSE_STANDARD', 'PULSE_ADVANCED', 'PULSE_ADVANCED_PLUS', 'PULSE_TEAM'])
   plan?: 'TRIAL' | 'PULSE_BASIC' | 'PULSE_STANDARD' | 'PULSE_ADVANCED' | 'PULSE_ADVANCED_PLUS' | 'PULSE_TEAM';
 
-  // Used only for PULSE_TEAM (11..30). Other plans ignore it.
+  // Number of users allowed for this customer workspace.
   @IsOptional()
   @IsInt()
   @Min(1)

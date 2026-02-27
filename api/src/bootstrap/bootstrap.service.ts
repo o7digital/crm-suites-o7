@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
@@ -25,6 +25,18 @@ export class BootstrapService {
       where: { id: user.userId, tenantId: user.tenantId },
       select: { id: true, role: true },
     });
+
+    if (!existingUser) {
+      const seatLimit = await this.getSeatLimit(user.tenantId);
+      if (seatLimit !== null) {
+        const currentUsers = await this.prisma.user.count({ where: { tenantId: user.tenantId } });
+        if (currentUsers >= seatLimit) {
+          throw new ForbiddenException(
+            `User limit reached (${seatLimit}). Increase subscription users before adding another member.`,
+          );
+        }
+      }
+    }
 
     const normalizedEmail = (user.email || '').trim().toLowerCase();
     let pendingInvite:
@@ -243,6 +255,23 @@ export class BootstrapService {
       if (defaultCount === 0) {
         await this.prisma.pipeline.update({ where: { id: newSales.id }, data: { isDefault: true } });
       }
+    }
+  }
+
+  private async getSeatLimit(tenantId: string): Promise<number | null> {
+    try {
+      const subscription = await this.prisma.subscription.findFirst({
+        where: { customerTenantId: tenantId, status: 'ACTIVE' },
+        orderBy: { createdAt: 'desc' },
+        select: { seats: true },
+      });
+      if (!subscription) return null;
+      return Math.max(1, subscription.seats || 1);
+    } catch (err) {
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || (err.code !== 'P2021' && err.code !== 'P2022')) {
+        throw err;
+      }
+      return null;
     }
   }
 
