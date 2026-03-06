@@ -82,6 +82,24 @@ function createInviteRow(): CreateInviteRow {
   };
 }
 
+const DISPLAY_NAME_EMAIL_PATTERN = /^(.*?)\s*<\s*([^<>\s@]+@[^<>\s@]+\.[^<>\s@]+)\s*>\s*$/;
+const SIMPLE_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeEmailInput(value: string) {
+  const trimmed = value.trim();
+  const match = trimmed.match(DISPLAY_NAME_EMAIL_PATTERN);
+  if (match?.[2]) return match[2];
+  return trimmed;
+}
+
+function normalizeEmailValue(value: string) {
+  return normalizeEmailInput(value).trim().toLowerCase();
+}
+
+function isValidEmailValue(value: string) {
+  return SIMPLE_EMAIL_PATTERN.test(normalizeEmailInput(value).trim());
+}
+
 export default function AdminSubscriptionsPage() {
   const { token } = useAuth();
   const api = useApi(token);
@@ -323,6 +341,10 @@ export default function AdminSubscriptionsPage() {
         setError(t('adminSubscriptions.customerNameRequired'));
         return;
       }
+      if (draft.contactEmail.trim() && !isValidEmailValue(draft.contactEmail)) {
+        setError(t('adminSubscriptions.contactEmailInvalid'));
+        return;
+      }
 
       setSavingSubscriptionId(sub.id);
       setError(null);
@@ -335,7 +357,7 @@ export default function AdminSubscriptionsPage() {
             customerName: nextCustomerName,
             contactFirstName: draft.contactFirstName.trim() || null,
             contactLastName: draft.contactLastName.trim() || null,
-            contactEmail: draft.contactEmail.trim() || null,
+            contactEmail: normalizeEmailValue(draft.contactEmail) || null,
             seats: draft.seats,
           }),
         });
@@ -368,17 +390,25 @@ export default function AdminSubscriptionsPage() {
     const name = customerName.trim();
     const first = contactFirstName.trim();
     const last = contactLastName.trim();
-    const email = contactEmail.trim();
+    const email = normalizeEmailValue(contactEmail);
     const industryValue = industryId === 'OTHER' ? industryOther.trim() : industryId;
     if (!name || !first || !last || !email || !industryValue) return;
+    if (!isValidEmailValue(contactEmail)) {
+      setError(t('adminSubscriptions.contactEmailInvalid'));
+      return;
+    }
 
     const normalizedCreateInvites = createInviteRows
       .map((row) => ({
         name: row.name.trim(),
-        email: row.email.trim().toLowerCase(),
+        email: normalizeEmailValue(row.email),
         role: row.role,
       }))
       .filter((row) => row.email.length > 0);
+    if (normalizedCreateInvites.some((row) => !isValidEmailValue(row.email))) {
+      setError(t('adminSubscriptions.invites.invalidEmail'));
+      return;
+    }
     if (normalizedCreateInvites.length > seats) {
       setError(t('adminSubscriptions.createInvites.tooMany', { count: seats }));
       return;
@@ -498,8 +528,12 @@ export default function AdminSubscriptionsPage() {
   const createSubscriptionInvite = useCallback(
     async (sub: SubscriptionItem) => {
       const inviteDraft = getInviteDraft(sub.id);
-      const email = inviteDraft.email.trim();
+      const email = normalizeEmailValue(inviteDraft.email);
       if (!email) return;
+      if (!isValidEmailValue(inviteDraft.email)) {
+        setError(t('adminSubscriptions.invites.invalidEmail'));
+        return;
+      }
 
       setSavingInviteSubscriptionId(sub.id);
       setError(null);
@@ -539,7 +573,7 @@ export default function AdminSubscriptionsPage() {
         setSavingInviteSubscriptionId((prev) => (prev === sub.id ? null : prev));
       }
     },
-    [api, buildInviteUrl, copyUrl, getInviteDraft, getLinkDraft],
+    [api, buildInviteUrl, copyUrl, getInviteDraft, getLinkDraft, t],
   );
 
   const rows = useMemo(
@@ -606,7 +640,7 @@ export default function AdminSubscriptionsPage() {
                   className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                   type="email"
                   value={contactEmail}
-                  onChange={(e) => setContactEmail(e.target.value)}
+                  onChange={(e) => setContactEmail(normalizeEmailInput(e.target.value))}
                   placeholder={t('adminSubscriptions.contactEmailPlaceholder')}
                   required
                 />
@@ -639,7 +673,7 @@ export default function AdminSubscriptionsPage() {
                     <input
                       className="w-full rounded-lg bg-black/20 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                       value={row.email}
-                      onChange={(e) => updateCreateInviteRow(row.id, { email: e.target.value })}
+                      onChange={(e) => updateCreateInviteRow(row.id, { email: normalizeEmailInput(e.target.value) })}
                       placeholder={t('adminSubscriptions.invites.emailPlaceholder')}
                       type="email"
                     />
@@ -869,7 +903,7 @@ export default function AdminSubscriptionsPage() {
                               <input
                                 className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                                 value={sub.draft.contactEmail}
-                                onChange={(e) => updateLinkDraft(sub.id, { contactEmail: e.target.value })}
+                                onChange={(e) => updateLinkDraft(sub.id, { contactEmail: normalizeEmailInput(e.target.value) })}
                                 placeholder={t('adminSubscriptions.contactEmailPlaceholder')}
                                 type="email"
                               />
@@ -911,7 +945,7 @@ export default function AdminSubscriptionsPage() {
                                 <input
                                   className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                                   value={sub.inviteDraft.email}
-                                  onChange={(e) => updateInviteDraft(sub.id, { email: e.target.value })}
+                                  onChange={(e) => updateInviteDraft(sub.id, { email: normalizeEmailInput(e.target.value) })}
                                   placeholder={t('adminSubscriptions.invites.emailPlaceholder')}
                                   type="email"
                                 />
