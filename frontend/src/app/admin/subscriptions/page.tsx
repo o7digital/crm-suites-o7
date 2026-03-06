@@ -760,7 +760,7 @@ export default function AdminSubscriptionsPage() {
                   }}
                   required
                 >
-                  <option value="">{t('adminSubscriptions.industryPlaceholder')}</option>
+                  <option value="">{t('adminSubscriptions.industrySelectPlaceholder')}</option>
                   <optgroup label="B2C">
                     {INDUSTRY_GROUPS.b2c.map((opt) => (
                       <option key={opt.id} value={opt.id}>
@@ -777,10 +777,13 @@ export default function AdminSubscriptionsPage() {
                   </optgroup>
                   {INDUSTRY_GROUPS.other.map((opt) => (
                     <option key={opt.id} value={opt.id}>
-                      {industryLabel(opt, language)}
+                    {industryLabel(opt, language)}
                     </option>
                   ))}
                 </select>
+                {!industryId ? (
+                  <p className="mt-2 text-xs text-amber-200">{t('adminSubscriptions.industryRequiredHint')}</p>
+                ) : null}
                 {industryId === 'OTHER' ? (
                   <input
                     className="mt-2 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"

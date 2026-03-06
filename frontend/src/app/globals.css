@@ -60,6 +60,19 @@ a {
   box-shadow: 0 18px 38px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+.btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+  box-shadow: none;
+  filter: saturate(0.7);
+}
+
+.btn-primary:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
 .btn-secondary {
   background: rgba(255, 255, 255, 0.05);
   color: #e9edf5;
