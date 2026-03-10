@@ -3,14 +3,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { RequestUser } from '../common/user.decorator';
+import { GoogleCalendarService } from '../admin/google-calendar.service';
 
 @Injectable()
 export class TasksService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private googleCalendarService: GoogleCalendarService,
+  ) {}
 
   async create(dto: CreateTaskDto, user: RequestUser) {
     await this.ensureClient(dto.clientId, user);
-    return this.prisma.task.create({
+    const task = await this.prisma.task.create({
       data: {
         title: dto.title,
         status: dto.status,
@@ -21,7 +25,18 @@ export class TasksService {
         clientId: dto.clientId,
         tenantId: user.tenantId,
       },
+      include: {
+        client: {
+          select: {
+            firstName: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
     });
+    void this.googleCalendarService.syncTaskChange(task);
+    return task;
   }
 
   async findAll(user: RequestUser, clientId?: string) {
@@ -37,19 +52,32 @@ export class TasksService {
     if (dto.clientId) {
       await this.ensureClient(dto.clientId, user);
     }
-    return this.prisma.task.update({
+    const task = await this.prisma.task.update({
       where: { id },
       data: {
         ...dto,
         currency: dto.currency ? dto.currency.toUpperCase() : undefined,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       },
+      include: {
+        client: {
+          select: {
+            firstName: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
     });
+    void this.googleCalendarService.syncTaskChange(task);
+    return task;
   }
 
   async remove(id: string, user: RequestUser) {
     await this.ensureTask(id, user);
-    return this.prisma.task.delete({ where: { id } });
+    const deleted = await this.prisma.task.delete({ where: { id } });
+    void this.googleCalendarService.removeTaskFromCalendars(id, user.tenantId);
+    return deleted;
   }
 
   private async ensureClient(clientId: string, user: RequestUser) {

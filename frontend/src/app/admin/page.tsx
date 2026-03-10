@@ -9,6 +9,7 @@ import { useApi, useAuth } from '../../contexts/AuthContext';
 const tiles = [
   { href: '/admin/users', title: 'Users', description: 'Manage workspace members and permissions.' },
   { href: '/admin/parameters', title: 'Parameters', description: 'Customers fields and product catalog.' },
+  { href: '/admin/calendar', title: 'Calendar sync', description: 'Connect Google Calendar and sync CRM tasks.' },
   { href: '/admin/ocr-scan', title: 'OCR - Scan', description: 'Upload and process invoices with OCR extraction.' },
   { href: '/admin/subscriptions', title: 'Subscriptions', description: 'Billing and subscription foundations.' },
   { href: '/admin/mail', title: 'Mail integration', description: 'Connect O7 Workspace (Mailcow) or SMTP.' },

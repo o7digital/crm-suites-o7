@@ -5,9 +5,11 @@ import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
 import { getClientDisplayName } from '@/lib/clients';
+import { CalendarSyncCard } from '@/components/CalendarSyncCard';
+import { TaskCalendarActions } from '@/components/TaskCalendarActions';
 
 export default function PostSalesPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const api = useApi(token);
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -304,7 +306,9 @@ export default function PostSalesPage() {
           </div>
         </div>
 
-        <div className="card p-4">
+        <CalendarSyncCard />
+
+        <div className="mt-4 card p-4">
           <div className="grid gap-3 md:grid-cols-12 md:items-end">
             <div className="md:col-span-4">
               <label className="text-sm text-slate-300">Start date</label>
@@ -483,21 +487,9 @@ export default function PostSalesPage() {
                           Delete
                         </button>
                       </div>
-                      {(() => {
-                        const googleCalendarUrl = buildGoogleCalendarTaskUrl(task);
-                        return googleCalendarUrl ? (
-                          <div className="mt-2">
-                            <a
-                              href={googleCalendarUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="rounded-lg border border-cyan-400/30 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-500/10"
-                            >
-                              Google Calendar
-                            </a>
-                          </div>
-                        ) : null;
-                      })()}
+                      <div className="mt-2">
+                        <TaskCalendarActions task={task} ownerEmail={user?.email} />
+                      </div>
                       <div className="mt-3 flex items-center gap-2">
                         <select
                           value={task.status}
@@ -555,21 +547,9 @@ export default function PostSalesPage() {
                         {task.client ? getClientDisplayName(task.client) : 'No client'}
                         {getTaskIsoDueDate(task) ? ` · ${formatIsoDateShort(getTaskIsoDueDate(task)!)}` : ''}
                       </p>
-                      {(() => {
-                        const googleCalendarUrl = buildGoogleCalendarTaskUrl(task);
-                        return googleCalendarUrl ? (
-                          <div className="mt-2">
-                            <a
-                              href={googleCalendarUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="rounded-lg border border-cyan-400/30 px-2 py-1 text-xs text-cyan-100 hover:bg-cyan-500/10"
-                            >
-                              Google Calendar
-                            </a>
-                          </div>
-                        ) : null;
-                      })()}
+                      <div className="mt-2">
+                        <TaskCalendarActions task={task} ownerEmail={user?.email} />
+                      </div>
                       {(() => {
                         const hours = formatTaskHours(task.timeSpentHours);
                         return hours ? <p className="mt-1 text-xs text-cyan-200">{hours}</p> : null;
@@ -633,6 +613,7 @@ type Client = {
   id: string;
   firstName?: string | null;
   name: string;
+  email?: string | null;
 };
 
 type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE';
@@ -858,28 +839,6 @@ function formatActivePeriodLabel(mode: PeriodViewMode, startIso: string, endIso:
   return formatDateRangeLabel(startIso, endIso);
 }
 
-function isoToGoogleDate(iso: string): string {
-  return iso.replaceAll('-', '');
-}
-
-function buildGoogleCalendarTaskUrl(task: Task): string | null {
-  const dueIso = getTaskIsoDueDate(task);
-  if (!dueIso) return null;
-  const nextIso = addDaysIso(dueIso, 1);
-  const detailsLines = [
-    'Post-Sales task from CRM',
-    `Status: ${task.status}`,
-    task.client ? `Client: ${getClientDisplayName(task.client)}` : '',
-  ].filter(Boolean);
-
-  const params = new URLSearchParams({
-    action: 'TEMPLATE',
-    text: task.title || 'Post-Sales Task',
-    dates: `${isoToGoogleDate(dueIso)}/${isoToGoogleDate(nextIso)}`,
-    details: detailsLines.join('\n'),
-  });
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
-}
 
 function TaskCreateCard({
   clients,

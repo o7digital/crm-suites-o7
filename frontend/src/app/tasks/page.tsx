@@ -6,6 +6,8 @@ import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
 import { getClientDisplayName } from '@/lib/clients';
 import { useI18n } from '../../contexts/I18nContext';
+import { CalendarSyncCard } from '@/components/CalendarSyncCard';
+import { TaskCalendarActions } from '@/components/TaskCalendarActions';
 
 type Task = {
   id: string;
@@ -14,14 +16,15 @@ type Task = {
   dueDate?: string;
   amount?: number | string | null;
   currency?: string;
-  client?: { id: string; firstName?: string | null; name: string };
+  timeSpentHours?: number | string | null;
+  client?: { id: string; firstName?: string | null; name: string; email?: string | null };
 };
 
 type Client = { id: string; firstName?: string | null; name: string };
 type TaskInput = { title: string; clientId: string; dueDate?: string; amount?: number; currency?: string };
 
 export default function TasksPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const api = useApi(token);
   const { t } = useI18n();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -66,7 +69,11 @@ export default function TasksPage() {
           </div>
         </div>
 
-        <TaskForm clients={clients} onSubmit={handleCreate} />
+        <CalendarSyncCard />
+
+        <div className="mt-6">
+          <TaskForm clients={clients} onSubmit={handleCreate} />
+        </div>
 
         {loading && <div className="mt-6 text-slate-300">{t('tasks.loading')}</div>}
 
@@ -86,7 +93,8 @@ export default function TasksPage() {
                   ) : null}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <TaskCalendarActions task={task} ownerEmail={user?.email} />
                 <select
                   value={task.status}
                   onChange={(e) => handleStatusChange(task.id, e.target.value)}
@@ -97,6 +105,7 @@ export default function TasksPage() {
                   <option value="DONE">{t('taskStatus.DONE')}</option>
                 </select>
                 <button
+                  type="button"
                   className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
                   onClick={() => handleDelete(task.id)}
                 >
