@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
@@ -8,12 +9,19 @@ import { getClientDisplayName } from '@/lib/clients';
 import { CalendarSyncCard } from '@/components/CalendarSyncCard';
 import { TaskCalendarActions } from '@/components/TaskCalendarActions';
 
+type Pipeline = {
+  id: string;
+  name: string;
+};
+
 export default function PostSalesPage() {
   const { token, user } = useAuth();
   const api = useApi(token);
+  const router = useRouter();
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [postSalesPipelineId, setPostSalesPipelineId] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hoursDraftByTask, setHoursDraftByTask] = useState<Record<string, string>>({});
@@ -62,6 +70,17 @@ export default function PostSalesPage() {
     if (!token) return;
     loadData();
   }, [token, loadData]);
+
+  useEffect(() => {
+    if (!token) return;
+    api<Pipeline[]>('/pipelines')
+      .then((data) => {
+        setPostSalesPipelineId(data.find((pipeline) => pipeline.name === 'Post Sales')?.id || '');
+      })
+      .catch(() => {
+        setPostSalesPipelineId('');
+      });
+  }, [api, token]);
 
   const rangeValid = Boolean(startDate && endDate && startDate <= endDate);
   const rangeLabel = useMemo(() => {
@@ -300,6 +319,15 @@ export default function PostSalesPage() {
             <button className="btn-secondary" onClick={setThisMonth} type="button">
               This month
             </button>
+            {postSalesPipelineId ? (
+              <button
+                className="btn-secondary"
+                onClick={() => router.push(`/crm?pipelineId=${encodeURIComponent(postSalesPipelineId)}`)}
+                type="button"
+              >
+                Manage workflow
+              </button>
+            ) : null}
             <button className="btn-secondary" onClick={refresh} type="button">
               Refresh
             </button>

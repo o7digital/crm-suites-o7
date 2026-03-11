@@ -242,6 +242,7 @@ export default function CrmPage() {
   });
   const [workflowSaving, setWorkflowSaving] = useState(false);
   const [workflowAddingStage, setWorkflowAddingStage] = useState(false);
+  const [workflowAddStageAttempted, setWorkflowAddStageAttempted] = useState(false);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [workflowInfo, setWorkflowInfo] = useState<string | null>(null);
   const [statusDropHover, setStatusDropHover] = useState<Stage['status'] | null>(null);
@@ -254,6 +255,8 @@ export default function CrmPage() {
       : newStageProbabilityValue === null
         ? 'Probability must be between 0 and 100'
         : null;
+  const displayedWorkflowAddStageValidationError =
+    workflowAddStageAttempted || newStageNameValue ? workflowAddStageValidationError : null;
   const canCreateWorkflowStage = !workflowAddStageValidationError && !workflowAddingStage && !workflowSaving;
 
   useEffect(() => {
@@ -486,6 +489,7 @@ export default function CrmPage() {
 
   const resetWorkflowEditor = (sourceStages: Stage[], afterStageId?: string) => {
     const orderedStages = [...sourceStages].sort((a, b) => a.position - b.position);
+    setWorkflowAddStageAttempted(false);
     setWorkflowStageDrafts(
       orderedStages.map((stage) => ({
         id: stage.id,
@@ -865,6 +869,54 @@ export default function CrmPage() {
     );
   };
 
+  const createWorkflowStageFromDraft = async (draft: NewStageDraft) => {
+    const stageNameValue = draft.name.trim();
+    if (!stageNameValue) return null;
+
+    const probabilityPct = parseProbabilityPct(draft.probabilityPct);
+    if (probabilityPct === null) {
+      throw new Error('Probability must be between 0 and 100');
+    }
+
+    const created = await api<Stage>('/stages', {
+      method: 'POST',
+      body: JSON.stringify({
+        pipelineId,
+        name: stageNameValue,
+        status: draft.status,
+        probability: probabilityPct / 100,
+      }),
+    });
+
+    let refreshedStages = await api<Stage[]>(`/stages?pipelineId=${pipelineId}`);
+    const orderedStages = [...refreshedStages].sort((a, b) => a.position - b.position);
+    const createdStage = orderedStages.find((stage) => stage.id === created.id);
+
+    if (createdStage && draft.afterStageId) {
+      const withoutCreated = orderedStages.filter((stage) => stage.id !== createdStage.id);
+      const afterIndex = withoutCreated.findIndex((stage) => stage.id === draft.afterStageId);
+      if (afterIndex >= 0) {
+        const desiredOrder = [
+          ...withoutCreated.slice(0, afterIndex + 1),
+          createdStage,
+          ...withoutCreated.slice(afterIndex + 1),
+        ];
+        const hasChangedOrder = desiredOrder.some((stage, index) => stage.id !== orderedStages[index]?.id);
+        if (hasChangedOrder) {
+          await api('/stages/reorder', {
+            method: 'PATCH',
+            body: JSON.stringify({
+              items: desiredOrder.map((stage, position) => ({ id: stage.id, position })),
+            }),
+          });
+          refreshedStages = await api<Stage[]>(`/stages?pipelineId=${pipelineId}`);
+        }
+      }
+    }
+
+    return { created, stages: refreshedStages };
+  };
+
   const handleSaveWorkflow = async () => {
     if (!pipelineId) {
       setWorkflowError('Select a pipeline first');
@@ -917,10 +969,11 @@ export default function CrmPage() {
         });
       }
 
-      const refreshedStages = await api<Stage[]>(`/stages?pipelineId=${pipelineId}`);
+      const createdStageResult = newStageNameValue ? await createWorkflowStageFromDraft(newStageDraft) : null;
+      const refreshedStages = createdStageResult?.stages || (await api<Stage[]>(`/stages?pipelineId=${pipelineId}`));
       setStages(refreshedStages);
       setStagesByPipelineId((prev) => ({ ...prev, [pipelineId]: refreshedStages }));
-      resetWorkflowEditor(refreshedStages, newStageDraft.afterStageId || undefined);
+      resetWorkflowEditor(refreshedStages, createdStageResult?.created.id || newStageDraft.afterStageId || undefined);
       setWorkflowInfo(t('common.saved'));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to save workflow';
@@ -931,6 +984,7 @@ export default function CrmPage() {
   };
 
   const handleCreateStageFromWorkflow = async () => {
+    setWorkflowAddStageAttempted(true);
     if (workflowAddStageValidationError) {
       setWorkflowError(workflowAddStageValidationError);
       return;
@@ -941,46 +995,15 @@ export default function CrmPage() {
     setWorkflowInfo(null);
 
     try {
-      const created = await api<Stage>('/stages', {
-        method: 'POST',
-        body: JSON.stringify({
-          pipelineId,
-          name: newStageNameValue,
-          status: newStageDraft.status,
-          probability: (newStageProbabilityValue as number) / 100,
-        }),
-      });
-
-      let refreshedStages = await api<Stage[]>(`/stages?pipelineId=${pipelineId}`);
-      const orderedStages = [...refreshedStages].sort((a, b) => a.position - b.position);
-      const createdStage = orderedStages.find((stage) => stage.id === created.id);
-
-      if (createdStage && newStageDraft.afterStageId) {
-        const withoutCreated = orderedStages.filter((stage) => stage.id !== createdStage.id);
-        const afterIndex = withoutCreated.findIndex((stage) => stage.id === newStageDraft.afterStageId);
-        if (afterIndex >= 0) {
-          const desiredOrder = [
-            ...withoutCreated.slice(0, afterIndex + 1),
-            createdStage,
-            ...withoutCreated.slice(afterIndex + 1),
-          ];
-          const hasChangedOrder = desiredOrder.some((stage, index) => stage.id !== orderedStages[index]?.id);
-          if (hasChangedOrder) {
-            await api('/stages/reorder', {
-              method: 'PATCH',
-              body: JSON.stringify({
-                items: desiredOrder.map((stage, position) => ({ id: stage.id, position })),
-              }),
-            });
-            refreshedStages = await api<Stage[]>(`/stages?pipelineId=${pipelineId}`);
-          }
-        }
+      const createdStageResult = await createWorkflowStageFromDraft(newStageDraft);
+      if (!createdStageResult) {
+        throw new Error('Stage name is required');
       }
 
-      setStages(refreshedStages);
-      setStagesByPipelineId((prev) => ({ ...prev, [pipelineId]: refreshedStages }));
-      resetWorkflowEditor(refreshedStages, created.id);
-      setWorkflowInfo('Stage added');
+      setStages(createdStageResult.stages);
+      setStagesByPipelineId((prev) => ({ ...prev, [pipelineId]: createdStageResult.stages }));
+      resetWorkflowEditor(createdStageResult.stages, createdStageResult.created.id);
+      setWorkflowInfo(t('crm.stageAdded'));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to add stage';
       setWorkflowError(message);
@@ -1196,7 +1219,7 @@ export default function CrmPage() {
 
               <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
                 <label className="block text-sm text-slate-300">
-                  {t('crm.pipeline')}
+                  {t('crm.workflowName')}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={workflowPipelineName}
@@ -1264,69 +1287,82 @@ export default function CrmPage() {
                 <div className="rounded-lg border border-white/10 bg-white/5 p-4">
                   <p className="text-sm font-semibold text-slate-100">+ {t('crm.stage')}</p>
                   <div className="mt-3 grid gap-2 md:grid-cols-2">
-                    <input
-                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                      placeholder={t('crm.stage')}
-                      value={newStageDraft.name}
-                      onChange={(e) =>
-                        setNewStageDraft((prev) => ({
-                          ...prev,
-                          name: e.target.value,
-                        }))
-                      }
-                    />
-                    <select
-                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                      value={newStageDraft.afterStageId}
-                      onChange={(e) =>
-                        setNewStageDraft((prev) => ({
-                          ...prev,
-                          afterStageId: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">At end</option>
-                      {workflowStageDrafts.map((draft) => (
-                        <option key={draft.id} value={draft.id}>
-                          {stageName(draft.name)}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                      value={newStageDraft.status}
-                      onChange={(e) =>
-                        setNewStageDraft((prev) => ({
-                          ...prev,
-                          status: e.target.value as Stage['status'],
-                        }))
-                      }
-                    >
-                      {STAGE_STATUSES.map((status) => (
-                        <option key={status} value={status}>
-                          {t(`stageStatus.${status}`)}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="relative">
+                    <label className="block text-sm text-slate-300">
+                      {t('crm.stageName')}
                       <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 pr-7 text-sm"
-                        value={newStageDraft.probabilityPct}
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        placeholder={t('crm.stage')}
+                        value={newStageDraft.name}
                         onChange={(e) =>
                           setNewStageDraft((prev) => ({
                             ...prev,
-                            probabilityPct: e.target.value,
+                            name: e.target.value,
                           }))
                         }
                       />
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
-                        %
-                      </span>
-                    </div>
+                    </label>
+                    <label className="block text-sm text-slate-300">
+                      {t('crm.insertAfter')}
+                      <select
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={newStageDraft.afterStageId}
+                        onChange={(e) =>
+                          setNewStageDraft((prev) => ({
+                            ...prev,
+                            afterStageId: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">{t('crm.stageAtEnd')}</option>
+                        {workflowStageDrafts.map((draft) => (
+                          <option key={draft.id} value={draft.id}>
+                            {stageName(draft.name)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block text-sm text-slate-300">
+                      {t('crm.stageStatus')}
+                      <select
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={newStageDraft.status}
+                        onChange={(e) =>
+                          setNewStageDraft((prev) => ({
+                            ...prev,
+                            status: e.target.value as Stage['status'],
+                          }))
+                        }
+                      >
+                        {STAGE_STATUSES.map((status) => (
+                          <option key={status} value={status}>
+                            {t(`stageStatus.${status}`)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block text-sm text-slate-300">
+                      {t('crm.probability')}
+                      <div className="relative mt-2">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 pr-7 text-sm"
+                          value={newStageDraft.probabilityPct}
+                          onChange={(e) =>
+                            setNewStageDraft((prev) => ({
+                              ...prev,
+                              probabilityPct: e.target.value,
+                            }))
+                          }
+                        />
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                          %
+                        </span>
+                      </div>
+                    </label>
                   </div>
+                  <p className="mt-3 text-xs text-slate-400">{t('crm.stageCreateHint')}</p>
                   <div className="mt-3 flex justify-end">
                     <button
                       className="btn-secondary"
@@ -1337,8 +1373,8 @@ export default function CrmPage() {
                       {workflowAddingStage ? t('common.saving') : `+ ${t('crm.stage')}`}
                     </button>
                   </div>
-                  {workflowAddStageValidationError ? (
-                    <p className="mt-2 text-xs text-slate-400">{workflowAddStageValidationError}</p>
+                  {displayedWorkflowAddStageValidationError ? (
+                    <p className="mt-2 text-xs text-slate-400">{displayedWorkflowAddStageValidationError}</p>
                   ) : null}
                 </div>
 
