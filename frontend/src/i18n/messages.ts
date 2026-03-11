@@ -1,6 +1,6 @@
 import type { LanguageCode } from './types';
 
-export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
+const CORE_MESSAGES = {
   en: {
     'app.tagline': 'Tenant-ready SaaS',
 
@@ -46,13 +46,21 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     'account.languageHint': 'Choose the language used across the CRM interface.',
 
     'account.skin.title': 'Featured & Skin',
-    'account.skin.subtitle': 'Upload your logo and customize the CRM accent colors.',
+    'account.skin.subtitle': 'Upload your logo and customize the full CRM color palette.',
     'account.skin.logo': 'Logo',
     'account.skin.logoHint': 'PNG/JPG/SVG. Max 800 KB.',
     'account.skin.logoTooLarge': 'Logo too large (max 800 KB).',
     'account.skin.logoInvalid': 'Invalid image file.',
+    'account.skin.background': 'Background color',
+    'account.skin.surface': 'Shell surface',
+    'account.skin.card': 'Card color',
+    'account.skin.foreground': 'Primary text',
+    'account.skin.muted': 'Muted text',
     'account.skin.accent': 'Accent color',
     'account.skin.accent2': 'Secondary accent',
+    'account.skin.preview': 'Theme preview',
+    'account.skin.previewHint': 'Live shell sample',
+    'account.skin.invalidHex': 'Enter a valid hex color.',
     'account.skin.reset': 'Reset',
 
     'field.name': 'Name',
@@ -430,13 +438,21 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     'account.languageHint': "Choisissez la langue de l'interface CRM.",
 
     'account.skin.title': 'Featured & Skin',
-    'account.skin.subtitle': 'Ajoutez votre logo et personnalisez les couleurs du CRM.',
+    'account.skin.subtitle': 'Ajoutez votre logo et personnalisez toute la palette du CRM.',
     'account.skin.logo': 'Logo',
     'account.skin.logoHint': 'PNG/JPG/SVG. 800 KB max.',
     'account.skin.logoTooLarge': 'Logo trop lourd (800 KB max).',
     'account.skin.logoInvalid': 'Fichier image invalide.',
+    'account.skin.background': 'Couleur de fond',
+    'account.skin.surface': 'Surface du shell',
+    'account.skin.card': 'Couleur des cartes',
+    'account.skin.foreground': 'Texte principal',
+    'account.skin.muted': 'Texte secondaire',
     'account.skin.accent': 'Couleur principale',
     'account.skin.accent2': 'Couleur secondaire',
+    'account.skin.preview': 'Apercu du theme',
+    'account.skin.previewHint': 'Exemple du shell',
+    'account.skin.invalidHex': 'Saisissez une couleur hex valide.',
     'account.skin.reset': 'Reinitialiser',
 
     'field.name': 'Nom',
@@ -814,13 +830,21 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     'account.languageHint': 'Elige el idioma de la interfaz del CRM.',
 
     'account.skin.title': 'Featured & Skin',
-    'account.skin.subtitle': 'Sube tu logo y personaliza los colores del CRM.',
+    'account.skin.subtitle': 'Sube tu logo y personaliza toda la paleta de colores del CRM.',
     'account.skin.logo': 'Logo',
     'account.skin.logoHint': 'PNG/JPG/SVG. Max 800 KB.',
     'account.skin.logoTooLarge': 'Logo demasiado grande (max 800 KB).',
     'account.skin.logoInvalid': 'Archivo de imagen invalido.',
+    'account.skin.background': 'Color de fondo',
+    'account.skin.surface': 'Superficie del shell',
+    'account.skin.card': 'Color de tarjeta',
+    'account.skin.foreground': 'Texto principal',
+    'account.skin.muted': 'Texto secundario',
     'account.skin.accent': 'Color principal',
     'account.skin.accent2': 'Color secundario',
+    'account.skin.preview': 'Vista previa del tema',
+    'account.skin.previewHint': 'Muestra del shell',
+    'account.skin.invalidHex': 'Ingresa un color hex valido.',
     'account.skin.reset': 'Restablecer',
 
     'field.name': 'Nombre',
@@ -1153,4 +1177,12 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     'adminSubscriptions.table.link': 'Enlace',
     'adminSubscriptions.table.created': 'Creado',
   },
+} as const;
+
+export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
+  ...CORE_MESSAGES,
+  it: CORE_MESSAGES.en,
+  de: CORE_MESSAGES.en,
+  pt: CORE_MESSAGES.en,
+  nl: CORE_MESSAGES.en,
 };

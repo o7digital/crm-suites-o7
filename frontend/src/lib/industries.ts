@@ -5,7 +5,7 @@ export type CrmMode = 'B2B' | 'B2C';
 export type IndustryOption = {
   id: string; // Stored in DB (Tenant.industry)
   crmMode: CrmMode; // Recommended CRM mode for this industry
-  label: Record<LanguageCode, string>;
+  label: Partial<Record<LanguageCode, string>> & Record<'en' | 'fr' | 'es', string>;
 };
 
 // Curated list (grouped by CRM mode). You can extend this over time.
@@ -78,4 +78,3 @@ export function industryGroups() {
   const other = INDUSTRIES.filter((x) => x.id === 'OTHER');
   return { b2c, b2b, other };
 }
-
