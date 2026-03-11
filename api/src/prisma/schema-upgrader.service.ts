@@ -389,6 +389,7 @@ export class SchemaUpgraderService {
       { name: 'crmDisplayCurrency', type: `TEXT NOT NULL DEFAULT 'USD'` },
       { name: 'industry', type: 'TEXT' },
       { name: 'contractSetup', type: 'JSONB' },
+      { name: 'marketingSetup', type: 'JSONB' },
     ];
 
     for (const col of columns) {

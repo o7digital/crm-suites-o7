@@ -13,7 +13,7 @@ const tiles = [
   { href: '/admin/ocr-scan', title: 'OCR - Scan', description: 'Upload and process invoices with OCR extraction.' },
   { href: '/admin/subscriptions', title: 'Subscriptions', description: 'Billing and subscription foundations.' },
   { href: '/admin/mail', title: 'Mail integration', description: 'Connect O7 Workspace (Mailcow) or SMTP.' },
-  { href: '/admin/benchmarking', title: 'Benchmarking', description: 'Evaluate mailing tools and workflows.' },
+  { href: '/admin/benchmarking', title: 'Benchmarking', description: 'Connect providers, build audiences, and send newsletters.' },
   { href: '/admin/reporting', title: 'Reporting', description: 'Sales charts and KPI dashboards.' },
   { href: '/admin/goals', title: 'Objectives', description: 'Targets, quotas, and goal tracking.' },
   { href: '/admin/contracts', title: 'Contracts', description: 'Templates and variable fields (Pipedrive-style).' },

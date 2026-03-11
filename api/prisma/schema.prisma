@@ -24,6 +24,7 @@ model Tenant {
   crmDisplayCurrency String @default("USD")
   industry  String?
   contractSetup Json?
+  marketingSetup Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
