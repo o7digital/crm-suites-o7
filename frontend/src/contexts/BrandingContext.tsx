@@ -5,6 +5,11 @@ import { useApi, useAuth } from './AuthContext';
 
 type Branding = {
   logoDataUrl: string | null;
+  backgroundColor: string | null;
+  surfaceColor: string | null;
+  cardColor: string | null;
+  foregroundColor: string | null;
+  mutedColor: string | null;
   accentColor: string | null;
   accentColor2: string | null;
 };
@@ -19,6 +24,11 @@ type BrandingContextValue = {
 
 const DEFAULT_BRANDING: Branding = {
   logoDataUrl: null,
+  backgroundColor: null,
+  surfaceColor: null,
+  cardColor: null,
+  foregroundColor: null,
+  mutedColor: null,
   accentColor: null,
   accentColor2: null,
 };
@@ -34,6 +44,11 @@ function applyCssVars(branding: Branding) {
     else root.style.removeProperty(name);
   };
 
+  setVar('--background', branding.backgroundColor);
+  setVar('--surface', branding.surfaceColor);
+  setVar('--card', branding.cardColor);
+  setVar('--foreground', branding.foregroundColor);
+  setVar('--muted', branding.mutedColor);
   setVar('--accent', branding.accentColor);
   setVar('--accent-2', branding.accentColor2);
 }
@@ -59,6 +74,11 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
       }>('/tenant/branding', { method: 'GET' });
       setBranding({
         logoDataUrl: data.branding?.logoDataUrl ?? null,
+        backgroundColor: data.branding?.backgroundColor ?? null,
+        surfaceColor: data.branding?.surfaceColor ?? null,
+        cardColor: data.branding?.cardColor ?? null,
+        foregroundColor: data.branding?.foregroundColor ?? null,
+        mutedColor: data.branding?.mutedColor ?? null,
         accentColor: data.branding?.accentColor ?? null,
         accentColor2: data.branding?.accentColor2 ?? null,
       });
@@ -85,6 +105,11 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
         });
         setBranding({
           logoDataUrl: data.branding?.logoDataUrl ?? null,
+          backgroundColor: data.branding?.backgroundColor ?? null,
+          surfaceColor: data.branding?.surfaceColor ?? null,
+          cardColor: data.branding?.cardColor ?? null,
+          foregroundColor: data.branding?.foregroundColor ?? null,
+          mutedColor: data.branding?.mutedColor ?? null,
           accentColor: data.branding?.accentColor ?? null,
           accentColor2: data.branding?.accentColor2 ?? null,
         });
@@ -136,4 +161,3 @@ export function useBranding() {
   if (!ctx) throw new Error('useBranding must be used within BrandingProvider');
   return ctx;
 }
-

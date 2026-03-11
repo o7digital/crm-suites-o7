@@ -68,7 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-white/5 bg-[rgba(12,17,34,0.9)] backdrop-blur">
+      <header className="app-header sticky top-0 z-20 border-b backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
             {branding.logoDataUrl ? (
@@ -77,7 +77,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <img src={branding.logoDataUrl} alt="Logo" className="h-full w-full object-contain p-1" />
               </div>
             ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-400 text-slate-900">
+              <div className="brand-mark flex h-10 w-10 items-center justify-center rounded-xl">
                 <div className="text-center leading-[0.95]">
                   <div className="text-[12px] font-extrabold">o7</div>
                   <div className="text-[10px] font-semibold">Pulse</div>
@@ -118,7 +118,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
                 {accountOpen ? (
                   <div
-                    className="absolute right-0 mt-2 w-64 overflow-hidden rounded-xl border border-white/10 bg-[rgba(12,17,34,0.98)] shadow-lg shadow-black/30"
+                    className="app-menu absolute right-0 mt-2 w-64 overflow-hidden rounded-xl border shadow-lg shadow-black/30"
                     role="menu"
                   >
                     <div className="px-4 py-3">

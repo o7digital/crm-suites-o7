@@ -362,6 +362,11 @@ export class SchemaUpgraderService {
   private async ensureTenantBrandingFields() {
     const columns: Array<{ name: string; type: string }> = [
       { name: 'logoDataUrl', type: 'TEXT' },
+      { name: 'backgroundColor', type: 'TEXT' },
+      { name: 'surfaceColor', type: 'TEXT' },
+      { name: 'cardColor', type: 'TEXT' },
+      { name: 'foregroundColor', type: 'TEXT' },
+      { name: 'mutedColor', type: 'TEXT' },
       { name: 'accentColor', type: 'TEXT' },
       { name: 'accentColor2', type: 'TEXT' },
     ];

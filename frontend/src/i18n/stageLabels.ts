@@ -1,7 +1,7 @@
 import type { LanguageCode } from './types';
 
 // Translate known default stage names. Custom stages will fall back to their stored name.
-export const STAGE_LABELS: Record<LanguageCode, Record<string, string>> = {
+const CORE_STAGE_LABELS = {
   en: {
     Lead: 'Lead',
     Qualified: 'Qualified',
@@ -44,6 +44,14 @@ export const STAGE_LABELS: Record<LanguageCode, Record<string, string>> = {
     'Transfer Scheduled': 'Transferencia programada',
     Paid: 'Pagado',
   },
+} as const;
+
+export const STAGE_LABELS: Record<LanguageCode, Record<string, string>> = {
+  ...CORE_STAGE_LABELS,
+  it: CORE_STAGE_LABELS.en,
+  de: CORE_STAGE_LABELS.en,
+  pt: CORE_STAGE_LABELS.en,
+  nl: CORE_STAGE_LABELS.en,
 };
 
 export function translateStageName(lang: LanguageCode, name: string): string {

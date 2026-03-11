@@ -4,34 +4,34 @@ import type { InputHTMLAttributes, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
+import { useApi, useAuth } from '../../../contexts/AuthContext';
 
-type SellerGoal = {
+type WorkspaceUser = {
   id: string;
-  sellerName: string;
+  email: string;
+  name: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  createdAt: string;
+};
+
+type AdminContextResponse = {
+  isCustomerWorkspace?: boolean;
+  canManageSubscriptions?: boolean;
+  ownsSubscriptions?: boolean;
+  isCustomerTenant?: boolean;
+};
+
+type SellerGoalDraft = {
   team: string;
   leadsTarget: number;
   meetingsTarget: number;
   pipelineTargetUsd: number;
   wonTargetUsd: number;
   winRateTarget: number;
-  leadsActual: number;
-  meetingsActual: number;
-  pipelineActualUsd: number;
-  wonActualUsd: number;
 };
 
-type PlansByMonth = Record<string, SellerGoal[]>;
+type PlansByMonth = Record<string, Record<string, SellerGoalDraft>>;
 
-type GoalInsight = {
-  id: string;
-  score: number;
-  statusLabel: string;
-  statusClassName: string;
-  quotaGapUsd: number;
-  pipelineCoverage: number;
-};
-
-type TextField = 'sellerName' | 'team';
 type NumberField =
   | 'leadsTarget'
   | 'meetingsTarget'
@@ -39,8 +39,15 @@ type NumberField =
   | 'wonTargetUsd'
   | 'winRateTarget';
 
-const STORAGE_KEY = 'o7-admin-sales-goals-v1';
-const EMPTY_GOALS: SellerGoal[] = [];
+const EMPTY_GOAL: SellerGoalDraft = {
+  team: '',
+  leadsTarget: 0,
+  meetingsTarget: 0,
+  pipelineTargetUsd: 0,
+  wonTargetUsd: 0,
+  winRateTarget: 0,
+};
+const EMPTY_MONTH_PLAN: Record<string, SellerGoalDraft> = {};
 
 const USD = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -48,352 +55,251 @@ const USD = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
 });
 const INT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-const PERCENT = new Intl.NumberFormat('en-US', {
-  style: 'percent',
-  maximumFractionDigits: 0,
-});
 
 function getCurrentMonthKey() {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  return `${year}-${month}`;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function formatMonthLabel(monthKey: string) {
   const [year, month] = monthKey.split('-').map(Number);
-  if (!Number.isFinite(year) || !Number.isFinite(month)) return monthKey;
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(year, month - 1, 1));
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return monthKey;
+  return new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1));
 }
 
-function toNumber(value: unknown, fallback = 0) {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
+function toPositiveNumber(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, value);
   if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return fallback;
-    const parsed = Number(trimmed);
-    return Number.isFinite(parsed) ? parsed : fallback;
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
   }
-  return fallback;
+  return 0;
 }
 
-function toPositiveNumber(value: unknown, fallback = 0) {
-  return Math.max(0, toNumber(value, fallback));
-}
-
-function normalizeGoal(raw: unknown, index: number): SellerGoal | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-
-  const goal = raw as Partial<SellerGoal>;
+function normalizeGoalDraft(raw: unknown): SellerGoalDraft {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ...EMPTY_GOAL };
+  const draft = raw as Partial<SellerGoalDraft>;
   return {
-    id: typeof goal.id === 'string' && goal.id.trim() ? goal.id : `seller-${index + 1}`,
-    sellerName:
-      typeof goal.sellerName === 'string' && goal.sellerName.trim() ? goal.sellerName : `Seller ${index + 1}`,
-    team: typeof goal.team === 'string' && goal.team.trim() ? goal.team : 'Sales',
-    leadsTarget: toPositiveNumber(goal.leadsTarget),
-    meetingsTarget: toPositiveNumber(goal.meetingsTarget),
-    pipelineTargetUsd: toPositiveNumber(goal.pipelineTargetUsd),
-    wonTargetUsd: toPositiveNumber(goal.wonTargetUsd),
-    winRateTarget: toPositiveNumber(goal.winRateTarget),
-    leadsActual: toPositiveNumber(goal.leadsActual),
-    meetingsActual: toPositiveNumber(goal.meetingsActual),
-    pipelineActualUsd: toPositiveNumber(goal.pipelineActualUsd),
-    wonActualUsd: toPositiveNumber(goal.wonActualUsd),
+    team: typeof draft.team === 'string' ? draft.team : '',
+    leadsTarget: toPositiveNumber(draft.leadsTarget),
+    meetingsTarget: toPositiveNumber(draft.meetingsTarget),
+    pipelineTargetUsd: toPositiveNumber(draft.pipelineTargetUsd),
+    wonTargetUsd: toPositiveNumber(draft.wonTargetUsd),
+    winRateTarget: toPositiveNumber(draft.winRateTarget),
   };
 }
 
-function createSeedGoals(): SellerGoal[] {
-  return [
-    {
-      id: 'camille',
-      sellerName: 'Camille Laurent',
-      team: 'Enterprise / US East',
-      leadsTarget: 34,
-      meetingsTarget: 14,
-      pipelineTargetUsd: 120000,
-      wonTargetUsd: 36000,
-      winRateTarget: 26,
-      leadsActual: 27,
-      meetingsActual: 11,
-      pipelineActualUsd: 84500,
-      wonActualUsd: 24100,
-    },
-    {
-      id: 'julian',
-      sellerName: 'Julian Park',
-      team: 'Mid-market / LATAM',
-      leadsTarget: 46,
-      meetingsTarget: 19,
-      pipelineTargetUsd: 98000,
-      wonTargetUsd: 28000,
-      winRateTarget: 22,
-      leadsActual: 41,
-      meetingsActual: 16,
-      pipelineActualUsd: 90600,
-      wonActualUsd: 19800,
-    },
-    {
-      id: 'noemie',
-      sellerName: 'Noemie Costa',
-      team: 'Inbound / Expansion',
-      leadsTarget: 28,
-      meetingsTarget: 12,
-      pipelineTargetUsd: 76000,
-      wonTargetUsd: 24000,
-      winRateTarget: 31,
-      leadsActual: 22,
-      meetingsActual: 9,
-      pipelineActualUsd: 61100,
-      wonActualUsd: 17500,
-    },
-  ];
-}
+function normalizePlans(raw: unknown): PlansByMonth {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const result: PlansByMonth = {};
 
-function sanitizePlans(raw: unknown, defaultMonth: string): PlansByMonth {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { [defaultMonth]: createSeedGoals() };
+  for (const [monthKey, monthValue] of Object.entries(raw as Record<string, unknown>)) {
+    if (!/^\d{4}-\d{2}$/.test(monthKey)) continue;
+    if (!monthValue || typeof monthValue !== 'object' || Array.isArray(monthValue)) continue;
+
+    const monthPlan: Record<string, SellerGoalDraft> = {};
+    for (const [userId, goalValue] of Object.entries(monthValue as Record<string, unknown>)) {
+      if (!userId.trim()) continue;
+      monthPlan[userId] = normalizeGoalDraft(goalValue);
+    }
+    result[monthKey] = monthPlan;
   }
 
-  const entries = Object.entries(raw as Record<string, unknown>)
-    .filter(([month]) => /^\d{4}-\d{2}$/.test(month))
-    .map(([month, value]) => {
-      const goals = Array.isArray(value)
-        ? value.map((goal, index) => normalizeGoal(goal, index)).filter((goal): goal is SellerGoal => Boolean(goal))
-        : [];
-      return [month, goals] as const;
-    })
-    .filter(([, goals]) => goals.length > 0);
-
-  if (entries.length === 0) {
-    return { [defaultMonth]: createSeedGoals() };
-  }
-
-  const plans = Object.fromEntries(entries);
-  if (!plans[defaultMonth]) {
-    plans[defaultMonth] = cloneTargetsForNewMonth(entries[0]?.[1] ?? createSeedGoals());
-  }
-  return plans;
+  return result;
 }
 
-function cloneTargetsForNewMonth(goals: SellerGoal[]) {
-  return goals.map((goal, index) => ({
-    ...goal,
-    id: `${goal.id || 'seller'}-${index + 1}`,
-    leadsActual: 0,
-    meetingsActual: 0,
-    pipelineActualUsd: 0,
-    wonActualUsd: 0,
-  }));
-}
-
-function progressRatio(actual: number, target: number) {
-  if (target <= 0) return 0;
-  return Math.max(0, actual / target);
-}
-
-function cappedScore(actual: number, target: number) {
-  return Math.min(progressRatio(actual, target), 1.4);
-}
-
-function computeAttainment(goal: SellerGoal) {
+function hasTargets(goal: SellerGoalDraft) {
   return (
-    cappedScore(goal.leadsActual, goal.leadsTarget) * 0.2 +
-    cappedScore(goal.meetingsActual, goal.meetingsTarget) * 0.2 +
-    cappedScore(goal.pipelineActualUsd, goal.pipelineTargetUsd) * 0.3 +
-    cappedScore(goal.wonActualUsd, goal.wonTargetUsd) * 0.3
+    goal.team.trim().length > 0 ||
+    goal.leadsTarget > 0 ||
+    goal.meetingsTarget > 0 ||
+    goal.pipelineTargetUsd > 0 ||
+    goal.wonTargetUsd > 0 ||
+    goal.winRateTarget > 0
   );
 }
 
-function getStatusMeta(score: number) {
-  if (score >= 0.95) {
-    return {
-      label: 'Ahead',
-      className: 'bg-emerald-400/15 text-emerald-200 ring-1 ring-emerald-400/25',
-    };
-  }
-  if (score >= 0.72) {
-    return {
-      label: 'On track',
-      className: 'bg-cyan-400/15 text-cyan-100 ring-1 ring-cyan-400/25',
-    };
-  }
-  return {
-    label: 'At risk',
-    className: 'bg-amber-400/15 text-amber-100 ring-1 ring-amber-400/25',
-  };
+function roleLabel(role: WorkspaceUser['role']) {
+  if (role === 'OWNER') return 'Owner';
+  if (role === 'ADMIN') return 'Admin';
+  return 'Member';
 }
 
-function newSellerGoal(nextIndex: number): SellerGoal {
-  return {
-    id: `seller-${Date.now()}-${nextIndex}`,
-    sellerName: `New seller ${nextIndex}`,
-    team: 'New territory',
-    leadsTarget: 30,
-    meetingsTarget: 10,
-    pipelineTargetUsd: 70000,
-    wonTargetUsd: 20000,
-    winRateTarget: 25,
-    leadsActual: 0,
-    meetingsActual: 0,
-    pipelineActualUsd: 0,
-    wonActualUsd: 0,
-  };
+function roleOrder(role: WorkspaceUser['role']) {
+  if (role === 'OWNER') return 0;
+  if (role === 'ADMIN') return 1;
+  return 2;
 }
 
 export default function AdminGoalsPage() {
+  const { token, user } = useAuth();
+  const api = useApi(token);
   const defaultMonth = useMemo(() => getCurrentMonthKey(), []);
+  const storageKey = useMemo(
+    () => (user ? `o7-admin-sales-goals-v2:${user.tenantId}:${user.id}` : null),
+    [user],
+  );
+
   const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
-  const [plansByMonth, setPlansByMonth] = useState<PlansByMonth>({
-    [defaultMonth]: createSeedGoals(),
-  });
+  const [users, setUsers] = useState<WorkspaceUser[]>([]);
+  const [adminContext, setAdminContext] = useState<AdminContextResponse | null>(null);
+  const [plansByMonth, setPlansByMonth] = useState<PlansByMonth>({});
   const [storageReady, setStorageReady] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!token) return;
+
+    let active = true;
+    setLoading(true);
+    setError(null);
+
+    Promise.allSettled([api<WorkspaceUser[]>('/admin/users'), api<AdminContextResponse>('/admin/context')])
+      .then(([usersResult, contextResult]) => {
+        if (!active) return;
+
+        if (usersResult.status === 'fulfilled') {
+          setUsers(usersResult.value);
+        } else {
+          setError(usersResult.reason instanceof Error ? usersResult.reason.message : 'Unable to load workspace users');
+        }
+
+        if (contextResult.status === 'fulfilled') {
+          setAdminContext(contextResult.value);
+        }
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [api, token]);
+
+  useEffect(() => {
+    if (!storageKey) return;
     try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        setPlansByMonth(sanitizePlans(JSON.parse(saved), defaultMonth));
-      }
+      const raw = window.localStorage.getItem(storageKey);
+      setPlansByMonth(raw ? normalizePlans(JSON.parse(raw)) : {});
     } catch {
-      setPlansByMonth({ [defaultMonth]: createSeedGoals() });
+      setPlansByMonth({});
     } finally {
       setStorageReady(true);
     }
-  }, [defaultMonth]);
+  }, [storageKey]);
 
   useEffect(() => {
-    if (!storageReady) return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(plansByMonth));
-  }, [plansByMonth, storageReady]);
+    if (!storageKey || !storageReady) return;
+    window.localStorage.setItem(storageKey, JSON.stringify(plansByMonth));
+  }, [plansByMonth, storageKey, storageReady]);
 
-  useEffect(() => {
-    setPlansByMonth((current) => {
-      if (current[selectedMonth]) return current;
-      const fallbackPlan = current[defaultMonth] ?? Object.values(current)[0] ?? createSeedGoals();
-      return {
-        ...current,
-        [selectedMonth]: cloneTargetsForNewMonth(fallbackPlan),
-      };
+  const orderedUsers = useMemo(() => {
+    return [...users].sort((a, b) => {
+      const currentA = a.id === user?.id ? 0 : 1;
+      const currentB = b.id === user?.id ? 0 : 1;
+      if (currentA !== currentB) return currentA - currentB;
+      const roleDiff = roleOrder(a.role) - roleOrder(b.role);
+      if (roleDiff !== 0) return roleDiff;
+      return (a.name || a.email).localeCompare(b.name || b.email);
     });
-  }, [defaultMonth, selectedMonth]);
+  }, [user?.id, users]);
 
-  const sellerGoals = plansByMonth[selectedMonth] ?? EMPTY_GOALS;
+  const monthPlan = plansByMonth[selectedMonth] ?? EMPTY_MONTH_PLAN;
 
-  const insights = useMemo<GoalInsight[]>(
+  const rows = useMemo(
     () =>
-      sellerGoals.map((goal) => {
-        const score = computeAttainment(goal);
-        const status = getStatusMeta(score);
-        return {
-          id: goal.id,
-          score,
-          statusLabel: status.label,
-          statusClassName: status.className,
-          quotaGapUsd: Math.max(goal.wonTargetUsd - goal.wonActualUsd, 0),
-          pipelineCoverage: goal.wonTargetUsd > 0 ? goal.pipelineActualUsd / goal.wonTargetUsd : 0,
-        };
-      }),
-    [sellerGoals],
+      orderedUsers.map((workspaceUser) => ({
+        workspaceUser,
+        goal: monthPlan[workspaceUser.id] ?? EMPTY_GOAL,
+      })),
+    [monthPlan, orderedUsers],
   );
 
-  const insightById = useMemo(() => new Map(insights.map((insight) => [insight.id, insight])), [insights]);
+  const configuredRows = useMemo(() => rows.filter((row) => hasTargets(row.goal)), [rows]);
 
   const summary = useMemo(() => {
-    const totals = sellerGoals.reduce(
-      (acc, goal) => {
-        acc.leadsTarget += goal.leadsTarget;
-        acc.leadsActual += goal.leadsActual;
-        acc.pipelineTargetUsd += goal.pipelineTargetUsd;
-        acc.pipelineActualUsd += goal.pipelineActualUsd;
-        acc.wonTargetUsd += goal.wonTargetUsd;
-        acc.wonActualUsd += goal.wonActualUsd;
-        acc.attainment += computeAttainment(goal);
+    return rows.reduce(
+      (acc, row) => {
+        acc.leadsTarget += row.goal.leadsTarget;
+        acc.meetingsTarget += row.goal.meetingsTarget;
+        acc.pipelineTargetUsd += row.goal.pipelineTargetUsd;
+        acc.wonTargetUsd += row.goal.wonTargetUsd;
+        acc.winRateTotal += row.goal.winRateTarget;
         return acc;
       },
       {
         leadsTarget: 0,
-        leadsActual: 0,
+        meetingsTarget: 0,
         pipelineTargetUsd: 0,
-        pipelineActualUsd: 0,
         wonTargetUsd: 0,
-        wonActualUsd: 0,
-        attainment: 0,
+        winRateTotal: 0,
       },
     );
+  }, [rows]);
 
-    return {
-      ...totals,
-      sellerCount: sellerGoals.length,
-      averageAttainment: sellerGoals.length > 0 ? totals.attainment / sellerGoals.length : 0,
-      pipelineCoverage: totals.wonTargetUsd > 0 ? totals.pipelineTargetUsd / totals.wonTargetUsd : 0,
-      committedCoverage: totals.wonTargetUsd > 0 ? totals.pipelineActualUsd / totals.wonTargetUsd : 0,
-      onTrackCount: insights.filter((insight) => insight.score >= 0.72).length,
-    };
-  }, [insights, sellerGoals]);
+  const averageWinRate = configuredRows.length > 0 ? summary.winRateTotal / configuredRows.length : 0;
+  const coverageTarget = summary.wonTargetUsd > 0 ? summary.pipelineTargetUsd / summary.wonTargetUsd : 0;
 
-  const focusList = useMemo(
-    () =>
-      [...sellerGoals]
-        .map((goal) => {
-          const insight = insightById.get(goal.id);
-          return { goal, insight };
-        })
-        .filter((row): row is { goal: SellerGoal; insight: GoalInsight } => Boolean(row.insight))
-        .sort((a, b) => a.insight.score - b.insight.score)
-        .slice(0, 3),
-    [insightById, sellerGoals],
+  const missingTargets = useMemo(
+    () => rows.filter((row) => !hasTargets(row.goal)).slice(0, 6),
+    [rows],
   );
 
-  const updateTextField = (sellerId: string, field: TextField, value: string) => {
+  const topQuotaRows = useMemo(
+    () =>
+      [...configuredRows]
+        .sort((a, b) => b.goal.wonTargetUsd - a.goal.wonTargetUsd || b.goal.pipelineTargetUsd - a.goal.pipelineTargetUsd)
+        .slice(0, 5),
+    [configuredRows],
+  );
+
+  const updateTextField = (userId: string, team: string) => {
     setPlansByMonth((current) => ({
       ...current,
-      [selectedMonth]: (current[selectedMonth] ?? []).map((goal) =>
-        goal.id === sellerId ? { ...goal, [field]: value } : goal,
-      ),
+      [selectedMonth]: {
+        ...(current[selectedMonth] ?? {}),
+        [userId]: {
+          ...(current[selectedMonth]?.[userId] ?? EMPTY_GOAL),
+          team,
+        },
+      },
     }));
   };
 
-  const updateNumberField = (sellerId: string, field: NumberField, value: string) => {
-    const nextValue = Math.max(0, Number(value || 0));
+  const updateNumberField = (userId: string, field: NumberField, value: string) => {
+    const nextValue = toPositiveNumber(value);
     setPlansByMonth((current) => ({
       ...current,
-      [selectedMonth]: (current[selectedMonth] ?? []).map((goal) =>
-        goal.id === sellerId ? { ...goal, [field]: Number.isFinite(nextValue) ? nextValue : 0 } : goal,
-      ),
+      [selectedMonth]: {
+        ...(current[selectedMonth] ?? {}),
+        [userId]: {
+          ...(current[selectedMonth]?.[userId] ?? EMPTY_GOAL),
+          [field]: nextValue,
+        },
+      },
     }));
   };
 
-  const addSeller = () => {
+  const resetUserTargets = (userId: string) => {
     setPlansByMonth((current) => {
-      const currentGoals = current[selectedMonth] ?? [];
+      const nextMonthPlan = { ...(current[selectedMonth] ?? {}) };
+      delete nextMonthPlan[userId];
       return {
         ...current,
-        [selectedMonth]: [...currentGoals, newSellerGoal(currentGoals.length + 1)],
-      };
-    });
-  };
-
-  const removeSeller = (sellerId: string) => {
-    setPlansByMonth((current) => {
-      const nextGoals = (current[selectedMonth] ?? []).filter((goal) => goal.id !== sellerId);
-      return {
-        ...current,
-        [selectedMonth]: nextGoals.length > 0 ? nextGoals : [newSellerGoal(1)],
+        [selectedMonth]: nextMonthPlan,
       };
     });
   };
 
   const resetMonth = () => {
-    setPlansByMonth((current) => ({
-      ...current,
-      [selectedMonth]:
-        selectedMonth === defaultMonth
-          ? createSeedGoals()
-          : cloneTargetsForNewMonth(current[defaultMonth] ?? createSeedGoals()),
-    }));
+    setPlansByMonth((current) => {
+      const next = { ...current };
+      delete next[selectedMonth];
+      return next;
+    });
   };
 
   return (
@@ -404,13 +310,12 @@ export default function AdminGoalsPage() {
             <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Admin</p>
             <h1 className="text-3xl font-semibold">Objectives</h1>
             <p className="mt-3 max-w-3xl text-sm text-slate-400">
-              Define monthly goals per seller: lead volume, discovery cadence, pipeline creation and closed-won revenue
-              in USD.
+              Monthly sales targets by seller, using the real users of the current workspace only.
             </p>
           </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <label className="min-w-[180px]">
+            <label className="min-w-[190px]">
               <span className="mb-2 block text-xs uppercase tracking-[0.16em] text-slate-400">Target month</span>
               <input
                 type="month"
@@ -419,9 +324,6 @@ export default function AdminGoalsPage() {
                 className="w-full rounded-xl bg-white/5 px-3 py-2.5 text-sm text-slate-100 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
               />
             </label>
-            <button type="button" onClick={addSeller} className="btn-secondary">
-              Add seller
-            </button>
             <button type="button" onClick={resetMonth} className="btn-secondary">
               Reset month
             </button>
@@ -429,271 +331,256 @@ export default function AdminGoalsPage() {
         </div>
 
         <div className="card p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.16em] text-cyan-300/80">Sales planning board</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-cyan-300/80">Planning board</p>
               <h2 className="mt-2 text-2xl font-semibold">{formatMonthLabel(selectedMonth)}</h2>
-              <p className="mt-2 text-sm text-slate-400">
-                Targets update live while you edit each seller. Use this page to align individual quotas with the team
-                revenue plan.
+              <p className="mt-2 text-sm text-slate-300">
+                No seeded sellers, no fake KPIs. Targets start empty and are mapped to actual workspace members.
               </p>
             </div>
 
-            <div className="grid gap-3 text-sm sm:grid-cols-3">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Sellers</p>
-                <p className="mt-2 text-xl font-semibold text-white">{summary.sellerCount}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.14em] text-slate-500">On track</p>
-                <p className="mt-2 text-xl font-semibold text-white">{summary.onTrackCount}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Avg attainment</p>
-                <p className="mt-2 text-xl font-semibold text-white">{PERCENT.format(summary.averageAttainment)}</p>
-              </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
+              <p className="font-medium text-white">{user?.email || 'Current account'}</p>
+              <p className="mt-1 text-slate-400">
+                Local draft scoped to this account{user?.tenantId ? ` · tenant ${user.tenantId.slice(0, 8)}` : ''}.
+              </p>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <SummaryCard
-            title="Closed-won target"
-            value={USD.format(summary.wonTargetUsd)}
-            detail={`${USD.format(summary.wonActualUsd)} committed so far`}
-            accentClassName="from-violet-500/25 via-violet-500/10 to-transparent"
-          />
-          <SummaryCard
-            title="Pipeline target"
-            value={USD.format(summary.pipelineTargetUsd)}
-            detail={`${summary.pipelineCoverage.toFixed(1)}x planned coverage on team quota`}
-            accentClassName="from-cyan-500/25 via-cyan-500/10 to-transparent"
-          />
-          <SummaryCard
-            title="Lead target"
-            value={INT.format(summary.leadsTarget)}
-            detail={`${INT.format(summary.leadsActual)} leads currently generated`}
-            accentClassName="from-emerald-500/20 via-emerald-500/10 to-transparent"
-          />
-          <SummaryCard
-            title="Committed pipeline"
-            value={USD.format(summary.pipelineActualUsd)}
-            detail={`${summary.committedCoverage.toFixed(1)}x live coverage against won quota`}
-            accentClassName="from-amber-500/20 via-amber-500/10 to-transparent"
-          />
-        </div>
+        {error ? <div className="card mt-6 p-5 text-sm text-rose-200">{error}</div> : null}
+        {loading ? <div className="card mt-6 p-5 text-slate-300">Loading workspace users...</div> : null}
 
-        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.95fr)]">
-          <div className="card p-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Per seller targets</p>
-                <h3 className="mt-2 text-xl font-semibold">Quota allocation</h3>
-                <p className="mt-2 text-sm text-slate-400">
-                  Edit seller names, teams and monthly targets. Progress cards compare current snapshot vs target.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
-                Currency locked to <span className="font-semibold text-white">USD</span>
-              </div>
+        {!loading && !error ? (
+          <>
+            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <SummaryCard
+                title="Workspace sellers"
+                value={INT.format(rows.length)}
+                detail={`${INT.format(configuredRows.length)} users already configured`}
+                accentClassName="from-cyan-500/20 via-cyan-500/10 to-transparent"
+              />
+              <SummaryCard
+                title="Lead target"
+                value={INT.format(summary.leadsTarget)}
+                detail={`${INT.format(summary.meetingsTarget)} meetings planned`}
+                accentClassName="from-emerald-500/20 via-emerald-500/10 to-transparent"
+              />
+              <SummaryCard
+                title="Pipeline target"
+                value={USD.format(summary.pipelineTargetUsd)}
+                detail={`${coverageTarget.toFixed(1)}x coverage vs won target`}
+                accentClassName="from-violet-500/25 via-violet-500/10 to-transparent"
+              />
+              <SummaryCard
+                title="Closed-won target"
+                value={USD.format(summary.wonTargetUsd)}
+                detail={`${Math.round(averageWinRate)}% avg target win rate`}
+                accentClassName="from-amber-500/20 via-amber-500/10 to-transparent"
+              />
             </div>
 
-            <div className="mt-5 space-y-5">
-              {sellerGoals.map((goal) => {
-                const insight = insightById.get(goal.id);
-                return (
-                  <div key={goal.id} className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4 md:p-5">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <p className="text-lg font-semibold text-white">{goal.sellerName}</p>
-                          {insight ? (
-                            <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${insight.statusClassName}`}>
-                              {insight.statusLabel}
-                            </span>
-                          ) : null}
+            <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.9fr)]">
+              <div className="card p-5">
+                <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Per seller targets</p>
+                    <h3 className="mt-2 text-xl font-semibold">Real workspace users</h3>
+                    <p className="mt-2 text-sm text-slate-400">
+                      Seller names come from the CRM workspace. Use this page only to define the monthly commercial
+                      target mix.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
+                    Currency locked to <span className="font-semibold text-white">USD</span>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-5">
+                  {rows.map(({ workspaceUser, goal }) => {
+                    const quotaShare = summary.wonTargetUsd > 0 ? goal.wonTargetUsd / summary.wonTargetUsd : 0;
+                    const pipelineCoverage = goal.wonTargetUsd > 0 ? goal.pipelineTargetUsd / goal.wonTargetUsd : 0;
+
+                    return (
+                      <div key={workspaceUser.id} className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4 md:p-5">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <p className="text-lg font-semibold text-white">{workspaceUser.name || workspaceUser.email}</p>
+                              <span className="rounded-full bg-white/6 px-2.5 py-1 text-xs font-medium text-slate-300 ring-1 ring-white/10">
+                                {roleLabel(workspaceUser.role)}
+                              </span>
+                              {workspaceUser.id === user?.id ? (
+                                <span className="rounded-full bg-cyan-400/15 px-2.5 py-1 text-xs font-medium text-cyan-100 ring-1 ring-cyan-400/25">
+                                  Current user
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-1 text-sm text-slate-400">{workspaceUser.email}</p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => resetUserTargets(workspaceUser.id)}
+                            className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 transition hover:bg-white/5"
+                          >
+                            Clear targets
+                          </button>
                         </div>
-                        <p className="mt-1 text-sm text-slate-400">{goal.team}</p>
+
+                        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                          <MetricBox
+                            label="Quota share"
+                            value={`${Math.round(quotaShare * 100)}%`}
+                            detail={goal.wonTargetUsd > 0 ? `${USD.format(goal.wonTargetUsd)} of team won target` : 'No quota set yet'}
+                          />
+                          <MetricBox
+                            label="Pipeline coverage"
+                            value={`${pipelineCoverage.toFixed(1)}x`}
+                            detail={goal.pipelineTargetUsd > 0 ? `${USD.format(goal.pipelineTargetUsd)} planned pipeline` : 'No pipeline target set'}
+                          />
+                          <MetricBox
+                            label="Meetings / leads"
+                            value={goal.leadsTarget > 0 ? `${Math.round((goal.meetingsTarget / goal.leadsTarget) * 100)}%` : '0%'}
+                            detail={
+                              goal.leadsTarget > 0
+                                ? `${INT.format(goal.meetingsTarget)} meetings for ${INT.format(goal.leadsTarget)} leads`
+                                : 'No volume target set'
+                            }
+                          />
+                        </div>
+
+                        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                          <Field>
+                            <Label>Team / segment</Label>
+                            <TextInput
+                              value={goal.team}
+                              onChange={(event) => updateTextField(workspaceUser.id, event.target.value)}
+                              placeholder="Enterprise / FR"
+                            />
+                          </Field>
+                          <Field>
+                            <Label>Lead target</Label>
+                            <NumberInput
+                              value={goal.leadsTarget}
+                              onChange={(event) => updateNumberField(workspaceUser.id, 'leadsTarget', event.target.value)}
+                            />
+                          </Field>
+                          <Field>
+                            <Label>Meetings target</Label>
+                            <NumberInput
+                              value={goal.meetingsTarget}
+                              onChange={(event) => updateNumberField(workspaceUser.id, 'meetingsTarget', event.target.value)}
+                            />
+                          </Field>
+                          <Field>
+                            <Label>Target win rate (%)</Label>
+                            <NumberInput
+                              value={goal.winRateTarget}
+                              onChange={(event) => updateNumberField(workspaceUser.id, 'winRateTarget', event.target.value)}
+                            />
+                          </Field>
+                          <Field>
+                            <Label>Pipeline target (USD)</Label>
+                            <NumberInput
+                              value={goal.pipelineTargetUsd}
+                              step={1000}
+                              onChange={(event) => updateNumberField(workspaceUser.id, 'pipelineTargetUsd', event.target.value)}
+                            />
+                          </Field>
+                          <Field>
+                            <Label>Closed-won target (USD)</Label>
+                            <NumberInput
+                              value={goal.wonTargetUsd}
+                              step={1000}
+                              onChange={(event) => updateNumberField(workspaceUser.id, 'wonTargetUsd', event.target.value)}
+                            />
+                          </Field>
+                        </div>
                       </div>
+                    );
+                  })}
+                </div>
+              </div>
 
-                      <button
-                        type="button"
-                        onClick={() => removeSeller(goal.id)}
-                        className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 transition hover:bg-white/5"
-                      >
-                        Remove
-                      </button>
-                    </div>
-
-                    <div className="mt-4 grid gap-3 lg:grid-cols-3">
-                      <MetricProgress
-                        label="Leads"
-                        actual={goal.leadsActual}
-                        target={goal.leadsTarget}
-                        valueFormatter={(value) => INT.format(value)}
-                        barClassName="bg-cyan-400"
-                      />
-                      <MetricProgress
-                        label="Pipeline"
-                        actual={goal.pipelineActualUsd}
-                        target={goal.pipelineTargetUsd}
-                        valueFormatter={(value) => USD.format(value)}
-                        barClassName="bg-violet-400"
-                      />
-                      <MetricProgress
-                        label="Closed-won"
-                        actual={goal.wonActualUsd}
-                        target={goal.wonTargetUsd}
-                        valueFormatter={(value) => USD.format(value)}
-                        barClassName="bg-emerald-400"
-                      />
-                    </div>
-
-                    <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                      <Field>
-                        <Label>Seller</Label>
-                        <TextInput
-                          value={goal.sellerName}
-                          onChange={(event) => updateTextField(goal.id, 'sellerName', event.target.value)}
-                        />
-                      </Field>
-                      <Field>
-                        <Label>Team / segment</Label>
-                        <TextInput value={goal.team} onChange={(event) => updateTextField(goal.id, 'team', event.target.value)} />
-                      </Field>
-                      <Field>
-                        <Label>Lead target</Label>
-                        <NumberInput
-                          value={goal.leadsTarget}
-                          onChange={(event) => updateNumberField(goal.id, 'leadsTarget', event.target.value)}
-                        />
-                      </Field>
-                      <Field>
-                        <Label>Meetings target</Label>
-                        <NumberInput
-                          value={goal.meetingsTarget}
-                          onChange={(event) => updateNumberField(goal.id, 'meetingsTarget', event.target.value)}
-                        />
-                      </Field>
-                      <Field>
-                        <Label>Pipeline target (USD)</Label>
-                        <NumberInput
-                          value={goal.pipelineTargetUsd}
-                          step={1000}
-                          onChange={(event) => updateNumberField(goal.id, 'pipelineTargetUsd', event.target.value)}
-                        />
-                      </Field>
-                      <Field>
-                        <Label>Closed-won target (USD)</Label>
-                        <NumberInput
-                          value={goal.wonTargetUsd}
-                          step={1000}
-                          onChange={(event) => updateNumberField(goal.id, 'wonTargetUsd', event.target.value)}
-                        />
-                      </Field>
-                      <Field>
-                        <Label>Target win rate (%)</Label>
-                        <NumberInput
-                          value={goal.winRateTarget}
-                          onChange={(event) => updateNumberField(goal.id, 'winRateTarget', event.target.value)}
-                        />
-                      </Field>
-                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <p className="text-xs uppercase tracking-[0.14em] text-slate-500">Quota gap</p>
-                        <p className="mt-2 text-xl font-semibold text-white">
-                          {USD.format(insight?.quotaGapUsd ?? Math.max(goal.wonTargetUsd - goal.wonActualUsd, 0))}
-                        </p>
-                        <p className="mt-2 text-sm text-slate-400">
-                          Coverage at {(insight?.pipelineCoverage ?? 0).toFixed(1)}x of the personal won target.
-                        </p>
+              <div className="space-y-6">
+                <div className="card p-5">
+                  <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Top quotas</p>
+                  <h3 className="mt-2 text-xl font-semibold">Revenue split</h3>
+                  <div className="mt-4 space-y-3">
+                    {topQuotaRows.length > 0 ? (
+                      topQuotaRows.map(({ workspaceUser, goal }) => {
+                        const share = summary.wonTargetUsd > 0 ? goal.wonTargetUsd / summary.wonTargetUsd : 0;
+                        return (
+                          <div key={workspaceUser.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                            <div className="flex items-center justify-between gap-4">
+                              <div>
+                                <p className="font-semibold text-white">{workspaceUser.name || workspaceUser.email}</p>
+                                <p className="mt-1 text-sm text-slate-400">{goal.team || workspaceUser.email}</p>
+                              </div>
+                              <p className="text-lg font-semibold text-white">{USD.format(goal.wonTargetUsd)}</p>
+                            </div>
+                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400"
+                                style={{ width: `${Math.min(share * 100, 100)}%` }}
+                              />
+                            </div>
+                            <p className="mt-2 text-xs uppercase tracking-[0.14em] text-slate-500">
+                              {Math.round(share * 100)}% of team won target
+                            </p>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">
+                        No seller target configured yet for {formatMonthLabel(selectedMonth)}.
                       </div>
-                    </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          </div>
+                </div>
 
-          <div className="space-y-6">
-            <div className="card p-5">
-              <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Focus sellers</p>
-              <h3 className="mt-2 text-xl font-semibold">Who needs attention</h3>
-              <div className="mt-4 space-y-3">
-                {focusList.map(({ goal, insight }) => (
-                  <div key={goal.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="font-semibold text-white">{goal.sellerName}</p>
-                        <p className="mt-1 text-sm text-slate-400">{goal.team}</p>
+                <div className="card p-5">
+                  <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Missing targets</p>
+                  <h3 className="mt-2 text-xl font-semibold">Users still empty</h3>
+                  <div className="mt-4 space-y-3">
+                    {missingTargets.length > 0 ? (
+                      missingTargets.map(({ workspaceUser }) => (
+                        <div key={workspaceUser.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                          <p className="font-semibold text-white">{workspaceUser.name || workspaceUser.email}</p>
+                          <p className="mt-1 text-sm text-slate-400">{workspaceUser.email}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">
+                        All workspace users have a target definition for this month.
                       </div>
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${insight.statusClassName}`}>
-                        {insight.statusLabel}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-sm text-slate-300">
-                      {USD.format(insight.quotaGapUsd)} still needed to hit the monthly won target.
+                    )}
+                  </div>
+                </div>
+
+                <div className="card p-5">
+                  <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Workspace scope</p>
+                  <h3 className="mt-2 text-xl font-semibold">Tenant isolation</h3>
+                  <div className="mt-4 space-y-3 text-sm text-slate-300">
+                    <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      This page only uses users from the current CRM workspace. Other subscriptions stay isolated.
                     </p>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-violet-400"
-                        style={{ width: `${Math.min(insight.score * 100, 100)}%` }}
-                      />
-                    </div>
-                    <p className="mt-2 text-xs uppercase tracking-[0.14em] text-slate-500">
-                      Attainment {PERCENT.format(insight.score)}
+                    <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      {adminContext?.isCustomerWorkspace
+                        ? 'Current workspace is a customer subscription workspace. Subscription administration remains managed from the owner workspace.'
+                        : 'Current workspace is an owner workspace or standalone tenant. You can still manage customer subscriptions separately.'}
+                    </p>
+                    <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      Account enabled here: <span className="font-semibold text-white">{user?.email || 'unknown'}</span>
                     </p>
                   </div>
-                ))}
+                </div>
               </div>
             </div>
-
-            <div className="card p-5">
-              <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Quota guardrails</p>
-              <h3 className="mt-2 text-xl font-semibold">Recommended operating rules</h3>
-              <div className="mt-4 space-y-4">
-                <Guideline
-                  title="Pipeline coverage"
-                  value={`${summary.pipelineCoverage.toFixed(1)}x`}
-                  description="Aim for at least 3.0x pipeline vs closed-won target across the team."
-                />
-                <Guideline
-                  title="Discovery cadence"
-                  value={`${INT.format(
-                    sellerGoals.reduce((sum, goal) => sum + goal.meetingsTarget, 0),
-                  )} meetings`}
-                  description="Use meetings targets to avoid front-loading quota on a single large deal."
-                />
-                <Guideline
-                  title="Average win rate"
-                  value={
-                    sellerGoals.length > 0
-                      ? `${Math.round(
-                          sellerGoals.reduce((sum, goal) => sum + goal.winRateTarget, 0) / sellerGoals.length,
-                        )}%`
-                      : '0%'
-                  }
-                  description="Keep target win rate realistic per segment before increasing revenue quota."
-                />
-              </div>
-            </div>
-
-            <div className="card p-5">
-              <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Suggested plan</p>
-              <h3 className="mt-2 text-xl font-semibold">One clean monthly operating model</h3>
-              <div className="mt-4 space-y-3 text-sm text-slate-300">
-                <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  1. Set the closed-won target first, then work backward to required pipeline and lead volume.
-                </p>
-                <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  2. Keep enterprise reps on higher pipeline quotas and inbound reps on higher conversion expectations.
-                </p>
-                <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  3. Review this board weekly and re-balance territories before the month-end crunch.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+          </>
+        ) : null}
       </AppShell>
     </Guard>
   );
@@ -722,51 +609,20 @@ function SummaryCard({
   );
 }
 
-function MetricProgress({
+function MetricBox({
   label,
-  actual,
-  target,
-  valueFormatter,
-  barClassName,
+  value,
+  detail,
 }: {
   label: string;
-  actual: number;
-  target: number;
-  valueFormatter: (value: number) => string;
-  barClassName: string;
-}) {
-  const ratio = progressRatio(actual, target);
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-300">{label}</p>
-        <p className="text-xs uppercase tracking-[0.14em] text-slate-500">{Math.round(ratio * 100)}%</p>
-      </div>
-      <p className="mt-3 text-2xl font-semibold text-white">{valueFormatter(actual)}</p>
-      <p className="mt-1 text-sm text-slate-400">Target {valueFormatter(target)}</p>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
-        <div className={`h-full rounded-full ${barClassName}`} style={{ width: `${Math.min(ratio * 100, 100)}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function Guideline({
-  title,
-  value,
-  description,
-}: {
-  title: string;
   value: string;
-  description: string;
+  detail: string;
 }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <div className="flex items-start justify-between gap-4">
-        <p className="text-sm text-slate-300">{title}</p>
-        <p className="text-lg font-semibold text-white">{value}</p>
-      </div>
-      <p className="mt-2 text-sm text-slate-400">{description}</p>
+      <p className="text-sm text-slate-300">{label}</p>
+      <p className="mt-3 text-2xl font-semibold text-white">{value}</p>
+      <p className="mt-2 text-sm text-slate-400">{detail}</p>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useI18n } from '../../../contexts/I18nContext';
+import type { LanguageCode } from '../../../i18n/types';
 
 type TemplateCard = {
   title: string;
@@ -24,7 +25,7 @@ type ContractsUi = {
   templates: TemplateCard[];
 };
 
-const UI_BY_LANGUAGE: Record<'fr' | 'en' | 'es', ContractsUi> = {
+const UI_BY_LANGUAGE_CORE: Record<'fr' | 'en' | 'es', ContractsUi> = {
   fr: {
     heading: 'Contracts',
     intro: 'Pack contractuel pret a personnaliser pour vos abonnements clients (MSA + RGPD + securite).',
@@ -124,6 +125,14 @@ const UI_BY_LANGUAGE: Record<'fr' | 'en' | 'es', ContractsUi> = {
       },
     ],
   },
+};
+
+const UI_BY_LANGUAGE: Record<LanguageCode, ContractsUi> = {
+  ...UI_BY_LANGUAGE_CORE,
+  it: UI_BY_LANGUAGE_CORE.en,
+  de: UI_BY_LANGUAGE_CORE.en,
+  pt: UI_BY_LANGUAGE_CORE.en,
+  nl: UI_BY_LANGUAGE_CORE.en,
 };
 
 function escapeHtml(raw: string): string {

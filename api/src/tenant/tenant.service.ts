@@ -123,7 +123,19 @@ export class TenantService {
     try {
       const tenant = await this.prisma.tenant.findFirst({
         where: { id: user.tenantId },
-        select: { id: true, name: true, logoDataUrl: true, accentColor: true, accentColor2: true, updatedAt: true },
+        select: {
+          id: true,
+          name: true,
+          logoDataUrl: true,
+          backgroundColor: true,
+          surfaceColor: true,
+          cardColor: true,
+          foregroundColor: true,
+          mutedColor: true,
+          accentColor: true,
+          accentColor2: true,
+          updatedAt: true,
+        },
       });
       if (!tenant) throw new NotFoundException('Tenant not found');
       return {
@@ -131,6 +143,11 @@ export class TenantService {
         tenantName: tenant.name,
         branding: {
           logoDataUrl: tenant.logoDataUrl,
+          backgroundColor: tenant.backgroundColor,
+          surfaceColor: tenant.surfaceColor,
+          cardColor: tenant.cardColor,
+          foregroundColor: tenant.foregroundColor,
+          mutedColor: tenant.mutedColor,
           accentColor: tenant.accentColor,
           accentColor2: tenant.accentColor2,
         },
@@ -158,10 +175,27 @@ export class TenantService {
         where: { id: user.tenantId },
         data: {
           logoDataUrl: normalize(dto.logoDataUrl),
+          backgroundColor: normalize(dto.backgroundColor),
+          surfaceColor: normalize(dto.surfaceColor),
+          cardColor: normalize(dto.cardColor),
+          foregroundColor: normalize(dto.foregroundColor),
+          mutedColor: normalize(dto.mutedColor),
           accentColor: normalize(dto.accentColor),
           accentColor2: normalize(dto.accentColor2),
         },
-        select: { id: true, name: true, logoDataUrl: true, accentColor: true, accentColor2: true, updatedAt: true },
+        select: {
+          id: true,
+          name: true,
+          logoDataUrl: true,
+          backgroundColor: true,
+          surfaceColor: true,
+          cardColor: true,
+          foregroundColor: true,
+          mutedColor: true,
+          accentColor: true,
+          accentColor2: true,
+          updatedAt: true,
+        },
       });
 
       return {
@@ -169,6 +203,11 @@ export class TenantService {
         tenantName: updated.name,
         branding: {
           logoDataUrl: updated.logoDataUrl,
+          backgroundColor: updated.backgroundColor,
+          surfaceColor: updated.surfaceColor,
+          cardColor: updated.cardColor,
+          foregroundColor: updated.foregroundColor,
+          mutedColor: updated.mutedColor,
           accentColor: updated.accentColor,
           accentColor2: updated.accentColor2,
         },
