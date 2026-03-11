@@ -534,10 +534,6 @@ const IA_PULSE_LOCALE_CORE: Record<'en' | 'fr' | 'es', IaPulseLocale> = {
 
 const IA_PULSE_LOCALE: Record<LanguageCode, IaPulseLocale> = {
   ...IA_PULSE_LOCALE_CORE,
-  it: IA_PULSE_LOCALE_CORE.en,
-  de: IA_PULSE_LOCALE_CORE.en,
-  pt: IA_PULSE_LOCALE_CORE.en,
-  nl: IA_PULSE_LOCALE_CORE.en,
 };
 
 function getClientLabel(client?: Client | null): string {

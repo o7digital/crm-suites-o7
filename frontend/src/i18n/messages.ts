@@ -1181,8 +1181,4 @@ const CORE_MESSAGES = {
 
 export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
   ...CORE_MESSAGES,
-  it: CORE_MESSAGES.en,
-  de: CORE_MESSAGES.en,
-  pt: CORE_MESSAGES.en,
-  nl: CORE_MESSAGES.en,
 };
