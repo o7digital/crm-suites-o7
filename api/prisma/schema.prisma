@@ -24,6 +24,7 @@ model Tenant {
   crmDisplayCurrency String @default("USD")
   industry  String?
   contractSetup Json?
+  marketingSetup Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -39,6 +40,7 @@ model Tenant {
   products Product[]
   dealItems DealItem[]
   userInvites UserInvite[]
+  googleCalendarConnections GoogleCalendarConnection[]
 }
 
 enum UserRole {
@@ -71,6 +73,7 @@ model User {
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   deals  Deal[] @relation("DealOwner")
+  googleCalendarConnection GoogleCalendarConnection?
 }
 
 model Subscription {
@@ -151,6 +154,25 @@ model Task {
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   client Client @relation(fields: [clientId], references: [id])
+}
+
+model GoogleCalendarConnection {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  userId              String   @unique
+  googleEmail         String
+  refreshTokenCipher  String
+  calendarId          String   @default("primary")
+  calendarSummary     String?
+  lastSyncAt          DateTime?
+  lastSyncError       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
 }
 
 model Invoice {

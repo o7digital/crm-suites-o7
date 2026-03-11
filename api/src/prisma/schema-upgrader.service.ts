@@ -18,6 +18,7 @@ export class SchemaUpgraderService {
     await this.ensureSubscriptionsSchema();
     await this.ensureTenantBrandingFields();
     await this.ensureTenantCrmSettingsFields();
+    await this.ensureGoogleCalendarConnectionSchema();
   }
 
   private async tableExists(table: string) {
@@ -388,6 +389,7 @@ export class SchemaUpgraderService {
       { name: 'crmDisplayCurrency', type: `TEXT NOT NULL DEFAULT 'USD'` },
       { name: 'industry', type: 'TEXT' },
       { name: 'contractSetup', type: 'JSONB' },
+      { name: 'marketingSetup', type: 'JSONB' },
     ];
 
     for (const col of columns) {
@@ -397,6 +399,77 @@ export class SchemaUpgraderService {
         await this.prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN "${col.name}" ${col.type};`);
       } catch {
         // Ignore permissions / already-added races.
+      }
+    }
+  }
+
+  private async ensureGoogleCalendarConnectionSchema() {
+    const hasConnection = await this.tableExists('GoogleCalendarConnection');
+    if (!hasConnection) {
+      await this.prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "GoogleCalendarConnection" (
+          "id" TEXT NOT NULL,
+          "tenantId" TEXT NOT NULL,
+          "userId" TEXT NOT NULL,
+          "googleEmail" TEXT NOT NULL,
+          "refreshTokenCipher" TEXT NOT NULL,
+          "calendarId" TEXT NOT NULL DEFAULT 'primary',
+          "calendarSummary" TEXT,
+          "lastSyncAt" TIMESTAMP(3),
+          "lastSyncError" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL,
+          CONSTRAINT "GoogleCalendarConnection_pkey" PRIMARY KEY ("id")
+        );
+      `);
+    }
+
+    const columns: Array<{ name: string; type: string }> = [
+      { name: 'googleEmail', type: 'TEXT NOT NULL DEFAULT \'\'' },
+      { name: 'refreshTokenCipher', type: 'TEXT NOT NULL DEFAULT \'\'' },
+      { name: 'calendarId', type: `TEXT NOT NULL DEFAULT 'primary'` },
+      { name: 'calendarSummary', type: 'TEXT' },
+      { name: 'lastSyncAt', type: 'TIMESTAMP(3)' },
+      { name: 'lastSyncError', type: 'TEXT' },
+    ];
+
+    for (const col of columns) {
+      const exists = await this.columnExists('GoogleCalendarConnection', col.name);
+      if (exists) continue;
+      try {
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "GoogleCalendarConnection" ADD COLUMN "${col.name}" ${col.type};`,
+        );
+      } catch {
+        // Ignore permissions / already-added races.
+      }
+    }
+
+    await this.prisma.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "GoogleCalendarConnection_userId_key" ON "GoogleCalendarConnection"("userId");`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "GoogleCalendarConnection_tenantId_idx" ON "GoogleCalendarConnection"("tenantId");`,
+    );
+
+    const fks: Array<{ name: string; sql: string }> = [
+      {
+        name: 'GoogleCalendarConnection_tenantId_fkey',
+        sql: `ALTER TABLE "GoogleCalendarConnection" ADD CONSTRAINT "GoogleCalendarConnection_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;`,
+      },
+      {
+        name: 'GoogleCalendarConnection_userId_fkey',
+        sql: `ALTER TABLE "GoogleCalendarConnection" ADD CONSTRAINT "GoogleCalendarConnection_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;`,
+      },
+    ];
+
+    for (const fk of fks) {
+      const exists = await this.constraintExists(fk.name);
+      if (exists) continue;
+      try {
+        await this.prisma.$executeRawUnsafe(fk.sql);
+      } catch {
+        // Ignore constraint races / existing under another name.
       }
     }
   }

@@ -129,10 +129,6 @@ const UI_BY_LANGUAGE_CORE: Record<'fr' | 'en' | 'es', ContractsUi> = {
 
 const UI_BY_LANGUAGE: Record<LanguageCode, ContractsUi> = {
   ...UI_BY_LANGUAGE_CORE,
-  it: UI_BY_LANGUAGE_CORE.en,
-  de: UI_BY_LANGUAGE_CORE.en,
-  pt: UI_BY_LANGUAGE_CORE.en,
-  nl: UI_BY_LANGUAGE_CORE.en,
 };
 
 function escapeHtml(raw: string): string {

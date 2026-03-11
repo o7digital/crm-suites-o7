@@ -19,4 +19,8 @@ export class UpdateTenantSettingsDto {
   @IsOptional()
   @IsObject()
   contractSetup?: Record<string, unknown> | null;
+
+  @IsOptional()
+  @IsObject()
+  marketingSetup?: Record<string, unknown> | null;
 }

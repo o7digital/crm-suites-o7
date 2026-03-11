@@ -48,10 +48,6 @@ const CORE_STAGE_LABELS = {
 
 export const STAGE_LABELS: Record<LanguageCode, Record<string, string>> = {
   ...CORE_STAGE_LABELS,
-  it: CORE_STAGE_LABELS.en,
-  de: CORE_STAGE_LABELS.en,
-  pt: CORE_STAGE_LABELS.en,
-  nl: CORE_STAGE_LABELS.en,
 };
 
 export function translateStageName(lang: LanguageCode, name: string): string {
