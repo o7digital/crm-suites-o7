@@ -129,6 +129,15 @@ const UI_BY_LANGUAGE_CORE: Record<'fr' | 'en' | 'es', ContractsUi> = {
 
 const UI_BY_LANGUAGE: Record<LanguageCode, ContractsUi> = {
   ...UI_BY_LANGUAGE_CORE,
+  it: UI_BY_LANGUAGE_CORE.en,
+  de: UI_BY_LANGUAGE_CORE.en,
+  pt: UI_BY_LANGUAGE_CORE.en,
+  nl: UI_BY_LANGUAGE_CORE.en,
+  ru: UI_BY_LANGUAGE_CORE.en,
+  no: UI_BY_LANGUAGE_CORE.en,
+  ja: UI_BY_LANGUAGE_CORE.en,
+  zh: UI_BY_LANGUAGE_CORE.en,
+  ar: UI_BY_LANGUAGE_CORE.en,
 };
 
 function escapeHtml(raw: string): string {
