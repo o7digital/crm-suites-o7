@@ -1,4 +1,5 @@
 import type { LanguageCode } from './types';
+import { EXTRA_MESSAGES } from './extraMessages';
 
 const CORE_MESSAGES = {
   en: {
@@ -1200,6 +1201,18 @@ const CORE_MESSAGES = {
   },
 } as const;
 
-export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
+type CoreLanguageCode = 'en' | 'fr' | 'es';
+
+export const MESSAGES: Partial<Record<LanguageCode, Record<string, string>>> &
+  Record<CoreLanguageCode, Record<string, string>> = {
   ...CORE_MESSAGES,
+  it: { ...CORE_MESSAGES.en, ...EXTRA_MESSAGES.it },
+  de: { ...CORE_MESSAGES.en, ...EXTRA_MESSAGES.de },
+  pt: { ...CORE_MESSAGES.en, ...EXTRA_MESSAGES.pt },
+  nl: { ...CORE_MESSAGES.en, ...EXTRA_MESSAGES.nl },
+  ru: { ...CORE_MESSAGES.en, ...EXTRA_MESSAGES.ru },
+  no: { ...CORE_MESSAGES.en, ...EXTRA_MESSAGES.no },
+  ja: { ...CORE_MESSAGES.en, ...EXTRA_MESSAGES.ja },
+  zh: { ...CORE_MESSAGES.en, ...EXTRA_MESSAGES.zh },
+  ar: { ...CORE_MESSAGES.en, ...EXTRA_MESSAGES.ar },
 };
