@@ -82,12 +82,54 @@ type WorkflowStageDraft = {
   status: Stage['status'];
 };
 
+type WorkflowEditorMode = 'edit' | 'create';
+
 type NewStageDraft = {
   name: string;
   probabilityPct: string;
   status: Stage['status'];
   afterStageId: string;
 };
+
+let workflowStageDraftCounter = 0;
+
+function createWorkflowStageDraftId() {
+  workflowStageDraftCounter += 1;
+  return `workflow-stage-draft-${workflowStageDraftCounter}`;
+}
+
+function insertWorkflowStageDraft(
+  drafts: WorkflowStageDraft[],
+  draft: NewStageDraft,
+): { drafts: WorkflowStageDraft[]; insertedId: string | null } {
+  const stageName = draft.name.trim();
+  if (!stageName) return { drafts, insertedId: null };
+
+  const nextDraft: WorkflowStageDraft = {
+    id: createWorkflowStageDraftId(),
+    name: stageName,
+    probabilityPct: draft.probabilityPct,
+    status: draft.status,
+  };
+
+  if (!draft.afterStageId) {
+    return { drafts: [...drafts, nextDraft], insertedId: nextDraft.id };
+  }
+
+  const afterIndex = drafts.findIndex((item) => item.id === draft.afterStageId);
+  if (afterIndex < 0) {
+    return { drafts: [...drafts, nextDraft], insertedId: nextDraft.id };
+  }
+
+  return {
+    drafts: [
+      ...drafts.slice(0, afterIndex + 1),
+      nextDraft,
+      ...drafts.slice(afterIndex + 1),
+    ],
+    insertedId: nextDraft.id,
+  };
+}
 
 function parseContactLine(input: string): { name?: string; email?: string } {
   const raw = (input || '').trim();
@@ -232,6 +274,8 @@ export default function CrmPage() {
     stageId: '',
   });
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
+  const [workflowMode, setWorkflowMode] = useState<WorkflowEditorMode>('edit');
+  const [workflowEditingPipelineId, setWorkflowEditingPipelineId] = useState('');
   const [workflowPipelineName, setWorkflowPipelineName] = useState('');
   const [workflowStageDrafts, setWorkflowStageDrafts] = useState<WorkflowStageDraft[]>([]);
   const [newStageDraft, setNewStageDraft] = useState<NewStageDraft>({
@@ -246,9 +290,12 @@ export default function CrmPage() {
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [workflowInfo, setWorkflowInfo] = useState<string | null>(null);
   const [statusDropHover, setStatusDropHover] = useState<Stage['status'] | null>(null);
+  const workflowIsCreateMode = workflowMode === 'create';
+  const workflowTargetPipelineId = workflowIsCreateMode ? '' : workflowEditingPipelineId;
   const newStageNameValue = newStageDraft.name.trim();
   const newStageProbabilityValue = parseProbabilityPct(newStageDraft.probabilityPct);
-  const workflowAddStageValidationError = !pipelineId
+  const workflowAddStageValidationError =
+    !workflowIsCreateMode && !workflowTargetPipelineId
     ? 'Select a pipeline first'
     : !newStageNameValue
       ? 'Stage name is required'
@@ -482,36 +529,57 @@ export default function CrmPage() {
     return formatDealsUsdTotal(lostDeals, fx, fxLoading);
   }, [fx, fxLoading, lostDeals]);
 
-  const resetWorkflowEditor = (sourceStages: Stage[], afterStageId?: string) => {
-    const orderedStages = [...sourceStages].sort((a, b) => a.position - b.position);
+  const resetWorkflowEditorFromDrafts = (
+    sourceDrafts: WorkflowStageDraft[],
+    afterStageId?: string,
+  ) => {
     setWorkflowAddStageAttempted(false);
-    setWorkflowStageDrafts(
-      orderedStages.map((stage) => ({
-        id: stage.id,
-        name: stage.name,
-        status: stage.status,
-        probabilityPct: toProbabilityPct(stage.probability),
-      })),
-    );
+    setWorkflowStageDrafts(sourceDrafts);
 
     const preferredAfterStageId =
-      afterStageId && orderedStages.some((stage) => stage.id === afterStageId)
+      afterStageId && sourceDrafts.some((stage) => stage.id === afterStageId)
         ? afterStageId
-        : orderedStages[orderedStages.length - 1]?.id || '';
+        : sourceDrafts[sourceDrafts.length - 1]?.id || '';
     const referenceStage =
-      orderedStages.find((stage) => stage.id === preferredAfterStageId) || orderedStages[orderedStages.length - 1];
+      sourceDrafts.find((stage) => stage.id === preferredAfterStageId) ||
+      sourceDrafts[sourceDrafts.length - 1];
 
     setNewStageDraft({
       name: '',
-      probabilityPct: toProbabilityPct(referenceStage?.probability ?? 0.5),
+      probabilityPct: referenceStage?.probabilityPct ?? '50',
       status: referenceStage?.status ?? 'OPEN',
       afterStageId: preferredAfterStageId,
     });
   };
 
+  const resetWorkflowEditor = (sourceStages: Stage[], afterStageId?: string) => {
+    const orderedDrafts = [...sourceStages]
+      .sort((a, b) => a.position - b.position)
+      .map((stage) => ({
+        id: stage.id,
+        name: stage.name,
+        status: stage.status,
+        probabilityPct: toProbabilityPct(stage.probability),
+      }));
+
+    resetWorkflowEditorFromDrafts(orderedDrafts, afterStageId);
+  };
+
   const openWorkflowEditor = (afterStageId?: string) => {
+    setWorkflowMode('edit');
+    setWorkflowEditingPipelineId(pipelineId);
     setWorkflowPipelineName(selectedPipeline?.name || '');
     resetWorkflowEditor(sortedStages, afterStageId);
+    setWorkflowError(null);
+    setWorkflowInfo(null);
+    setShowWorkflowModal(true);
+  };
+
+  const openNewWorkflowEditor = () => {
+    setWorkflowMode('create');
+    setWorkflowEditingPipelineId('');
+    setWorkflowPipelineName('');
+    resetWorkflowEditorFromDrafts([]);
     setWorkflowError(null);
     setWorkflowInfo(null);
     setShowWorkflowModal(true);
@@ -904,7 +972,7 @@ export default function CrmPage() {
     );
   };
 
-  const createWorkflowStageFromDraft = async (draft: NewStageDraft) => {
+  const createWorkflowStageFromDraft = async (targetPipelineId: string, draft: NewStageDraft) => {
     const stageNameValue = draft.name.trim();
     if (!stageNameValue) return null;
 
@@ -916,14 +984,14 @@ export default function CrmPage() {
     const created = await api<Stage>('/stages', {
       method: 'POST',
       body: JSON.stringify({
-        pipelineId,
+        pipelineId: targetPipelineId,
         name: stageNameValue,
         status: draft.status,
         probability: probabilityPct / 100,
       }),
     });
 
-    let refreshedStages = await api<Stage[]>(`/stages?pipelineId=${pipelineId}`);
+    let refreshedStages = await api<Stage[]>(`/stages?pipelineId=${targetPipelineId}`);
     const orderedStages = [...refreshedStages].sort((a, b) => a.position - b.position);
     const createdStage = orderedStages.find((stage) => stage.id === created.id);
 
@@ -944,7 +1012,7 @@ export default function CrmPage() {
               items: desiredOrder.map((stage, position) => ({ id: stage.id, position })),
             }),
           });
-          refreshedStages = await api<Stage[]>(`/stages?pipelineId=${pipelineId}`);
+          refreshedStages = await api<Stage[]>(`/stages?pipelineId=${targetPipelineId}`);
         }
       }
     }
@@ -953,7 +1021,7 @@ export default function CrmPage() {
   };
 
   const handleSaveWorkflow = async () => {
-    if (!pipelineId) {
+    if (!workflowIsCreateMode && !workflowTargetPipelineId) {
       setWorkflowError('Select a pipeline first');
       return;
     }
@@ -967,47 +1035,125 @@ export default function CrmPage() {
         throw new Error('Workflow name is required');
       }
 
-      if (selectedPipeline && nextPipelineName !== selectedPipeline.name) {
-        await api(`/pipelines/${pipelineId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ name: nextPipelineName }),
-        });
-        setPipelines((prev) =>
-          prev.map((pipeline) => (pipeline.id === pipelineId ? { ...pipeline, name: nextPipelineName } : pipeline)),
-        );
-      }
-
-      const existingById = new Map(sortedStages.map((stage) => [stage.id, stage]));
-      for (const draft of workflowStageDrafts) {
+      const normalizedDrafts = workflowStageDrafts.map((draft) => {
         const name = draft.name.trim();
         if (!name) throw new Error('Each stage needs a name');
 
         const probabilityPct = parseProbabilityPct(draft.probabilityPct);
         if (probabilityPct === null) throw new Error('Probability must be between 0 and 100');
-        const probability = probabilityPct / 100;
+        return {
+          ...draft,
+          name,
+          probability: probabilityPct / 100,
+        };
+      });
 
+      if (workflowIsCreateMode) {
+        const draftInsertResult = newStageNameValue
+          ? insertWorkflowStageDraft(normalizedDrafts, newStageDraft)
+          : { drafts: normalizedDrafts, insertedId: null };
+        const draftsToCreate = draftInsertResult.drafts.map((draft) => {
+          const name = draft.name.trim();
+          if (!name) throw new Error('Each stage needs a name');
+          const probabilityPct = parseProbabilityPct(draft.probabilityPct);
+          if (probabilityPct === null) throw new Error('Probability must be between 0 and 100');
+          return {
+            ...draft,
+            name,
+            probability: probabilityPct / 100,
+          };
+        });
+        if (draftsToCreate.length === 0) {
+          throw new Error('Add at least one stage before saving the workflow');
+        }
+
+        let createdPipeline: Pipeline | null = null;
+        try {
+          createdPipeline = await api<Pipeline>('/pipelines', {
+            method: 'POST',
+            body: JSON.stringify({ name: nextPipelineName }),
+          });
+          const nextPipeline = createdPipeline;
+
+          for (const [index, draft] of draftsToCreate.entries()) {
+            await api<Stage>('/stages', {
+              method: 'POST',
+              body: JSON.stringify({
+                pipelineId: nextPipeline.id,
+                name: draft.name,
+                status: draft.status,
+                probability: draft.probability,
+                position: index + 1,
+              }),
+            });
+          }
+
+          const refreshedStages = await api<Stage[]>(`/stages?pipelineId=${nextPipeline.id}`);
+          setPipelines((prev) => [...prev, nextPipeline]);
+          setStages(refreshedStages);
+          setStagesByPipelineId((prev) => ({ ...prev, [nextPipeline.id]: refreshedStages }));
+          setDeals([]);
+          setPipelineId(nextPipeline.id);
+          setRequestedStageId(refreshedStages[0]?.id || null);
+          setHighlightStageId(null);
+          setShowWorkflowModal(false);
+          router.replace(`/crm?pipelineId=${nextPipeline.id}`);
+          return;
+        } catch (err) {
+          if (createdPipeline) {
+            try {
+              await api(`/pipelines/${createdPipeline.id}`, { method: 'DELETE' });
+            } catch {
+              // Ignore rollback failures and surface the original error.
+            }
+          }
+          throw err;
+        }
+      }
+
+      const editingPipeline = pipelines.find((pipeline) => pipeline.id === workflowTargetPipelineId) || null;
+      if (editingPipeline && nextPipelineName !== editingPipeline.name) {
+        await api(`/pipelines/${workflowTargetPipelineId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: nextPipelineName }),
+        });
+        setPipelines((prev) =>
+          prev.map((pipeline) =>
+            pipeline.id === workflowTargetPipelineId ? { ...pipeline, name: nextPipelineName } : pipeline,
+          ),
+        );
+      }
+
+      const existingStages = stagesByPipelineId[workflowTargetPipelineId] ?? sortedStages;
+      const existingById = new Map(existingStages.map((stage) => [stage.id, stage]));
+      for (const draft of normalizedDrafts) {
         const current = existingById.get(draft.id);
         if (!current) continue;
         const changed =
-          current.name !== name ||
+          current.name !== draft.name ||
           current.status !== draft.status ||
-          Math.abs((current.probability ?? 0) - probability) > 0.00001;
+          Math.abs((current.probability ?? 0) - draft.probability) > 0.00001;
         if (!changed) continue;
 
         await api(`/stages/${draft.id}`, {
           method: 'PATCH',
           body: JSON.stringify({
-            name,
+            name: draft.name,
             status: draft.status,
-            probability,
+            probability: draft.probability,
           }),
         });
       }
 
-      const createdStageResult = newStageNameValue ? await createWorkflowStageFromDraft(newStageDraft) : null;
-      const refreshedStages = createdStageResult?.stages || (await api<Stage[]>(`/stages?pipelineId=${pipelineId}`));
-      setStages(refreshedStages);
-      setStagesByPipelineId((prev) => ({ ...prev, [pipelineId]: refreshedStages }));
+      const createdStageResult = newStageNameValue
+        ? await createWorkflowStageFromDraft(workflowTargetPipelineId, newStageDraft)
+        : null;
+      const refreshedStages =
+        createdStageResult?.stages || (await api<Stage[]>(`/stages?pipelineId=${workflowTargetPipelineId}`));
+      if (workflowTargetPipelineId === pipelineId) {
+        setStages(refreshedStages);
+      }
+      setStagesByPipelineId((prev) => ({ ...prev, [workflowTargetPipelineId]: refreshedStages }));
       resetWorkflowEditor(refreshedStages, createdStageResult?.created.id || newStageDraft.afterStageId || undefined);
       setWorkflowInfo(null);
       setWorkflowError(null);
@@ -1033,13 +1179,25 @@ export default function CrmPage() {
     setWorkflowInfo(null);
 
     try {
-      const createdStageResult = await createWorkflowStageFromDraft(newStageDraft);
-      if (!createdStageResult) {
+      if (workflowIsCreateMode) {
+        const nextDraftInsert = insertWorkflowStageDraft(workflowStageDrafts, newStageDraft);
+        if (nextDraftInsert.drafts.length === workflowStageDrafts.length) {
+          throw new Error('Stage name is required');
+        }
+        resetWorkflowEditorFromDrafts(nextDraftInsert.drafts, nextDraftInsert.insertedId || undefined);
+        setWorkflowInfo(t('crm.stageAdded'));
+        return;
+      }
+
+      const createdStageResult = await createWorkflowStageFromDraft(workflowTargetPipelineId, newStageDraft);
+      if (!createdStageResult || !workflowTargetPipelineId) {
         throw new Error('Stage name is required');
       }
 
-      setStages(createdStageResult.stages);
-      setStagesByPipelineId((prev) => ({ ...prev, [pipelineId]: createdStageResult.stages }));
+      if (workflowTargetPipelineId === pipelineId) {
+        setStages(createdStageResult.stages);
+      }
+      setStagesByPipelineId((prev) => ({ ...prev, [workflowTargetPipelineId]: createdStageResult.stages }));
       resetWorkflowEditor(createdStageResult.stages, createdStageResult.created.id);
       setWorkflowInfo(t('crm.stageAdded'));
     } catch (err) {
@@ -1079,8 +1237,16 @@ export default function CrmPage() {
                 </option>
               ))}
             </select>
-            <button className="btn-secondary text-sm" type="button" onClick={() => openWorkflowEditor()}>
+            <button
+              className="btn-secondary text-sm"
+              type="button"
+              onClick={() => openWorkflowEditor()}
+              disabled={!selectedPipeline}
+            >
               {t('common.manage')} {t('tasks.section')}
+            </button>
+            <button className="btn-secondary text-sm" type="button" onClick={openNewWorkflowEditor}>
+              + {t('crm.newWorkflow')}
             </button>
             <button className="btn-primary" onClick={openCreateModal}>
               {t('crm.newDeal')}
@@ -1240,7 +1406,7 @@ export default function CrmPage() {
             <div className="card flex w-full max-w-3xl max-h-[90vh] flex-col overflow-hidden p-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold">
-                  {t('common.manage')} {t('tasks.section')}
+                  {workflowIsCreateMode ? t('crm.newWorkflow') : `${t('common.manage')} ${t('tasks.section')}`}
                 </h2>
                 <button
                   className="text-slate-400"
@@ -1256,6 +1422,32 @@ export default function CrmPage() {
               </div>
 
               <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    className={`rounded-full px-3 py-1.5 text-sm transition ${
+                      !workflowIsCreateMode
+                        ? 'bg-cyan-500/20 text-cyan-100'
+                        : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                    }`}
+                    type="button"
+                    onClick={() => openWorkflowEditor()}
+                    disabled={!selectedPipeline}
+                  >
+                    {selectedPipeline?.name || t('crm.currentWorkflow')}
+                  </button>
+                  <button
+                    className={`rounded-full px-3 py-1.5 text-sm transition ${
+                      workflowIsCreateMode
+                        ? 'bg-cyan-500/20 text-cyan-100'
+                        : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                    }`}
+                    type="button"
+                    onClick={openNewWorkflowEditor}
+                  >
+                    + {t('crm.newWorkflow')}
+                  </button>
+                </div>
+
                 <label className="block text-sm text-slate-300">
                   {t('crm.workflowName')}
                   <input
@@ -1264,6 +1456,9 @@ export default function CrmPage() {
                     onChange={(e) => setWorkflowPipelineName(e.target.value)}
                   />
                 </label>
+                {workflowIsCreateMode ? (
+                  <p className="text-xs text-slate-400">{t('crm.workflowCreateHint')}</p>
+                ) : null}
 
                 <div>
                   <p className="text-sm text-slate-300">{t('tasks.section')}</p>
