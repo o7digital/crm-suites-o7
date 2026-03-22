@@ -19,6 +19,14 @@ export class UpdateDealDto {
   expectedCloseDate?: string;
 
   @IsOptional()
+  @IsString()
+  pipelineId?: string;
+
+  @IsOptional()
+  @IsString()
+  stageId?: string;
+
+  @IsOptional()
   @IsUUID('4')
   clientId?: string | null;
 }

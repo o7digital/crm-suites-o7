@@ -330,7 +330,18 @@ export class DealsService {
 
   async update(id: string, dto: UpdateDealDto, user: RequestUser) {
     const caps = await this.getSchemaCaps();
-    await this.ensureBelongs(id, user, caps);
+    const role = await this.getUserRole(user);
+    const existing = await this.prisma.deal.findFirst({
+      where: {
+        id,
+        tenantId: user.tenantId,
+        ...(caps.hasOwnerId && role === 'MEMBER'
+          ? { ownerId: user.userId }
+          : {}),
+      },
+      select: { id: true, pipelineId: true, stageId: true },
+    });
+    if (!existing) throw new NotFoundException('Deal not found');
 
     if (dto.clientId) {
       if (!caps.hasClientId) {
@@ -347,7 +358,50 @@ export class DealsService {
       }
     }
 
-    const data: Prisma.DealUpdateInput = {
+    const requestedPipelineId = dto.pipelineId?.trim() || undefined;
+    const requestedStageId = dto.stageId?.trim() || undefined;
+    const targetPipelineId = requestedPipelineId ?? existing.pipelineId;
+    let targetStageId = requestedStageId ?? existing.stageId;
+    let resolvedTargetStageId: string | null = null;
+
+    if (requestedPipelineId && requestedPipelineId !== existing.pipelineId) {
+      const pipeline = await this.prisma.pipeline.findFirst({
+        where: { id: requestedPipelineId, tenantId: user.tenantId },
+        select: { id: true },
+      });
+      if (!pipeline) throw new NotFoundException('Pipeline not found');
+
+      if (!requestedStageId) {
+        const firstStage = await this.prisma.stage.findFirst({
+          where: { tenantId: user.tenantId, pipelineId: requestedPipelineId },
+          orderBy: { position: 'asc' },
+          select: { id: true },
+        });
+        if (!firstStage) throw new BadRequestException('Pipeline has no stages');
+        targetStageId = firstStage.id;
+        resolvedTargetStageId = firstStage.id;
+      }
+    }
+
+    if (requestedStageId || targetPipelineId !== existing.pipelineId) {
+      if (!resolvedTargetStageId) {
+        const targetStage = await this.prisma.stage.findFirst({
+          where: {
+            id: targetStageId,
+            tenantId: user.tenantId,
+            pipelineId: targetPipelineId,
+          },
+          select: { id: true },
+        });
+        if (!targetStage) {
+          throw new BadRequestException('Stage not found for pipeline');
+        }
+        resolvedTargetStageId = targetStage.id;
+      }
+      targetStageId = resolvedTargetStageId;
+    }
+
+    const data: Prisma.DealUncheckedUpdateInput = {
       title: dto.title,
       value: dto.value,
       currency: dto.currency ? dto.currency.toUpperCase() : undefined,
@@ -355,12 +409,35 @@ export class DealsService {
         ? new Date(dto.expectedCloseDate)
         : undefined,
       ...(caps.hasClientId ? { clientId: dto.clientId } : {}),
+      ...(targetPipelineId !== existing.pipelineId
+        ? { pipelineId: targetPipelineId }
+        : {}),
+      ...(targetStageId !== existing.stageId ? { stageId: targetStageId } : {}),
     };
 
-    return this.prisma.deal.update({
-      where: { id },
-      data,
-      select: this.dealSelect(caps),
+    if (targetStageId === existing.stageId) {
+      return this.prisma.deal.update({
+        where: { id },
+        data,
+        select: this.dealSelect(caps),
+      });
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.dealStageHistory.create({
+        data: {
+          tenantId: user.tenantId,
+          dealId: existing.id,
+          fromStageId: existing.stageId,
+          toStageId: targetStageId,
+        },
+      });
+
+      return tx.deal.update({
+        where: { id: existing.id },
+        data,
+        select: this.dealSelect(caps),
+      });
     });
   }
 

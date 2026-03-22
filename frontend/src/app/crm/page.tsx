@@ -662,6 +662,7 @@ export default function CrmPage() {
       if (!stageId) throw new Error('Stage is required');
 
       if (editingDeal) {
+        const pipelineChanged = targetPipelineId !== editingDeal.pipelineId;
         const updated = await api<Deal>(`/deals/${editingDeal.id}`, {
           method: 'PATCH',
           body: JSON.stringify({
@@ -670,17 +671,20 @@ export default function CrmPage() {
             currency: form.currency,
             expectedCloseDate: form.expectedCloseDate || undefined,
             clientId: form.clientId ? form.clientId : null,
+            pipelineId: targetPipelineId,
+            stageId,
           }),
         });
 
-        if (stageId !== editingDeal.stageId) {
-          await api(`/deals/${editingDeal.id}/move-stage`, {
-            method: 'POST',
-            body: JSON.stringify({ stageId }),
-          });
-        }
+        let finalDeal: Deal = { ...editingDeal, ...updated };
 
-        let finalDeal: Deal = { ...editingDeal, ...updated, stageId };
+        if (targetPipelineId === pipelineId) {
+          setDeals((prev) =>
+            prev.map((deal) =>
+              deal.id === editingDeal.id ? { ...deal, ...finalDeal } : deal,
+            ),
+          );
+        }
 
         if (proposalFile) {
           const proposalForm = new FormData();
@@ -692,18 +696,33 @@ export default function CrmPage() {
             });
             finalDeal = { ...finalDeal, ...withProposal };
             setProposalError(null);
+            if (targetPipelineId === pipelineId) {
+              setDeals((prev) =>
+                prev.map((deal) =>
+                  deal.id === editingDeal.id ? { ...deal, ...finalDeal } : deal,
+                ),
+              );
+            }
           } catch (err) {
             const message = err instanceof Error ? err.message : 'Unable to upload proposal PDF';
             setProposalError(message);
+            setEditingDeal(finalDeal);
+            if (targetPipelineId !== pipelineId) {
+              setPipelineId(targetPipelineId);
+              setRequestedStageId(finalDeal.stageId);
+              setHighlightStageId(null);
+              router.replace(`/crm?pipelineId=${targetPipelineId}`);
+            }
             throw err;
           }
         }
 
-        setDeals((prev) =>
-          prev.map((deal) =>
-            deal.id === editingDeal.id ? { ...deal, ...finalDeal } : deal,
-          ),
-        );
+        if (pipelineChanged) {
+          setPipelineId(targetPipelineId);
+          setRequestedStageId(finalDeal.stageId);
+          setHighlightStageId(null);
+          router.replace(`/crm?pipelineId=${targetPipelineId}`);
+        }
       } else {
         const created = await api<Deal>('/deals', {
           method: 'POST',
@@ -1607,7 +1626,6 @@ export default function CrmPage() {
                       setModalStagesError(null);
                       setForm((prev) => ({ ...prev, pipelineId: next, stageId: '' }));
                     }}
-                    disabled={Boolean(editingDeal)}
                   >
                     {pipelines.map((p) => (
                       <option key={p.id} value={p.id}>
