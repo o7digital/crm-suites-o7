@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../../../../components/AppShell';
 import { Guard } from '../../../../components/Guard';
 import { useApi, useAuth } from '../../../../contexts/AuthContext';
+import { useI18n } from '../../../../contexts/I18nContext';
 import { getClientDisplayName } from '@/lib/clients';
 
 type Stage = {
@@ -53,12 +54,15 @@ export default function DealPage() {
   const dealId = params?.dealId;
   const { token } = useAuth();
   const api = useApi(token);
+  const router = useRouter();
+  const { t } = useI18n();
 
   const [deal, setDeal] = useState<Deal | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -179,6 +183,24 @@ export default function DealPage() {
       setSaving(false);
     }
   }, [api, deal, dealId, form.clientId, form.currency, form.expectedCloseDate, form.stageId, form.title, form.value]);
+
+  const handleDuplicate = useCallback(async () => {
+    if (!dealId || !deal) return;
+    setDuplicating(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const duplicated = await api<Deal>(`/deals/${dealId}/duplicate`, {
+        method: 'POST',
+      });
+      router.push(`/crm/deal/${duplicated.id}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to duplicate deal';
+      setError(message);
+    } finally {
+      setDuplicating(false);
+    }
+  }, [api, deal, dealId, router]);
 
   return (
     <Guard>
@@ -306,10 +328,13 @@ export default function DealPage() {
               </div>
 
               <div className="mt-6 flex items-center justify-end gap-2">
-                <button className="btn-secondary" onClick={load} disabled={saving}>
+                <button className="btn-secondary" onClick={load} disabled={saving || duplicating}>
                   Cancel
                 </button>
-                <button className="btn-primary" onClick={handleSave} disabled={saving}>
+                <button className="btn-secondary" onClick={handleDuplicate} disabled={saving || duplicating}>
+                  {duplicating ? t('crm.duplicatingDeal') : t('crm.duplicateDeal')}
+                </button>
+                <button className="btn-primary" onClick={handleSave} disabled={saving || duplicating}>
                   {saving ? 'Saving…' : 'Save'}
                 </button>
               </div>

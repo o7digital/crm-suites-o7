@@ -169,7 +169,6 @@ export default function CrmPage() {
   const { t, stageName } = useI18n();
   const lastDragAtRef = useRef<number>(0);
   const proposalRef = useRef<HTMLInputElement | null>(null);
-  const [crmMode, setCrmMode] = useState<TenantSettings['crmMode']>('B2B');
   const [crmDisplayCurrency, setCrmDisplayCurrency] = useState<DealCurrency>('USD');
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState<string>('');
@@ -186,6 +185,7 @@ export default function CrmPage() {
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
+  const [dealDuplicating, setDealDuplicating] = useState(false);
   const [proposalFile, setProposalFile] = useState<File | null>(null);
   const [proposalFileName, setProposalFileName] = useState('');
   const [proposalError, setProposalError] = useState<string | null>(null);
@@ -345,11 +345,6 @@ export default function CrmPage() {
       api<Pipeline[]>('/pipelines'),
     ])
       .then(([settingsResult, pipelinesResult]) => {
-        const mode =
-          settingsResult.status === 'fulfilled' && settingsResult.value.settings?.crmMode === 'B2C'
-            ? 'B2C'
-            : 'B2B';
-        setCrmMode(mode);
         const rawCurrency =
           settingsResult.status === 'fulfilled'
             ? String(settingsResult.value.settings?.crmDisplayCurrency || 'USD').toUpperCase()
@@ -723,7 +718,6 @@ export default function CrmPage() {
             productIds: form.productIds,
           }),
         });
-        let finalDeal = created;
 
         // Optimistically add the deal so it's not lost even if the PDF upload fails.
         if (targetPipelineId === pipelineId) {
@@ -738,7 +732,6 @@ export default function CrmPage() {
               method: 'POST',
               body: proposalForm,
             });
-            finalDeal = withProposal;
             setProposalError(null);
             if (targetPipelineId === pipelineId) {
               setDeals((prev) => prev.map((d) => (d.id === created.id ? { ...d, ...withProposal } : d)));
@@ -783,6 +776,29 @@ export default function CrmPage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to delete deal';
       setError(message);
+    }
+  };
+
+  const handleDuplicateDeal = async () => {
+    if (!editingDeal) return;
+    setDealDuplicating(true);
+    setError(null);
+
+    try {
+      const duplicated = await api<Deal>(`/deals/${editingDeal.id}/duplicate`, {
+        method: 'POST',
+      });
+
+      if (duplicated.pipelineId === pipelineId) {
+        setDeals((prev) => [duplicated, ...prev.filter((deal) => deal.id !== duplicated.id)]);
+      }
+      setRequestedStageId(duplicated.stageId);
+      openEditModal(duplicated);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to duplicate deal';
+      setError(message);
+    } finally {
+      setDealDuplicating(false);
     }
   };
 
@@ -974,7 +990,10 @@ export default function CrmPage() {
       setStages(refreshedStages);
       setStagesByPipelineId((prev) => ({ ...prev, [pipelineId]: refreshedStages }));
       resetWorkflowEditor(refreshedStages, createdStageResult?.created.id || newStageDraft.afterStageId || undefined);
-      setWorkflowInfo(t('common.saved'));
+      setWorkflowInfo(null);
+      setWorkflowError(null);
+      setShowWorkflowModal(false);
+      setRequestedStageId(createdStageResult?.created.id || null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to save workflow';
       setWorkflowError(message);
@@ -1752,14 +1771,19 @@ export default function CrmPage() {
               </div>
               <div className="mt-6 flex items-center justify-end gap-2">
                 {editingDeal ? (
-                  <button className="btn-secondary" onClick={handleDeleteDeal}>
+                  <button className="btn-secondary" onClick={handleDeleteDeal} disabled={dealDuplicating}>
                     {t('common.delete')}
                   </button>
                 ) : null}
-                <button className="btn-secondary" onClick={() => setShowModal(false)}>
+                {editingDeal ? (
+                  <button className="btn-secondary" onClick={handleDuplicateDeal} disabled={dealDuplicating}>
+                    {dealDuplicating ? t('crm.duplicatingDeal') : t('crm.duplicateDeal')}
+                  </button>
+                ) : null}
+                <button className="btn-secondary" onClick={() => setShowModal(false)} disabled={dealDuplicating}>
                   {t('common.cancel')}
                 </button>
-                <button className="btn-primary" onClick={handleSaveDeal}>
+                <button className="btn-primary" onClick={handleSaveDeal} disabled={dealDuplicating}>
                   {editingDeal ? t('common.save') : t('crm.createDeal')}
                 </button>
               </div>

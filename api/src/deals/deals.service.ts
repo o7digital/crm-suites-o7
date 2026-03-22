@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
@@ -32,7 +36,8 @@ type DealSchemaCaps = {
 export class DealsService {
   constructor(private prisma: PrismaService) {}
 
-  private schemaCache: { checkedAt: number; caps: DealSchemaCaps } | null = null;
+  private schemaCache: { checkedAt: number; caps: DealSchemaCaps } | null =
+    null;
 
   private async getSchemaCaps(): Promise<DealSchemaCaps> {
     const now = Date.now();
@@ -58,10 +63,19 @@ export class DealsService {
 
     const hasClientId = dealColumns.some((c) => c.column_name === 'clientId');
     const hasOwnerId = dealColumns.some((c) => c.column_name === 'ownerId');
-    const hasProposalFilePath = dealColumns.some((c) => c.column_name === 'proposalFilePath');
-    const hasProductTables = tables.some((t) => t.table_name === 'Product') && tables.some((t) => t.table_name === 'DealItem');
+    const hasProposalFilePath = dealColumns.some(
+      (c) => c.column_name === 'proposalFilePath',
+    );
+    const hasProductTables =
+      tables.some((t) => t.table_name === 'Product') &&
+      tables.some((t) => t.table_name === 'DealItem');
 
-    const caps = { hasClientId, hasOwnerId, hasProductTables, hasProposalFilePath };
+    const caps = {
+      hasClientId,
+      hasOwnerId,
+      hasProductTables,
+      hasProposalFilePath,
+    };
     this.schemaCache = { checkedAt: now, caps };
     return caps;
   }
@@ -84,13 +98,17 @@ export class DealsService {
     return select;
   }
 
-  private async getUserRole(user: RequestUser): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
+  private async getUserRole(
+    user: RequestUser,
+  ): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
     try {
       const dbUser = await this.prisma.user.findFirst({
         where: { id: user.userId, tenantId: user.tenantId },
         select: { role: true },
       });
-      return (dbUser?.role as 'OWNER' | 'ADMIN' | 'MEMBER' | undefined) ?? 'MEMBER';
+      return (
+        (dbUser?.role as 'OWNER' | 'ADMIN' | 'MEMBER' | undefined) ?? 'MEMBER'
+      );
     } catch (err) {
       // Legacy / drifted schemas might not have the role column yet. Don't hard-fail the whole CRM.
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -113,7 +131,11 @@ export class DealsService {
     let stageId = dto.stageId;
     if (stageId) {
       const stage = await this.prisma.stage.findFirst({
-        where: { id: stageId, tenantId: user.tenantId, pipelineId: dto.pipelineId },
+        where: {
+          id: stageId,
+          tenantId: user.tenantId,
+          pipelineId: dto.pipelineId,
+        },
       });
       if (!stage) throw new BadRequestException('Stage not found for pipeline');
     } else {
@@ -125,13 +147,20 @@ export class DealsService {
       stageId = stage.id;
     }
 
-    const uniqueProductIds = Array.from(new Set((dto.productIds ?? []).map((x) => x.trim()).filter(Boolean)));
-    const productsById = new Map<string, { id: string; price: Prisma.Decimal | null }>();
+    const uniqueProductIds = Array.from(
+      new Set((dto.productIds ?? []).map((x) => x.trim()).filter(Boolean)),
+    );
+    const productsById = new Map<
+      string,
+      { id: string; price: Prisma.Decimal | null }
+    >();
 
     let clientId: string | undefined;
     if (dto.clientId) {
       if (!caps.hasClientId) {
-        throw new BadRequestException('CRM schema upgrade pending (missing Deal.clientId). Please retry in a minute.');
+        throw new BadRequestException(
+          'CRM schema upgrade pending (missing Deal.clientId). Please retry in a minute.',
+        );
       }
       const client = await this.prisma.client.findFirst({
         where: { id: dto.clientId, tenantId: user.tenantId },
@@ -145,17 +174,25 @@ export class DealsService {
 
     if (uniqueProductIds.length > 0) {
       if (!caps.hasProductTables) {
-        throw new BadRequestException('CRM schema upgrade pending (missing products tables). Please retry in a minute.');
+        throw new BadRequestException(
+          'CRM schema upgrade pending (missing products tables). Please retry in a minute.',
+        );
       }
       const products = await this.prisma.product.findMany({
-        where: { id: { in: uniqueProductIds }, tenantId: user.tenantId, isActive: true },
+        where: {
+          id: { in: uniqueProductIds },
+          tenantId: user.tenantId,
+          isActive: true,
+        },
         select: { id: true, price: true },
       });
 
       for (const p of products) productsById.set(p.id, p);
 
       if (products.length !== uniqueProductIds.length) {
-        throw new BadRequestException('Some products were not found (or are inactive).');
+        throw new BadRequestException(
+          'Some products were not found (or are inactive).',
+        );
       }
     }
 
@@ -165,7 +202,9 @@ export class DealsService {
           title: dto.title,
           value: dto.value,
           currency: (dto.currency ?? 'USD').toUpperCase(),
-          expectedCloseDate: dto.expectedCloseDate ? new Date(dto.expectedCloseDate) : undefined,
+          expectedCloseDate: dto.expectedCloseDate
+            ? new Date(dto.expectedCloseDate)
+            : undefined,
           clientId,
           ...(caps.hasOwnerId ? { ownerId: user.userId } : {}),
           tenantId: user.tenantId,
@@ -203,7 +242,9 @@ export class DealsService {
       where: {
         tenantId: user.tenantId,
         ...(pipelineId ? { pipelineId } : {}),
-        ...(caps.hasOwnerId && role === 'MEMBER' ? { ownerId: user.userId } : {}),
+        ...(caps.hasOwnerId && role === 'MEMBER'
+          ? { ownerId: user.userId }
+          : {}),
       },
       select: this.dealSelect(caps),
       orderBy: { createdAt: 'desc' },
@@ -217,12 +258,74 @@ export class DealsService {
       where: {
         id,
         tenantId: user.tenantId,
-        ...(caps.hasOwnerId && role === 'MEMBER' ? { ownerId: user.userId } : {}),
+        ...(caps.hasOwnerId && role === 'MEMBER'
+          ? { ownerId: user.userId }
+          : {}),
       },
       select: this.dealSelect(caps),
     });
     if (!deal) throw new NotFoundException('Deal not found');
     return deal;
+  }
+
+  async duplicate(id: string, user: RequestUser) {
+    const caps = await this.getSchemaCaps();
+    const source = (await this.findOne(id, user)) as unknown as {
+      title: string;
+      value: Prisma.Decimal;
+      currency: string;
+      expectedCloseDate?: Date | null;
+      pipelineId: string;
+      stageId: string;
+      clientId?: string | null;
+      ownerId?: string | null;
+      proposalFilePath?: string | null;
+      items?: Array<{
+        productId: string;
+        quantity: number;
+        unitPrice?: Prisma.Decimal | null;
+      }>;
+    };
+
+    return this.prisma.$transaction(async (tx) => {
+      const duplicated = await tx.deal.create({
+        data: {
+          title: source.title,
+          value: source.value,
+          currency: source.currency,
+          expectedCloseDate: source.expectedCloseDate ?? undefined,
+          tenantId: user.tenantId,
+          pipelineId: source.pipelineId,
+          stageId: source.stageId,
+          ...(caps.hasClientId ? { clientId: source.clientId ?? null } : {}),
+          ...(caps.hasOwnerId
+            ? { ownerId: source.ownerId ?? user.userId }
+            : {}),
+          ...(caps.hasProposalFilePath
+            ? { proposalFilePath: source.proposalFilePath ?? null }
+            : {}),
+        },
+      });
+
+      if (caps.hasProductTables && source.items && source.items.length > 0) {
+        await tx.dealItem.createMany({
+          data: source.items.map((item) => ({
+            tenantId: user.tenantId,
+            dealId: duplicated.id,
+            productId: item.productId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice ?? null,
+          })),
+        });
+      }
+
+      const created = await tx.deal.findFirst({
+        where: { id: duplicated.id, tenantId: user.tenantId },
+        select: this.dealSelect(caps),
+      });
+      if (!created) throw new NotFoundException('Deal not found');
+      return created;
+    });
   }
 
   async update(id: string, dto: UpdateDealDto, user: RequestUser) {
@@ -231,7 +334,9 @@ export class DealsService {
 
     if (dto.clientId) {
       if (!caps.hasClientId) {
-        throw new BadRequestException('CRM schema upgrade pending (missing Deal.clientId). Please retry in a minute.');
+        throw new BadRequestException(
+          'CRM schema upgrade pending (missing Deal.clientId). Please retry in a minute.',
+        );
       }
       const client = await this.prisma.client.findFirst({
         where: { id: dto.clientId, tenantId: user.tenantId },
@@ -246,7 +351,9 @@ export class DealsService {
       title: dto.title,
       value: dto.value,
       currency: dto.currency ? dto.currency.toUpperCase() : undefined,
-      expectedCloseDate: dto.expectedCloseDate ? new Date(dto.expectedCloseDate) : undefined,
+      expectedCloseDate: dto.expectedCloseDate
+        ? new Date(dto.expectedCloseDate)
+        : undefined,
       ...(caps.hasClientId ? { clientId: dto.clientId } : {}),
     };
 
@@ -257,7 +364,11 @@ export class DealsService {
     });
   }
 
-  async uploadProposal(id: string, file: Express.Multer.File, user: RequestUser) {
+  async uploadProposal(
+    id: string,
+    file: Express.Multer.File,
+    user: RequestUser,
+  ) {
     if (!file) throw new BadRequestException('File is required');
 
     const isPdf =
@@ -323,14 +434,20 @@ export class DealsService {
       where: {
         id,
         tenantId: user.tenantId,
-        ...(caps.hasOwnerId && role === 'MEMBER' ? { ownerId: user.userId } : {}),
+        ...(caps.hasOwnerId && role === 'MEMBER'
+          ? { ownerId: user.userId }
+          : {}),
       },
       select: { id: true, stageId: true, pipelineId: true },
     });
     if (!deal) throw new NotFoundException('Deal not found');
 
     const stage = await this.prisma.stage.findFirst({
-      where: { id: dto.stageId, tenantId: user.tenantId, pipelineId: deal.pipelineId },
+      where: {
+        id: dto.stageId,
+        tenantId: user.tenantId,
+        pipelineId: deal.pipelineId,
+      },
     });
     if (!stage) throw new BadRequestException('Stage not found for pipeline');
 
@@ -357,17 +474,25 @@ export class DealsService {
   async remove(id: string, user: RequestUser) {
     const caps = await this.getSchemaCaps();
     await this.ensureBelongs(id, user, caps);
-    await this.prisma.dealStageHistory.deleteMany({ where: { dealId: id, tenantId: user.tenantId } });
+    await this.prisma.dealStageHistory.deleteMany({
+      where: { dealId: id, tenantId: user.tenantId },
+    });
     return this.prisma.deal.delete({ where: { id }, select: { id: true } });
   }
 
-  private async ensureBelongs(id: string, user: RequestUser, caps: DealSchemaCaps) {
+  private async ensureBelongs(
+    id: string,
+    user: RequestUser,
+    caps: DealSchemaCaps,
+  ) {
     const role = await this.getUserRole(user);
     const exists = await this.prisma.deal.findFirst({
       where: {
         id,
         tenantId: user.tenantId,
-        ...(caps.hasOwnerId && role === 'MEMBER' ? { ownerId: user.userId } : {}),
+        ...(caps.hasOwnerId && role === 'MEMBER'
+          ? { ownerId: user.userId }
+          : {}),
       },
       select: { id: true },
     });

@@ -1,4 +1,19 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, StreamableFile, UploadedFile, UseGuards, UseInterceptors, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+  StreamableFile,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+  Req,
+} from '@nestjs/common';
 import { DealsService } from './deals.service';
 import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
@@ -26,7 +41,8 @@ export class DealsController {
     FileInterceptor('file', {
       storage: diskStorage({
         destination: (req, _file, cb) => {
-          const tenantId = (req.user as RequestUser | undefined)?.tenantId || 'public';
+          const tenantId =
+            (req.user as RequestUser | undefined)?.tenantId || 'public';
           const dest = path.join(uploadRoot, tenantId, 'proposals');
           fs.mkdirSync(dest, { recursive: true });
           cb(null, dest);
@@ -72,8 +88,16 @@ export class DealsController {
     return this.dealsService.create(dto, user);
   }
 
+  @Post(':id/duplicate')
+  duplicate(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.dealsService.duplicate(id, user);
+  }
+
   @Get()
-  findAll(@Query('pipelineId') pipelineId: string | undefined, @CurrentUser() user: RequestUser) {
+  findAll(
+    @Query('pipelineId') pipelineId: string | undefined,
+    @CurrentUser() user: RequestUser,
+  ) {
     return this.dealsService.findAll(pipelineId, user);
   }
 
@@ -83,12 +107,20 @@ export class DealsController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateDealDto, @CurrentUser() user: RequestUser) {
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateDealDto,
+    @CurrentUser() user: RequestUser,
+  ) {
     return this.dealsService.update(id, dto, user);
   }
 
   @Post(':id/move-stage')
-  moveStage(@Param('id') id: string, @Body() dto: MoveStageDto, @CurrentUser() user: RequestUser) {
+  moveStage(
+    @Param('id') id: string,
+    @Body() dto: MoveStageDto,
+    @CurrentUser() user: RequestUser,
+  ) {
     return this.dealsService.moveStage(id, dto, user);
   }
 
