@@ -2090,11 +2090,20 @@ function StageColumn({
   highlighted: boolean;
 }) {
   const { t, stageName } = useI18n();
+  const getEffectiveDealProbability = (deal: Deal) => {
+    const raw = Number(deal.probability ?? deal.stage?.probability ?? stage.probability ?? 0);
+    if (!Number.isFinite(raw)) return 0;
+    if (raw < 0) return 0;
+    if (raw > 1) return 1;
+    return raw;
+  };
+
   const totals = deals.reduce<Record<string, number>>((acc, deal) => {
     const currency = (deal.currency || 'USD').toUpperCase();
     const value = Number(deal.value);
     if (!Number.isFinite(value)) return acc;
-    acc[currency] = (acc[currency] || 0) + value;
+    const weightedValue = value * getEffectiveDealProbability(deal);
+    acc[currency] = (acc[currency] || 0) + weightedValue;
     return acc;
   }, {});
   const entries = Object.entries(totals).sort(([a], [b]) => a.localeCompare(b));
@@ -2191,12 +2200,17 @@ function StageColumn({
             }}
             className="cursor-pointer rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
           >
+            {(() => {
+              const dealProbabilityPct = Math.round(getEffectiveDealProbability(deal) * 100);
+              return (
             <div className="flex items-start justify-between gap-3">
               <p className="font-semibold">{deal.title}</p>
               <span className="mt-0.5 rounded-full bg-cyan-400/10 px-2 py-0.5 text-[11px] font-semibold text-cyan-100">
-                {Math.round((stage.probability ?? 0) * 100)}%
+                {dealProbabilityPct}%
               </span>
             </div>
+              );
+            })()}
             {deal.client ? (
               <p className="mt-1 text-[11px] text-slate-400">
                 {t('tasks.client')}: {getClientDisplayName(deal.client)}
