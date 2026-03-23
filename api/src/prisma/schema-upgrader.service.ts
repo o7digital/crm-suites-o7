@@ -11,6 +11,7 @@ export class SchemaUpgraderService {
     await this.ensureUserRoleSchema();
     await this.ensureDealClientId();
     await this.ensureDealOwnerId();
+    await this.ensureDealProbability();
     await this.ensureDealProposalFields();
     await this.ensureTaskTimeTrackingFields();
     await this.ensureProductsSchema();
@@ -171,6 +172,19 @@ export class SchemaUpgraderService {
       } catch {
         // Ignore permissions / already-added races.
       }
+    }
+  }
+
+  private async ensureDealProbability() {
+    const hasProbability = await this.columnExists('Deal', 'probability');
+    if (hasProbability) return;
+
+    try {
+      await this.prisma.$executeRawUnsafe(
+        `ALTER TABLE "Deal" ADD COLUMN "probability" DOUBLE PRECISION;`,
+      );
+    } catch {
+      // Ignore permissions / already-added races.
     }
   }
 
