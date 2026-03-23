@@ -2091,7 +2091,7 @@ function StageColumn({
 }) {
   const { t, stageName } = useI18n();
   const getEffectiveDealProbability = (deal: Deal) => {
-    const raw = Number(deal.probability ?? deal.stage?.probability ?? stage.probability ?? 0);
+    const raw = Number(deal.probability ?? stage.probability ?? 0);
     if (!Number.isFinite(raw)) return 0;
     if (raw < 0) return 0;
     if (raw > 1) return 1;
