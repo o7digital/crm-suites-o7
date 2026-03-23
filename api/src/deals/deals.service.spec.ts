@@ -49,6 +49,7 @@ describe('DealsService', () => {
         hasOwnerId: false,
         hasProductTables: false,
         hasProposalFilePath: false,
+        hasProbability: true,
       },
     };
 

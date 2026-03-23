@@ -1,0 +1,2 @@
+ALTER TABLE "Deal"
+ADD COLUMN "probability" DOUBLE PRECISION;

@@ -59,11 +59,13 @@ type Deal = {
   title: string;
   value: number;
   currency: string;
+  probability?: number | null;
   expectedCloseDate?: string | null;
   clientId?: string | null;
   client?: Client | null;
   stageId: string;
   pipelineId: string;
+  stage?: Stage | null;
   items?: DealItem[];
 };
 
@@ -258,6 +260,8 @@ export default function CrmPage() {
     title: string;
     value: string;
     currency: DealCurrency;
+    probabilityPct: string;
+    probabilityOverridesStage: boolean;
     expectedCloseDate: string;
     clientId: string;
     productIds: string[];
@@ -267,6 +271,8 @@ export default function CrmPage() {
     title: '',
     value: '',
     currency: 'USD',
+    probabilityPct: '',
+    probabilityOverridesStage: false,
     expectedCloseDate: '',
     clientId: '',
     productIds: [],
@@ -331,6 +337,8 @@ export default function CrmPage() {
         title: '',
         value: '',
         currency: 'USD',
+        probabilityPct: '',
+        probabilityOverridesStage: false,
         expectedCloseDate: '',
         clientId: '',
         productIds: [],
@@ -626,7 +634,24 @@ export default function CrmPage() {
     return modalSortedStages.find((stage) => stage.id === form.stageId) || null;
   }, [form.stageId, modalSortedStages]);
 
-  const stageProbabilityPct = Math.round(((modalSelectedStage?.probability ?? 0) as number) * 100);
+  const selectedStageProbabilityPct = toProbabilityPct(modalSelectedStage?.probability);
+
+  useEffect(() => {
+    if (!showModal) return;
+    if (!modalSelectedStage) return;
+    if (form.probabilityOverridesStage) return;
+    if (form.probabilityPct === selectedStageProbabilityPct) return;
+    setForm((prev) => {
+      if (prev.probabilityOverridesStage) return prev;
+      return { ...prev, probabilityPct: selectedStageProbabilityPct };
+    });
+  }, [
+    form.probabilityOverridesStage,
+    form.probabilityPct,
+    modalSelectedStage,
+    selectedStageProbabilityPct,
+    showModal,
+  ]);
 
   useEffect(() => {
     if (!token) return;
@@ -671,6 +696,7 @@ export default function CrmPage() {
   }, [form.stageId, modalDefaultStageId, modalPipelineId, modalSortedStages, showModal]);
 
   const openCreateModal = () => {
+    const defaultStage = sortedStages.find((stage) => stage.id === defaultStageId) || null;
     setError(null);
     setEditingDeal(null);
     setProposalFile(null);
@@ -681,6 +707,8 @@ export default function CrmPage() {
       title: '',
       value: '',
       currency: 'USD',
+      probabilityPct: toProbabilityPct(defaultStage?.probability),
+      probabilityOverridesStage: false,
       expectedCloseDate: '',
       clientId: '',
       productIds: [],
@@ -701,6 +729,8 @@ export default function CrmPage() {
       title: deal.title ?? '',
       value: deal.value === null || deal.value === undefined ? '' : String(deal.value),
       currency: (String(deal.currency || 'USD').toUpperCase() as DealCurrency) || 'USD',
+      probabilityPct: toProbabilityPct(deal.probability ?? deal.stage?.probability),
+      probabilityOverridesStage: deal.probability !== undefined && deal.probability !== null,
       expectedCloseDate: toDateInputValue(deal.expectedCloseDate),
       clientId: deal.clientId ?? '',
       productIds: (deal.items ?? []).map((it) => it.productId).filter(Boolean),
@@ -723,11 +753,17 @@ export default function CrmPage() {
     try {
       const title = form.title.trim();
       const value = Number(form.value);
+      const probabilityPct = parseProbabilityPct(form.probabilityPct);
       if (!title) throw new Error('Deal name is required');
       if (!Number.isFinite(value)) throw new Error('Amount must be a number');
+      if (probabilityPct === null) throw new Error('Probability must be between 0 and 100');
 
       const stageId = form.stageId || modalDefaultStageId || defaultStageId;
       if (!stageId) throw new Error('Stage is required');
+      const probability =
+        probabilityPct === parseProbabilityPct(selectedStageProbabilityPct)
+          ? null
+          : probabilityPct / 100;
 
       if (editingDeal) {
         const pipelineChanged = targetPipelineId !== editingDeal.pipelineId;
@@ -741,6 +777,7 @@ export default function CrmPage() {
             clientId: form.clientId ? form.clientId : null,
             pipelineId: targetPipelineId,
             stageId,
+            probability,
           }),
         });
 
@@ -802,6 +839,7 @@ export default function CrmPage() {
             clientId: form.clientId || undefined,
             pipelineId: targetPipelineId,
             stageId,
+            probability,
             productIds: form.productIds,
           }),
         });
@@ -1851,11 +1889,31 @@ export default function CrmPage() {
 
                 <label className="block text-sm text-slate-300">
                   {t('crm.probability')}
-                  <input
-                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200"
-                    value={`${stageProbabilityPct}%`}
-                    readOnly
-                  />
+                  <div className="relative mt-2">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 pr-7 text-sm text-slate-200"
+                      value={form.probabilityPct}
+                      onChange={(e) => {
+                        const nextValue = e.target.value;
+                        const nextProbabilityPct = parseProbabilityPct(nextValue);
+                        const stageProbabilityPct = parseProbabilityPct(selectedStageProbabilityPct);
+                        setForm((prev) => ({
+                          ...prev,
+                          probabilityPct: nextValue,
+                          probabilityOverridesStage:
+                            nextProbabilityPct === null || stageProbabilityPct === null
+                              ? true
+                              : nextProbabilityPct !== stageProbabilityPct,
+                        }));
+                      }}
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                      %
+                    </span>
+                  </div>
                   <p className="mt-1 text-[11px] text-slate-500">{t('crm.probabilityHint')}</p>
                 </label>
 

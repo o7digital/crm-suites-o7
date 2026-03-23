@@ -30,6 +30,7 @@ type Deal = {
   title: string;
   value: number;
   currency: string;
+  probability?: number | null;
   expectedCloseDate?: string | null;
   clientId?: string | null;
   client?: Client | null;
@@ -47,6 +48,19 @@ function toDateInputValue(value?: string | null) {
   if (!value) return '';
   if (typeof value === 'string' && value.length >= 10) return value.slice(0, 10);
   return '';
+}
+
+function toProbabilityPct(value?: number | null) {
+  const probability = Number(value);
+  if (!Number.isFinite(probability)) return '0';
+  return String(Math.round(probability * 100));
+}
+
+function parseProbabilityPct(value: string) {
+  const normalized = String(value || '').replace(',', '.').trim();
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) return null;
+  return parsed;
 }
 
 export default function DealPage() {
@@ -70,6 +84,8 @@ export default function DealPage() {
     title: string;
     value: string;
     currency: DealCurrency;
+    probabilityPct: string;
+    probabilityOverridesStage: boolean;
     expectedCloseDate: string;
     clientId: string;
     stageId: string;
@@ -77,6 +93,8 @@ export default function DealPage() {
     title: '',
     value: '',
     currency: 'USD',
+    probabilityPct: '',
+    probabilityOverridesStage: false,
     expectedCloseDate: '',
     clientId: '',
     stageId: '',
@@ -94,6 +112,8 @@ export default function DealPage() {
         title: dealData.title ?? '',
         value: dealData.value === null || dealData.value === undefined ? '' : String(dealData.value),
         currency: (String(dealData.currency || 'USD').toUpperCase() as DealCurrency) || 'USD',
+        probabilityPct: toProbabilityPct(dealData.probability ?? dealData.stage?.probability),
+        probabilityOverridesStage: dealData.probability !== undefined && dealData.probability !== null,
         expectedCloseDate: toDateInputValue(dealData.expectedCloseDate),
         clientId: dealData.clientId ?? '',
         stageId: dealData.stageId ?? '',
@@ -131,7 +151,22 @@ export default function DealPage() {
     return stages.find((s) => s.id === form.stageId) || deal?.stage || null;
   }, [deal?.stage, form.stageId, stages]);
 
-  const probabilityPct = Math.round(((selectedStage?.probability ?? 0) as number) * 100);
+  const selectedStageProbabilityPct = toProbabilityPct(selectedStage?.probability);
+
+  useEffect(() => {
+    if (!selectedStage) return;
+    if (form.probabilityOverridesStage) return;
+    if (form.probabilityPct === selectedStageProbabilityPct) return;
+    setForm((prev) => {
+      if (prev.probabilityOverridesStage) return prev;
+      return { ...prev, probabilityPct: selectedStageProbabilityPct };
+    });
+  }, [
+    form.probabilityOverridesStage,
+    form.probabilityPct,
+    selectedStage,
+    selectedStageProbabilityPct,
+  ]);
 
   const handleSave = useCallback(async () => {
     if (!dealId || !deal) return;
@@ -148,8 +183,12 @@ export default function DealPage() {
       const nextCurrency = (form.currency || 'USD').toUpperCase();
       const nextClientId = form.clientId ? form.clientId : null;
       const nextExpectedCloseDate = form.expectedCloseDate ? form.expectedCloseDate : undefined;
-
-      const stageChanged = form.stageId && form.stageId !== deal.stageId;
+      const nextProbabilityPct = parseProbabilityPct(form.probabilityPct);
+      if (nextProbabilityPct === null) throw new Error('Probability must be between 0 and 100');
+      const nextProbability =
+        nextProbabilityPct === parseProbabilityPct(selectedStageProbabilityPct)
+          ? null
+          : nextProbabilityPct / 100;
 
       const updated = await api<Deal>(`/deals/${dealId}`, {
         method: 'PATCH',
@@ -159,21 +198,16 @@ export default function DealPage() {
           currency: nextCurrency,
           expectedCloseDate: nextExpectedCloseDate,
           clientId: nextClientId,
+          stageId: form.stageId,
+          probability: nextProbability,
         }),
       });
-
-      if (stageChanged) {
-        await api(`/deals/${dealId}/move-stage`, {
-          method: 'POST',
-          body: JSON.stringify({ stageId: form.stageId }),
-        });
-      }
-
-      const refreshed = stageChanged ? await api<Deal>(`/deals/${dealId}`) : updated;
-      setDeal(refreshed);
+      setDeal(updated);
       setForm((prev) => ({
         ...prev,
-        stageId: refreshed.stageId,
+        stageId: updated.stageId,
+        probabilityPct: toProbabilityPct(updated.probability ?? updated.stage?.probability),
+        probabilityOverridesStage: updated.probability !== undefined && updated.probability !== null,
       }));
       setSuccess('Saved');
     } catch (err) {
@@ -211,7 +245,7 @@ export default function DealPage() {
           {deal ? (
             <p className="mt-2 text-sm text-slate-400">
               Stage: <span className="text-slate-200">{selectedStage?.name || deal.stageId}</span> · Probability:{' '}
-              <span className="text-slate-200">{probabilityPct}%</span>
+              <span className="text-slate-200">{form.probabilityPct || selectedStageProbabilityPct}%</span>
             </p>
           ) : null}
           <div className="mt-3 flex gap-2">
@@ -283,12 +317,34 @@ export default function DealPage() {
 
                 <label className="block text-sm text-slate-300">
                   Probability
-                  <input
-                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200"
-                    value={`${probabilityPct}%`}
-                    readOnly
-                  />
-                  <p className="mt-1 text-[11px] text-slate-500">Probability comes from the stage settings.</p>
+                  <div className="relative mt-2">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 pr-7 text-sm text-slate-200"
+                      value={form.probabilityPct}
+                      onChange={(e) => {
+                        const nextValue = e.target.value;
+                        const nextProbabilityPct = parseProbabilityPct(nextValue);
+                        const stageProbabilityPct = parseProbabilityPct(selectedStageProbabilityPct);
+                        setForm((prev) => ({
+                          ...prev,
+                          probabilityPct: nextValue,
+                          probabilityOverridesStage:
+                            nextProbabilityPct === null || stageProbabilityPct === null
+                              ? true
+                              : nextProbabilityPct !== stageProbabilityPct,
+                        }));
+                      }}
+                    />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
+                      %
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Defaults to the selected stage, but you can override it for this deal.
+                  </p>
                 </label>
 
                 <label className="block text-sm text-slate-300">

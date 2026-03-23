@@ -10,23 +10,32 @@ export class ForecastService {
     private fx: FxService,
   ) {}
 
-  private schemaCache: { checkedAt: number; hasOwnerId: boolean } | null = null;
+  private schemaCache:
+    | { checkedAt: number; hasOwnerId: boolean; hasProbability: boolean }
+    | null = null;
 
-  private async hasDealOwnerId(): Promise<boolean> {
+  private async getDealSchemaCaps(): Promise<{
+    hasOwnerId: boolean;
+    hasProbability: boolean;
+  }> {
     const now = Date.now();
     if (this.schemaCache && now - this.schemaCache.checkedAt < 60_000) {
-      return this.schemaCache.hasOwnerId;
+      return {
+        hasOwnerId: this.schemaCache.hasOwnerId,
+        hasProbability: this.schemaCache.hasProbability,
+      };
     }
     const cols = await this.prisma.$queryRaw<Array<{ column_name: string }>>`
       SELECT column_name
       FROM information_schema.columns
       WHERE table_schema = 'public'
         AND table_name = 'Deal'
-        AND column_name IN ('ownerId')
+        AND column_name IN ('ownerId', 'probability')
     `;
     const hasOwnerId = cols.some((c) => c.column_name === 'ownerId');
-    this.schemaCache = { checkedAt: now, hasOwnerId };
-    return hasOwnerId;
+    const hasProbability = cols.some((c) => c.column_name === 'probability');
+    this.schemaCache = { checkedAt: now, hasOwnerId, hasProbability };
+    return { hasOwnerId, hasProbability };
   }
 
   private async getUserRole(user: RequestUser): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
@@ -74,7 +83,7 @@ export class ForecastService {
     });
 
     const role = await this.getUserRole(user);
-    const hasOwnerId = await this.hasDealOwnerId();
+    const { hasOwnerId, hasProbability } = await this.getDealSchemaCaps();
 
     const deals = await this.prisma.deal.findMany({
       where: {
@@ -83,7 +92,12 @@ export class ForecastService {
         ...(hasOwnerId && role === 'MEMBER' ? { ownerId: user.userId } : {}),
       },
       // Keep this endpoint resilient during migrations (ex: when Deal.clientId doesn't exist yet).
-      select: { value: true, currency: true, stageId: true },
+      select: {
+        value: true,
+        currency: true,
+        stageId: true,
+        ...(hasProbability ? { probability: true } : {}),
+      },
     });
 
     const stageMap = new Map<string, (typeof stages)[number]>(
@@ -130,7 +144,10 @@ export class ForecastService {
 
       total += amount;
       const stage = stageMap.get(deal.stageId);
-      const probability = stage?.probability ?? (stage?.status === 'WON' ? 1 : stage?.status === 'LOST' ? 0 : 0);
+      const probability =
+        hasProbability && deal.probability !== undefined && deal.probability !== null
+          ? Number(deal.probability)
+          : stage?.probability ?? (stage?.status === 'WON' ? 1 : stage?.status === 'LOST' ? 0 : 0);
       weightedTotal += amount * probability;
 
       const row = byStageIndex.get(deal.stageId);
@@ -138,6 +155,12 @@ export class ForecastService {
         row.total += amount;
         row.weightedTotal += amount * probability;
         row.count += 1;
+      }
+    }
+
+    for (const row of byStage) {
+      if (row.count > 0 && row.total > 0) {
+        row.probability = row.weightedTotal / row.total;
       }
     }
 

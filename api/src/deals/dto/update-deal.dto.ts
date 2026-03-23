@@ -1,4 +1,4 @@
-import { IsDateString, IsNumber, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsDateString, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 
 export class UpdateDealDto {
   @IsOptional()
@@ -25,6 +25,12 @@ export class UpdateDealDto {
   @IsOptional()
   @IsString()
   stageId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  probability?: number | null;
 
   @IsOptional()
   @IsUUID('4')

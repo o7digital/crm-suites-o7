@@ -30,6 +30,7 @@ type DealSchemaCaps = {
   hasOwnerId: boolean;
   hasProductTables: boolean;
   hasProposalFilePath: boolean;
+  hasProbability: boolean;
 };
 
 @Injectable()
@@ -51,7 +52,7 @@ export class DealsService {
         FROM information_schema.columns
         WHERE table_schema = 'public'
           AND table_name = 'Deal'
-          AND column_name IN ('clientId', 'ownerId', 'proposalFilePath')
+          AND column_name IN ('clientId', 'ownerId', 'probability', 'proposalFilePath')
       `,
       this.prisma.$queryRaw<Array<{ table_name: string }>>`
         SELECT table_name
@@ -63,6 +64,9 @@ export class DealsService {
 
     const hasClientId = dealColumns.some((c) => c.column_name === 'clientId');
     const hasOwnerId = dealColumns.some((c) => c.column_name === 'ownerId');
+    const hasProbability = dealColumns.some(
+      (c) => c.column_name === 'probability',
+    );
     const hasProposalFilePath = dealColumns.some(
       (c) => c.column_name === 'proposalFilePath',
     );
@@ -75,6 +79,7 @@ export class DealsService {
       hasOwnerId,
       hasProductTables,
       hasProposalFilePath,
+      hasProbability,
     };
     this.schemaCache = { checkedAt: now, caps };
     return caps;
@@ -88,6 +93,9 @@ export class DealsService {
     }
     if (caps.hasOwnerId) {
       select.ownerId = true;
+    }
+    if (caps.hasProbability) {
+      select.probability = true;
     }
     if (caps.hasProposalFilePath) {
       select.proposalFilePath = true;
@@ -122,6 +130,11 @@ export class DealsService {
 
   async create(dto: CreateDealDto, user: RequestUser) {
     const caps = await this.getSchemaCaps();
+    if (dto.probability !== undefined && !caps.hasProbability) {
+      throw new BadRequestException(
+        'CRM schema upgrade pending (missing Deal.probability). Please retry in a minute.',
+      );
+    }
 
     const pipeline = await this.prisma.pipeline.findFirst({
       where: { id: dto.pipelineId, tenantId: user.tenantId },
@@ -210,6 +223,7 @@ export class DealsService {
           tenantId: user.tenantId,
           pipelineId: dto.pipelineId,
           stageId,
+          ...(caps.hasProbability ? { probability: dto.probability ?? null } : {}),
         },
       });
 
@@ -279,6 +293,7 @@ export class DealsService {
       stageId: string;
       clientId?: string | null;
       ownerId?: string | null;
+      probability?: number | null;
       proposalFilePath?: string | null;
       items?: Array<{
         productId: string;
@@ -300,6 +315,9 @@ export class DealsService {
           ...(caps.hasClientId ? { clientId: source.clientId ?? null } : {}),
           ...(caps.hasOwnerId
             ? { ownerId: source.ownerId ?? user.userId }
+            : {}),
+          ...(caps.hasProbability
+            ? { probability: source.probability ?? null }
             : {}),
           ...(caps.hasProposalFilePath
             ? { proposalFilePath: source.proposalFilePath ?? null }
@@ -330,6 +348,11 @@ export class DealsService {
 
   async update(id: string, dto: UpdateDealDto, user: RequestUser) {
     const caps = await this.getSchemaCaps();
+    if (dto.probability !== undefined && !caps.hasProbability) {
+      throw new BadRequestException(
+        'CRM schema upgrade pending (missing Deal.probability). Please retry in a minute.',
+      );
+    }
     const role = await this.getUserRole(user);
     const existing = await this.prisma.deal.findFirst({
       where: {
@@ -339,7 +362,12 @@ export class DealsService {
           ? { ownerId: user.userId }
           : {}),
       },
-      select: { id: true, pipelineId: true, stageId: true },
+      select: {
+        id: true,
+        pipelineId: true,
+        stageId: true,
+        ...(caps.hasProbability ? { probability: true } : {}),
+      },
     });
     if (!existing) throw new NotFoundException('Deal not found');
 
@@ -409,6 +437,9 @@ export class DealsService {
         ? new Date(dto.expectedCloseDate)
         : undefined,
       ...(caps.hasClientId ? { clientId: dto.clientId } : {}),
+      ...(caps.hasProbability && dto.probability !== undefined
+        ? { probability: dto.probability }
+        : {}),
       ...(targetPipelineId !== existing.pipelineId
         ? { pipelineId: targetPipelineId }
         : {}),

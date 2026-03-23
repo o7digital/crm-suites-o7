@@ -8,7 +8,9 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 
 function coerceStringArray(value: unknown): string[] | undefined {
@@ -49,6 +51,12 @@ export class CreateDealDto {
   @IsOptional()
   @IsString()
   stageId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  probability?: number | null;
 
   @IsOptional()
   @IsUUID('4')
