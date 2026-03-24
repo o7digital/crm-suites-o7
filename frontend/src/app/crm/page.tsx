@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
@@ -93,6 +93,8 @@ type NewStageDraft = {
   afterStageId: string;
 };
 
+type WorkflowStageDropPlacement = 'before' | 'after';
+
 let workflowStageDraftCounter = 0;
 
 function createWorkflowStageDraftId() {
@@ -131,6 +133,29 @@ function insertWorkflowStageDraft(
     ],
     insertedId: nextDraft.id,
   };
+}
+
+function moveWorkflowStageDraft(
+  drafts: WorkflowStageDraft[],
+  draggedId: string,
+  targetId: string,
+  placement: WorkflowStageDropPlacement,
+) {
+  if (draggedId === targetId) return drafts;
+
+  const draggedStage = drafts.find((item) => item.id === draggedId);
+  if (!draggedStage) return drafts;
+
+  const draftsWithoutDragged = drafts.filter((item) => item.id !== draggedId);
+  const targetIndex = draftsWithoutDragged.findIndex((item) => item.id === targetId);
+  if (targetIndex < 0) return drafts;
+
+  const insertIndex = placement === 'before' ? targetIndex : targetIndex + 1;
+  return [
+    ...draftsWithoutDragged.slice(0, insertIndex),
+    draggedStage,
+    ...draftsWithoutDragged.slice(insertIndex),
+  ];
 }
 
 function parseContactLine(input: string): { name?: string; email?: string } {
@@ -296,6 +321,11 @@ export default function CrmPage() {
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [workflowInfo, setWorkflowInfo] = useState<string | null>(null);
   const [statusDropHover, setStatusDropHover] = useState<Stage['status'] | null>(null);
+  const [workflowDraggedStageId, setWorkflowDraggedStageId] = useState<string | null>(null);
+  const [workflowStageDropTarget, setWorkflowStageDropTarget] = useState<{
+    stageId: string;
+    placement: WorkflowStageDropPlacement;
+  } | null>(null);
   const workflowIsCreateMode = workflowMode === 'create';
   const workflowTargetPipelineId = workflowIsCreateMode ? '' : workflowEditingPipelineId;
   const newStageNameValue = newStageDraft.name.trim();
@@ -311,6 +341,16 @@ export default function CrmPage() {
   const displayedWorkflowAddStageValidationError =
     workflowAddStageAttempted || newStageNameValue ? workflowAddStageValidationError : null;
   const canCreateWorkflowStage = !workflowAddStageValidationError && !workflowAddingStage && !workflowSaving;
+  const clearWorkflowStageDnD = () => {
+    setWorkflowDraggedStageId(null);
+    setWorkflowStageDropTarget(null);
+  };
+  const closeWorkflowModal = () => {
+    setShowWorkflowModal(false);
+    setWorkflowError(null);
+    setWorkflowInfo(null);
+    clearWorkflowStageDnD();
+  };
 
   useEffect(() => {
     if (!showModal) {
@@ -537,10 +577,40 @@ export default function CrmPage() {
     return formatDealsUsdTotal(lostDeals, fx, fxLoading);
   }, [fx, fxLoading, lostDeals]);
 
+  const updateWorkflowStageDropTarget = (
+    event: DragEvent<HTMLDivElement>,
+    stageId: string,
+  ) => {
+    const draggedStageId = workflowDraggedStageId || event.dataTransfer.getData('text/plain');
+    if (!draggedStageId) return;
+
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const placement: WorkflowStageDropPlacement =
+      event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+
+    setWorkflowStageDropTarget((prev) =>
+      prev?.stageId === stageId && prev.placement === placement ? prev : { stageId, placement },
+    );
+  };
+
+  const handleDropWorkflowStage = (event: DragEvent<HTMLDivElement>, targetId: string) => {
+    event.preventDefault();
+    const draggedStageId = workflowDraggedStageId || event.dataTransfer.getData('text/plain');
+    const dropTarget = workflowStageDropTarget;
+    clearWorkflowStageDnD();
+
+    if (!draggedStageId || !dropTarget || dropTarget.stageId !== targetId) return;
+    setWorkflowStageDrafts((prev) =>
+      moveWorkflowStageDraft(prev, draggedStageId, targetId, dropTarget.placement),
+    );
+  };
+
   const resetWorkflowEditorFromDrafts = (
     sourceDrafts: WorkflowStageDraft[],
     afterStageId?: string,
   ) => {
+    clearWorkflowStageDnD();
     setWorkflowAddStageAttempted(false);
     setWorkflowStageDrafts(sourceDrafts);
 
@@ -1183,6 +1253,22 @@ export default function CrmPage() {
         });
       }
 
+      const orderedExistingStageIds = [...existingStages]
+        .sort((a, b) => a.position - b.position)
+        .map((stage) => stage.id);
+      const orderedDraftStageIds = normalizedDrafts.map((draft) => draft.id);
+      const workflowOrderChanged =
+        orderedExistingStageIds.length === orderedDraftStageIds.length &&
+        orderedExistingStageIds.some((stageId, index) => stageId !== orderedDraftStageIds[index]);
+      if (workflowOrderChanged) {
+        await api('/stages/reorder', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            items: orderedDraftStageIds.map((id, position) => ({ id, position })),
+          }),
+        });
+      }
+
       const createdStageResult = newStageNameValue
         ? await createWorkflowStageFromDraft(workflowTargetPipelineId, newStageDraft)
         : null;
@@ -1449,11 +1535,7 @@ export default function CrmPage() {
                 <button
                   className="text-slate-400"
                   type="button"
-                  onClick={() => {
-                    setShowWorkflowModal(false);
-                    setWorkflowError(null);
-                    setWorkflowInfo(null);
-                  }}
+                  onClick={closeWorkflowModal}
                 >
                   ✕
                 </button>
@@ -1500,12 +1582,49 @@ export default function CrmPage() {
 
                 <div>
                   <p className="text-sm text-slate-300">{t('tasks.section')}</p>
+                  <p className="mt-1 text-xs text-slate-400">{t('crm.stageReorderHint')}</p>
                   <div className="mt-2 space-y-2">
                     {workflowStageDrafts.map((draft) => (
                       <div
                         key={draft.id}
-                        className="grid gap-2 rounded-lg border border-white/10 bg-white/5 p-3 md:grid-cols-[1fr_150px_130px]"
+                        className={`relative grid gap-2 rounded-lg border bg-white/5 p-3 transition md:grid-cols-[44px_1fr_150px_130px] ${
+                          workflowDraggedStageId === draft.id
+                            ? 'border-cyan-300/40 bg-cyan-400/10 opacity-70'
+                            : 'border-white/10'
+                        }`}
+                        onDragOver={(event) => updateWorkflowStageDropTarget(event, draft.id)}
+                        onDrop={(event) => handleDropWorkflowStage(event, draft.id)}
+                        onDragLeave={(event) => {
+                          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                            setWorkflowStageDropTarget((prev) => (prev?.stageId === draft.id ? null : prev));
+                          }
+                        }}
                       >
+                        {workflowStageDropTarget?.stageId === draft.id &&
+                        workflowStageDropTarget.placement === 'before' ? (
+                          <div className="pointer-events-none absolute inset-x-3 top-0 h-0.5 rounded-full bg-cyan-300" />
+                        ) : null}
+                        {workflowStageDropTarget?.stageId === draft.id &&
+                        workflowStageDropTarget.placement === 'after' ? (
+                          <div className="pointer-events-none absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-cyan-300" />
+                        ) : null}
+                        <div
+                          draggable
+                          className="flex cursor-grab items-center justify-center rounded-lg border border-white/10 bg-white/5 text-sm font-semibold text-slate-400 active:cursor-grabbing"
+                          title={t('crm.stageReorderHint')}
+                          aria-label={t('crm.dragStage')}
+                          onDragStart={(event) => {
+                            event.dataTransfer.effectAllowed = 'move';
+                            event.dataTransfer.setData('text/plain', draft.id);
+                            setWorkflowDraggedStageId(draft.id);
+                            setWorkflowStageDropTarget(null);
+                          }}
+                          onDragEnd={() => {
+                            clearWorkflowStageDnD();
+                          }}
+                        >
+                          ::
+                        </div>
                         <input
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                           value={draft.name}
@@ -1657,11 +1776,7 @@ export default function CrmPage() {
                 <button
                   className="btn-secondary"
                   type="button"
-                  onClick={() => {
-                    setShowWorkflowModal(false);
-                    setWorkflowError(null);
-                    setWorkflowInfo(null);
-                  }}
+                  onClick={closeWorkflowModal}
                 >
                   {t('common.cancel')}
                 </button>
