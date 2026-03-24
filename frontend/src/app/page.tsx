@@ -6,6 +6,7 @@ import { Guard } from '../components/Guard';
 import { useApi, useAuth } from '../contexts/AuthContext';
 import Link from 'next/link';
 import { useI18n } from '../contexts/I18nContext';
+import { convertCurrency, type FxRatesSnapshot } from '../lib/fx';
 
 const USD = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -14,7 +15,36 @@ const USD = new Intl.NumberFormat('en-US', {
 });
 const INT = new Intl.NumberFormat('en-US');
 
-type DashboardPayload = {
+type Pipeline = {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+};
+
+type Stage = {
+  id: string;
+  probability: number;
+  status: 'OPEN' | 'WON' | 'LOST';
+  pipelineId: string;
+};
+
+type Deal = {
+  id: string;
+  value: number | string;
+  currency: string;
+  probability?: number | null;
+  stageId: string;
+  pipelineId: string;
+};
+
+type PipelineTotal = {
+  pipelineId: string;
+  name: string;
+  open: number;
+  weightedOpenValueUsd: number;
+};
+
+type DashboardApiPayload = {
   clients: number;
   tasks: Record<string, number>;
   leads: {
@@ -34,6 +64,10 @@ type DashboardPayload = {
   invoices: { total: number; amount: number; recent: InvoiceSummary[] };
 };
 
+type DashboardPayload = DashboardApiPayload & {
+  pipelineTotals: PipelineTotal[];
+};
+
 type InvoiceSummary = {
   id: string;
   amount: number;
@@ -41,6 +75,93 @@ type InvoiceSummary = {
   createdAt: string;
   status: string;
 };
+
+function clampProbability(value?: number | null) {
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) return 0;
+  if (raw < 0) return 0;
+  if (raw > 1) return 1;
+  return raw;
+}
+
+function buildPipelineTotals(
+  pipelines: Pipeline[],
+  stages: Stage[],
+  deals: Deal[],
+  fx: FxRatesSnapshot | null,
+): PipelineTotal[] {
+  const stageById = new Map(stages.map((stage) => [stage.id, stage]));
+  const totalsByPipeline = new Map<
+    string,
+    {
+      pipelineId: string;
+      name: string;
+      open: number;
+      currencyTotals: Record<string, number>;
+    }
+  >(
+    pipelines.map((pipeline) => [
+      pipeline.id,
+      {
+        pipelineId: pipeline.id,
+        name: pipeline.name,
+        open: 0,
+        currencyTotals: {},
+      },
+    ]),
+  );
+
+  for (const deal of deals) {
+    const stage = stageById.get(deal.stageId);
+    if (!stage || stage.status !== 'OPEN') continue;
+
+    const current =
+      totalsByPipeline.get(deal.pipelineId) ?? {
+        pipelineId: deal.pipelineId,
+        name: deal.pipelineId,
+        open: 0,
+        currencyTotals: {},
+      };
+
+    current.open += 1;
+
+    const value = Number(deal.value);
+    if (Number.isFinite(value)) {
+      const currency = (deal.currency || 'USD').toUpperCase();
+      const probability = clampProbability(deal.probability ?? stage.probability);
+      current.currencyTotals[currency] = (current.currencyTotals[currency] || 0) + value * probability;
+    }
+
+    totalsByPipeline.set(deal.pipelineId, current);
+  }
+
+  const sortWeight = (name: string) => {
+    if (name === 'New Sales') return 0;
+    if (name === 'Post Sales') return 1;
+    return 2;
+  };
+
+  return Array.from(totalsByPipeline.values())
+    .map((pipeline) => {
+      const weightedOpenValueUsd = Object.entries(pipeline.currencyTotals).reduce((sum, [currency, amount]) => {
+        if (!fx) return currency === 'USD' ? sum + amount : sum;
+        const converted = convertCurrency(amount, currency, 'USD', fx);
+        return converted === null ? sum : sum + converted;
+      }, 0);
+
+      return {
+        pipelineId: pipeline.pipelineId,
+        name: pipeline.name,
+        open: pipeline.open,
+        weightedOpenValueUsd,
+      };
+    })
+    .sort((a, b) => {
+      const rankDiff = sortWeight(a.name) - sortWeight(b.name);
+      if (rankDiff !== 0) return rankDiff;
+      return a.name.localeCompare(b.name);
+    });
+}
 
 export default function DashboardPage() {
   const { token } = useAuth();
@@ -60,7 +181,35 @@ export default function DashboardPage() {
       if (inFlight) return;
       inFlight = true;
       try {
-        const next = await api<DashboardPayload>('/dashboard');
+        const [dashboardResult, pipelinesResult, stagesResult, dealsResult, fxResult] = await Promise.allSettled([
+          api<DashboardApiPayload>('/dashboard'),
+          api<Pipeline[]>('/pipelines'),
+          api<Stage[]>('/stages'),
+          api<Deal[]>('/deals'),
+          api<FxRatesSnapshot>('/fx/usd'),
+        ]);
+
+        if (dashboardResult.status !== 'fulfilled') {
+          throw dashboardResult.reason;
+        }
+
+        const pipelineTotals =
+          pipelinesResult.status === 'fulfilled' &&
+          stagesResult.status === 'fulfilled' &&
+          dealsResult.status === 'fulfilled'
+            ? buildPipelineTotals(
+                pipelinesResult.value,
+                stagesResult.value,
+                dealsResult.value,
+                fxResult.status === 'fulfilled' ? fxResult.value : null,
+              )
+            : [];
+
+        const next: DashboardPayload = {
+          ...dashboardResult.value,
+          pipelineTotals,
+        };
+
         if (!active) return;
         setData(next);
         setError(null);
@@ -80,6 +229,24 @@ export default function DashboardPage() {
       if (timer) window.clearInterval(timer);
     };
   }, [api, token]);
+
+  const primaryPipelineTotals = (() => {
+    if (!data?.pipelineTotals?.length) return [];
+    const preferred = ['New Sales', 'Post Sales']
+      .map((name) => data.pipelineTotals.find((pipeline) => pipeline.name === name))
+      .filter((pipeline): pipeline is PipelineTotal => Boolean(pipeline));
+    return preferred.length > 0 ? preferred : data.pipelineTotals.slice(0, 2);
+  })();
+
+  const pipelineTotalsHint = data
+    ? data.leads.fx?.error
+      ? t('dashboard.fxUnavailable')
+      : `${data.leads.fx?.date ? t('dashboard.fxDate', { date: data.leads.fx.date }) : t('dashboard.fxNA')}${
+          data.leads.fx?.missingCurrencies?.length
+            ? ` · ${t('dashboard.fxMissing', { currencies: data.leads.fx.missingCurrencies.join(', ') })}`
+            : ''
+        }`
+    : '';
 
   return (
     <Guard>
@@ -128,18 +295,10 @@ export default function DashboardPage() {
               value={INT.format(data.leads.total ?? 0)}
               hint={t('dashboard.totalLeadsHint')}
             />
-            <MetricCard
+            <PipelineTotalsCard
               title={t('dashboard.openPipelineValue')}
-              value={USD.format(data.leads.openValueUsd ?? data.leads.amountUsd ?? 0)}
-              hint={
-                data.leads.fx?.error
-                  ? t('dashboard.fxUnavailable', { amount: USD.format(data.leads.amountUsd ?? 0) })
-                  : `${data.leads.fx?.date ? t('dashboard.fxDate', { date: data.leads.fx.date }) : t('dashboard.fxNA')}${
-                      data.leads.fx?.missingCurrencies?.length
-                        ? ` · ${t('dashboard.fxMissing', { currencies: data.leads.fx.missingCurrencies.join(', ') })}`
-                        : ''
-                    } · ${t('dashboard.usdOnly', { amount: USD.format(data.leads.amountUsd ?? 0) })}`
-              }
+              totals={primaryPipelineTotals}
+              hint={pipelineTotalsHint}
             />
           </div>
         )}
@@ -209,6 +368,38 @@ function MetricCard({
       <p className="text-sm text-slate-400">{title}</p>
       <p className={valueClassName ?? 'mt-2 text-3xl font-semibold'}>{value}</p>
       <p className="text-xs text-slate-500">{hint}</p>
+    </div>
+  );
+}
+
+function PipelineTotalsCard({
+  title,
+  totals,
+  hint,
+}: {
+  title: string;
+  totals: PipelineTotal[];
+  hint: string;
+}) {
+  return (
+    <div className="card p-5">
+      <p className="text-sm text-slate-400">{title}</p>
+      <div className="mt-4 space-y-3">
+        {totals.length === 0 ? (
+          <p className="text-3xl font-semibold">—</p>
+        ) : (
+          totals.map((pipeline) => (
+            <div
+              key={pipeline.pipelineId}
+              className="flex items-center justify-between gap-3 rounded-lg bg-white/5 px-3 py-3"
+            >
+              <p className="text-sm font-semibold text-slate-100">{pipeline.name}</p>
+              <p className="text-lg font-semibold">{USD.format(pipeline.weightedOpenValueUsd)}</p>
+            </div>
+          ))
+        )}
+      </div>
+      <p className="mt-3 text-xs text-slate-500">{hint}</p>
     </div>
   );
 }
