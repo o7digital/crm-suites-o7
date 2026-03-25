@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../lib/supabaseClient';
-import { API_BASE_URL } from '../lib/apiBase';
+import { apiBaseForRequests } from '../lib/apiBase';
 
 type User = {
   id: string;
@@ -82,8 +82,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const bootstrapTenant = useCallback(async (accessToken: string, opts?: { ignoreErrors?: boolean }) => {
+    const apiBase = apiBaseForRequests();
     try {
-      const res = await fetch(`${API_BASE_URL}/bootstrap`, {
+      const res = await fetch(`${apiBase}/bootstrap`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -242,7 +243,7 @@ export function useApi(token: string | null) {
   return useMemo(() => {
     const authHeader: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
     return async <T = unknown>(path: string, init?: RequestInit): Promise<T> => {
-      const requestUrl = `${API_BASE_URL}${path}`;
+      const requestUrl = `${apiBaseForRequests()}${path}`;
       const headers: Record<string, string> = { ...authHeader };
       if (!(init?.body instanceof FormData)) {
         headers['Content-Type'] = 'application/json';
