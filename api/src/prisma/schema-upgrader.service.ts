@@ -16,6 +16,7 @@ export class SchemaUpgraderService {
     await this.ensureTaskTimeTrackingFields();
     await this.ensureProductsSchema();
     await this.ensureClientProfileFields();
+    await this.ensureClientCollaboratorsSchema();
     await this.ensureSubscriptionsSchema();
     await this.ensureTenantBrandingFields();
     await this.ensureTenantCrmSettingsFields();
@@ -62,7 +63,9 @@ export class SchemaUpgraderService {
   private async ensureDealClientId() {
     const hasClientId = await this.columnExists('Deal', 'clientId');
     if (!hasClientId) {
-      await this.prisma.$executeRawUnsafe(`ALTER TABLE "Deal" ADD COLUMN "clientId" TEXT;`);
+      await this.prisma.$executeRawUnsafe(
+        `ALTER TABLE "Deal" ADD COLUMN "clientId" TEXT;`,
+      );
     }
 
     // Idempotent index creation.
@@ -121,7 +124,9 @@ export class SchemaUpgraderService {
   private async ensureDealOwnerId() {
     const hasOwnerId = await this.columnExists('Deal', 'ownerId');
     if (!hasOwnerId) {
-      await this.prisma.$executeRawUnsafe(`ALTER TABLE "Deal" ADD COLUMN "ownerId" TEXT;`);
+      await this.prisma.$executeRawUnsafe(
+        `ALTER TABLE "Deal" ADD COLUMN "ownerId" TEXT;`,
+      );
     }
 
     // Backfill existing deals to the tenant OWNER (or first user if no owner exists).
@@ -145,7 +150,9 @@ export class SchemaUpgraderService {
       `);
     }
 
-    await this.prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Deal_ownerId_idx" ON "Deal"("ownerId");`);
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "Deal_ownerId_idx" ON "Deal"("ownerId");`,
+    );
 
     const fkName = 'Deal_ownerId_fkey';
     const fkExists = await this.constraintExists(fkName);
@@ -165,10 +172,15 @@ export class SchemaUpgraderService {
   }
 
   private async ensureDealProposalFields() {
-    const hasProposalFilePath = await this.columnExists('Deal', 'proposalFilePath');
+    const hasProposalFilePath = await this.columnExists(
+      'Deal',
+      'proposalFilePath',
+    );
     if (!hasProposalFilePath) {
       try {
-        await this.prisma.$executeRawUnsafe(`ALTER TABLE "Deal" ADD COLUMN "proposalFilePath" TEXT;`);
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "Deal" ADD COLUMN "proposalFilePath" TEXT;`,
+        );
       } catch {
         // Ignore permissions / already-added races.
       }
@@ -192,7 +204,9 @@ export class SchemaUpgraderService {
     const hasTimeSpentHours = await this.columnExists('Task', 'timeSpentHours');
     if (hasTimeSpentHours) return;
     try {
-      await this.prisma.$executeRawUnsafe(`ALTER TABLE "Task" ADD COLUMN "timeSpentHours" DECIMAL(8,2);`);
+      await this.prisma.$executeRawUnsafe(
+        `ALTER TABLE "Task" ADD COLUMN "timeSpentHours" DECIMAL(8,2);`,
+      );
     } catch {
       // Ignore permissions / already-added races.
     }
@@ -235,10 +249,18 @@ export class SchemaUpgraderService {
     }
 
     // Indexes and unique constraints (idempotent).
-    await this.prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Product_tenantId_idx" ON "Product"("tenantId");`);
-    await this.prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "DealItem_tenantId_idx" ON "DealItem"("tenantId");`);
-    await this.prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "DealItem_dealId_idx" ON "DealItem"("dealId");`);
-    await this.prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "DealItem_productId_idx" ON "DealItem"("productId");`);
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "Product_tenantId_idx" ON "Product"("tenantId");`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "DealItem_tenantId_idx" ON "DealItem"("tenantId");`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "DealItem_dealId_idx" ON "DealItem"("dealId");`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "DealItem_productId_idx" ON "DealItem"("productId");`,
+    );
     await this.prisma.$executeRawUnsafe(
       `CREATE UNIQUE INDEX IF NOT EXISTS "DealItem_dealId_productId_key" ON "DealItem"("dealId","productId");`,
     );
@@ -274,21 +296,109 @@ export class SchemaUpgraderService {
   }
 
   private async ensureClientProfileFields() {
-    // New optional client profile fields added in 2026-02 (firstName/function/companySector).
+    // Client profile fields added incrementally in 2026-02 and 2026-03.
     // Keep the API resilient even if Prisma Migrate hasn't been executed yet.
     const columns: Array<{ name: string; type: string }> = [
       { name: 'firstName', type: 'TEXT' },
       { name: 'function', type: 'TEXT' },
       { name: 'companySector', type: 'TEXT' },
+      { name: 'clientStatus', type: `TEXT NOT NULL DEFAULT 'CLIENT'` },
+      { name: 'dateOfBirth', type: 'TEXT' },
     ];
 
     for (const col of columns) {
       const exists = await this.columnExists('Client', col.name);
       if (exists) continue;
       try {
-        await this.prisma.$executeRawUnsafe(`ALTER TABLE "Client" ADD COLUMN "${col.name}" ${col.type};`);
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "Client" ADD COLUMN "${col.name}" ${col.type};`,
+        );
       } catch {
         // Ignore permissions / already-added races.
+      }
+    }
+  }
+
+  private async ensureClientCollaboratorsSchema() {
+    const hasTable = await this.tableExists('ClientCollaborator');
+    if (!hasTable) {
+      await this.prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "ClientCollaborator" (
+          "id" TEXT NOT NULL,
+          "tenantId" TEXT NOT NULL,
+          "clientId" TEXT NOT NULL,
+          "firstName" TEXT,
+          "name" TEXT NOT NULL,
+          "function" TEXT,
+          "email" TEXT,
+          "whatsapp" TEXT,
+          "comments" TEXT,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "ClientCollaborator_pkey" PRIMARY KEY ("id")
+        );
+      `);
+    }
+
+    const columns: Array<{ name: string; type: string }> = [
+      { name: 'tenantId', type: 'TEXT' },
+      { name: 'clientId', type: 'TEXT' },
+      { name: 'firstName', type: 'TEXT' },
+      { name: 'name', type: `TEXT NOT NULL DEFAULT ''` },
+      { name: 'function', type: 'TEXT' },
+      { name: 'email', type: 'TEXT' },
+      { name: 'whatsapp', type: 'TEXT' },
+      { name: 'comments', type: 'TEXT' },
+      {
+        name: 'createdAt',
+        type: 'TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP',
+      },
+      {
+        name: 'updatedAt',
+        type: 'TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP',
+      },
+    ];
+
+    for (const col of columns) {
+      const exists = await this.columnExists('ClientCollaborator', col.name);
+      if (exists) continue;
+      try {
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "ClientCollaborator" ADD COLUMN "${col.name}" ${col.type};`,
+        );
+      } catch {
+        // Ignore permissions / already-added races.
+      }
+    }
+
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "ClientCollaborator_tenantId_idx" ON "ClientCollaborator"("tenantId");`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "ClientCollaborator_clientId_idx" ON "ClientCollaborator"("clientId");`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "ClientCollaborator_tenantId_clientId_idx" ON "ClientCollaborator"("tenantId","clientId");`,
+    );
+
+    const fks: Array<{ name: string; sql: string }> = [
+      {
+        name: 'ClientCollaborator_tenantId_fkey',
+        sql: `ALTER TABLE "ClientCollaborator" ADD CONSTRAINT "ClientCollaborator_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;`,
+      },
+      {
+        name: 'ClientCollaborator_clientId_fkey',
+        sql: `ALTER TABLE "ClientCollaborator" ADD CONSTRAINT "ClientCollaborator_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;`,
+      },
+    ];
+
+    for (const fk of fks) {
+      const exists = await this.constraintExists(fk.name);
+      if (exists) continue;
+      try {
+        await this.prisma.$executeRawUnsafe(fk.sql);
+      } catch {
+        // Ignore constraint races / existing under another name.
       }
     }
   }
@@ -344,7 +454,9 @@ export class SchemaUpgraderService {
       const exists = await this.columnExists('Subscription', col.name);
       if (exists) continue;
       try {
-        await this.prisma.$executeRawUnsafe(`ALTER TABLE "Subscription" ADD COLUMN "${col.name}" ${col.type};`);
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "Subscription" ADD COLUMN "${col.name}" ${col.type};`,
+        );
       } catch {
         // Ignore permissions / already-added races.
       }
@@ -390,7 +502,9 @@ export class SchemaUpgraderService {
       const exists = await this.columnExists('Tenant', col.name);
       if (exists) continue;
       try {
-        await this.prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN "${col.name}" ${col.type};`);
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "Tenant" ADD COLUMN "${col.name}" ${col.type};`,
+        );
       } catch {
         // Ignore permissions / already-added races.
       }
@@ -410,7 +524,9 @@ export class SchemaUpgraderService {
       const exists = await this.columnExists('Tenant', col.name);
       if (exists) continue;
       try {
-        await this.prisma.$executeRawUnsafe(`ALTER TABLE "Tenant" ADD COLUMN "${col.name}" ${col.type};`);
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "Tenant" ADD COLUMN "${col.name}" ${col.type};`,
+        );
       } catch {
         // Ignore permissions / already-added races.
       }
@@ -439,8 +555,8 @@ export class SchemaUpgraderService {
     }
 
     const columns: Array<{ name: string; type: string }> = [
-      { name: 'googleEmail', type: 'TEXT NOT NULL DEFAULT \'\'' },
-      { name: 'refreshTokenCipher', type: 'TEXT NOT NULL DEFAULT \'\'' },
+      { name: 'googleEmail', type: "TEXT NOT NULL DEFAULT ''" },
+      { name: 'refreshTokenCipher', type: "TEXT NOT NULL DEFAULT ''" },
       { name: 'calendarId', type: `TEXT NOT NULL DEFAULT 'primary'` },
       { name: 'calendarSummary', type: 'TEXT' },
       { name: 'lastSyncAt', type: 'TIMESTAMP(3)' },
@@ -448,7 +564,10 @@ export class SchemaUpgraderService {
     ];
 
     for (const col of columns) {
-      const exists = await this.columnExists('GoogleCalendarConnection', col.name);
+      const exists = await this.columnExists(
+        'GoogleCalendarConnection',
+        col.name,
+      );
       if (exists) continue;
       try {
         await this.prisma.$executeRawUnsafe(

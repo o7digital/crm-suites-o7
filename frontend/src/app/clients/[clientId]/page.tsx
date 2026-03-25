@@ -1,13 +1,23 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppShell } from '../../../components/AppShell';
-import { Guard } from '../../../components/Guard';
-import { useApi, useAuth } from '../../../contexts/AuthContext';
-import { useI18n } from '../../../contexts/I18nContext';
-import { CLIENT_FUNCTION_OPTIONS, getClientDisplayName } from '@/lib/clients';
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AppShell } from "../../../components/AppShell";
+import {
+  ClientCollaboratorsSection,
+  type ClientCollaborator,
+  type ClientCollaboratorCreatePayload,
+} from "../../../components/ClientCollaboratorsSection";
+import { Guard } from "../../../components/Guard";
+import { useApi, useAuth } from "../../../contexts/AuthContext";
+import { useI18n } from "../../../contexts/I18nContext";
+import {
+  CLIENT_FUNCTION_OPTIONS,
+  CLIENT_STATUS_OPTIONS,
+  getClientDisplayName,
+  normalizeClientStatus,
+} from "@/lib/clients";
 
 type Client = {
   id: string;
@@ -15,6 +25,8 @@ type Client = {
   name: string;
   function?: string | null;
   companySector?: string | null;
+  clientStatus?: string | null;
+  dateOfBirth?: string | null;
   email?: string | null;
   phone?: string | null;
   company?: string | null;
@@ -22,6 +34,7 @@ type Client = {
   address?: string | null;
   taxId?: string | null;
   notes?: string | null;
+  collaborators: ClientCollaborator[];
   createdAt: string;
   updatedAt: string;
 };
@@ -49,6 +62,8 @@ export default function ClientPage() {
   const [form, setForm] = useState<{
     firstName: string;
     name: string;
+    clientStatus: string;
+    dateOfBirth: string;
     clientFunction: string;
     companySector: string;
     email: string;
@@ -59,21 +74,23 @@ export default function ClientPage() {
     address: string;
     notes: string;
   }>({
-    firstName: '',
-    name: '',
-    clientFunction: '',
-    companySector: '',
-    email: '',
-    company: '',
-    phone: '',
-    website: '',
-    taxId: '',
-    address: '',
-    notes: '',
+    firstName: "",
+    name: "",
+    clientStatus: "CLIENT",
+    dateOfBirth: "",
+    clientFunction: "",
+    companySector: "",
+    email: "",
+    company: "",
+    phone: "",
+    website: "",
+    taxId: "",
+    address: "",
+    notes: "",
   });
 
   const displayName = useMemo(() => {
-    return client ? getClientDisplayName(client) : t('clients.details.section');
+    return client ? getClientDisplayName(client) : t("clients.details.section");
   }, [client, t]);
 
   const load = useCallback(async () => {
@@ -83,28 +100,76 @@ export default function ClientPage() {
     setSuccess(null);
     try {
       const data = await api<Client>(`/clients/${clientId}`);
-      setClient(data);
+      setClient({
+        ...data,
+        collaborators: data.collaborators ?? [],
+      });
       setForm({
-        firstName: data.firstName ?? '',
-        name: data.name ?? '',
-        clientFunction: data.function ?? '',
-        companySector: data.companySector ?? '',
-        email: data.email ?? '',
-        company: data.company ?? '',
-        phone: data.phone ?? '',
-        website: data.website ?? '',
-        taxId: data.taxId ?? '',
-        address: data.address ?? '',
-        notes: data.notes ?? '',
+        firstName: data.firstName ?? "",
+        name: data.name ?? "",
+        clientStatus: normalizeClientStatus(data.clientStatus) ?? "CLIENT",
+        dateOfBirth: data.dateOfBirth ?? "",
+        clientFunction: data.function ?? "",
+        companySector: data.companySector ?? "",
+        email: data.email ?? "",
+        company: data.company ?? "",
+        phone: data.phone ?? "",
+        website: data.website ?? "",
+        taxId: data.taxId ?? "",
+        address: data.address ?? "",
+        notes: data.notes ?? "",
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to load client';
+      const message =
+        err instanceof Error ? err.message : "Unable to load client";
       setError(message);
       setClient(null);
     } finally {
       setLoading(false);
     }
   }, [api, clientId]);
+
+  const handleCreateCollaborator = useCallback(
+    async (payload: ClientCollaboratorCreatePayload) => {
+      if (!clientId) throw new Error("Missing client id");
+      const created = await api<ClientCollaborator>(
+        `/clients/${clientId}/collaborators`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      );
+      setClient((prev) =>
+        prev
+          ? {
+              ...prev,
+              collaborators: [...prev.collaborators, created],
+            }
+          : prev,
+      );
+    },
+    [api, clientId],
+  );
+
+  const handleDeleteCollaborator = useCallback(
+    async (collaboratorId: string) => {
+      if (!clientId) throw new Error("Missing client id");
+      await api(`/clients/${clientId}/collaborators/${collaboratorId}`, {
+        method: "DELETE",
+      });
+      setClient((prev) =>
+        prev
+          ? {
+              ...prev,
+              collaborators: prev.collaborators.filter(
+                (collaborator) => collaborator.id !== collaboratorId,
+              ),
+            }
+          : prev,
+      );
+    },
+    [api, clientId],
+  );
 
   useEffect(() => {
     if (!token) return;
@@ -118,13 +183,15 @@ export default function ClientPage() {
     setSuccess(null);
     try {
       const nextName = form.name.trim();
-      if (!nextName) throw new Error(t('clients.nameRequired'));
+      if (!nextName) throw new Error(t("clients.nameRequired"));
 
       const updated = await api<Client>(`/clients/${clientId}`, {
-        method: 'PATCH',
+        method: "PATCH",
         body: JSON.stringify({
           firstName: toOptionalTrimmed(form.firstName),
           name: nextName,
+          clientStatus: form.clientStatus,
+          dateOfBirth: toOptionalTrimmed(form.dateOfBirth),
           function: toOptionalTrimmed(form.clientFunction),
           companySector: toOptionalTrimmed(form.companySector),
           email: toOptionalTrimmed(form.email),
@@ -137,9 +204,10 @@ export default function ClientPage() {
         }),
       });
       setClient(updated);
-      setSuccess(t('common.saved'));
+      setSuccess(t("common.saved"));
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to save client';
+      const message =
+        err instanceof Error ? err.message : "Unable to save client";
       setError(message);
     } finally {
       setSaving(false);
@@ -148,16 +216,17 @@ export default function ClientPage() {
 
   const handleDelete = useCallback(async () => {
     if (!clientId) return;
-    const ok = confirm(t('clients.confirmDelete'));
+    const ok = confirm(t("clients.confirmDelete"));
     if (!ok) return;
     setSaving(true);
     setError(null);
     setSuccess(null);
     try {
-      await api(`/clients/${clientId}`, { method: 'DELETE' });
-      router.push('/clients');
+      await api(`/clients/${clientId}`, { method: "DELETE" });
+      router.push("/clients");
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to delete client';
+      const message =
+        err instanceof Error ? err.message : "Unable to delete client";
       setError(message);
       setSaving(false);
     }
@@ -167,62 +236,127 @@ export default function ClientPage() {
     <Guard>
       <AppShell>
         <div className="mb-6">
-          <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('clients.section')}</p>
+          <p className="text-sm uppercase tracking-[0.15em] text-slate-400">
+            {t("clients.section")}
+          </p>
           <h1 className="text-3xl font-semibold">{displayName}</h1>
           <div className="mt-3 flex gap-2">
             <Link href="/clients" className="btn-secondary text-sm">
-              {t('common.back')}
+              {t("common.back")}
             </Link>
-            <button className="btn-secondary text-sm" onClick={load} disabled={loading}>
-              {t('common.refresh')}
+            <button
+              className="btn-secondary text-sm"
+              onClick={load}
+              disabled={loading}
+            >
+              {t("common.refresh")}
             </button>
             <button
               className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
               onClick={handleDelete}
               disabled={saving}
             >
-              {t('common.delete')}
+              {t("common.delete")}
             </button>
           </div>
         </div>
 
-        {loading && <p className="text-slate-300">{t('clients.details.loading')}</p>}
-        {error && <div className="mt-4 rounded-lg bg-red-500/15 px-3 py-2 text-red-200">{error}</div>}
-        {success && <div className="mt-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-emerald-200">{success}</div>}
+        {loading && (
+          <p className="text-slate-300">{t("clients.details.loading")}</p>
+        )}
+        {error && (
+          <div className="mt-4 rounded-lg bg-red-500/15 px-3 py-2 text-red-200">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="mt-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-emerald-200">
+            {success}
+          </div>
+        )}
 
         {!loading && client && (
           <div className="space-y-6">
             <div className="card p-5">
-              <p className="text-sm text-slate-400">{t('clients.details.title')}</p>
+              <p className="text-sm text-slate-400">
+                {t("clients.details.title")}
+              </p>
 
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <label className="block text-sm text-slate-300">
-                  {t('field.firstName')}
+                  {t("field.firstName")}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.firstName}
-                    onChange={(e) => setForm((prev) => ({ ...prev, firstName: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        firstName: e.target.value,
+                      }))
+                    }
                     autoComplete="given-name"
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  {t('field.name')}
+                  {t("field.name")}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.name}
-                    onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, name: e.target.value }))
+                    }
                     required
                     autoComplete="family-name"
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  {t('field.function')}
+                  {t("field.clientStatus")}
+                  <select
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                    value={form.clientStatus}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        clientStatus:
+                          normalizeClientStatus(e.target.value) ?? "CLIENT",
+                      }))
+                    }
+                  >
+                    {CLIENT_STATUS_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {t(`clients.status.${opt.toLowerCase()}`)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm text-slate-300">
+                  {t("field.dateOfBirth")}
+                  <input
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                    value={form.dateOfBirth}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        dateOfBirth: e.target.value,
+                      }))
+                    }
+                    type="date"
+                    autoComplete="bday"
+                  />
+                </label>
+                <label className="block text-sm text-slate-300">
+                  {t("field.function")}
                   <select
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.clientFunction}
-                    onChange={(e) => setForm((prev) => ({ ...prev, clientFunction: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        clientFunction: e.target.value,
+                      }))
+                    }
                   >
-                    <option value="">{t('clients.selectFunction')}</option>
+                    <option value="">{t("clients.selectFunction")}</option>
                     {CLIENT_FUNCTION_OPTIONS.map((opt) => (
                       <option key={opt} value={opt}>
                         {opt}
@@ -231,97 +365,129 @@ export default function ClientPage() {
                   </select>
                 </label>
                 <label className="block text-sm text-slate-300">
-                  {t('field.companySector')}
+                  {t("field.companySector")}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.companySector}
-                    onChange={(e) => setForm((prev) => ({ ...prev, companySector: e.target.value }))}
-                    placeholder={t('clients.companySectorPlaceholder')}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        companySector: e.target.value,
+                      }))
+                    }
+                    placeholder={t("clients.companySectorPlaceholder")}
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  {t('field.email')}
+                  {t("field.email")}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.email}
-                    onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, email: e.target.value }))
+                    }
                     type="email"
                     autoComplete="email"
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  {t('field.company')}
+                  {t("field.company")}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.company}
-                    onChange={(e) => setForm((prev) => ({ ...prev, company: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, company: e.target.value }))
+                    }
                     autoComplete="organization"
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  {t('field.phone')}
+                  {t("field.phone")}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.phone}
-                    onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, phone: e.target.value }))
+                    }
                     autoComplete="tel"
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  {t('field.website')}
+                  {t("field.website")}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.website}
-                    onChange={(e) => setForm((prev) => ({ ...prev, website: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, website: e.target.value }))
+                    }
                     placeholder="https://example.com"
                     autoComplete="url"
                   />
                 </label>
                 <label className="block text-sm text-slate-300">
-                  {t('field.taxId')}
+                  {t("field.taxId")}
                   <input
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.taxId}
-                    onChange={(e) => setForm((prev) => ({ ...prev, taxId: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, taxId: e.target.value }))
+                    }
                   />
                 </label>
                 <div />
                 <label className="block text-sm text-slate-300 md:col-span-2">
-                  {t('field.address')}
+                  {t("field.address")}
                   <textarea
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.address}
-                    onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, address: e.target.value }))
+                    }
                     rows={3}
-                    placeholder={t('clients.addressPlaceholder')}
+                    placeholder={t("clients.addressPlaceholder")}
                   />
                 </label>
                 <label className="block text-sm text-slate-300 md:col-span-2">
-                  {t('field.notes')}
+                  {t("field.notes")}
                   <textarea
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.notes}
-                    onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, notes: e.target.value }))
+                    }
                     rows={4}
                   />
                 </label>
               </div>
 
               <div className="mt-5 flex justify-end gap-2">
-                <button className="btn-primary" onClick={handleSave} disabled={saving}>
-                  {saving ? t('common.saving') : t('common.save')}
+                <button
+                  className="btn-primary"
+                  onClick={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? t("common.saving") : t("common.save")}
                 </button>
               </div>
             </div>
 
+            <ClientCollaboratorsSection
+              collaborators={client.collaborators}
+              onAdd={handleCreateCollaborator}
+              onDelete={handleDeleteCollaborator}
+              disabled={saving}
+            />
+
             <div className="card p-5">
-              <p className="text-sm text-slate-400">{t('common.metadata')}</p>
+              <p className="text-sm text-slate-400">{t("common.metadata")}</p>
               <div className="mt-2 text-sm text-slate-300">
                 <p>
-                  {t('common.created')}: {new Date(client.createdAt).toLocaleString()}
+                  {t("common.created")}:{" "}
+                  {new Date(client.createdAt).toLocaleString()}
                 </p>
                 <p>
-                  {t('common.updated')}: {new Date(client.updatedAt).toLocaleString()}
+                  {t("common.updated")}:{" "}
+                  {new Date(client.updatedAt).toLocaleString()}
                 </p>
               </div>
             </div>

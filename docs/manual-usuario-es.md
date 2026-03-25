@@ -68,6 +68,8 @@ Un cliente puede incluir:
 
 - Nombre
 - Nombre de pila
+- Estado del cliente (`Cliente`, `Prospecto`, `Perdido`)
+- Fecha de nacimiento
 - Funcion o cargo
 - Sector de empresa
 - Correo electronico
@@ -78,11 +80,23 @@ Un cliente puede incluir:
 - Tax ID / RFC
 - Notas
 
+### Contactos colaboradores
+
+Cada cliente tambien puede tener varios contactos colaboradores con estos datos:
+
+- Nombre
+- Nombre de pila
+- Funcion o cargo
+- Email
+- WhatsApp
+- Comentarios
+
 ### Acciones principales
 
 - Crear un cliente manualmente.
 - Editar la ficha completa de un cliente.
 - Eliminar un cliente.
+- Agregar o eliminar contactos colaboradores dentro de la ficha del cliente.
 - Importar clientes desde CSV.
 - Exportar clientes a CSV.
 
