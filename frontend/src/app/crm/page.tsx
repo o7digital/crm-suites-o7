@@ -85,6 +85,7 @@ type WorkflowStageDraft = {
 };
 
 type WorkflowEditorMode = 'edit' | 'create';
+type CrmStatusFilter = 'ALL' | Stage['status'];
 
 type NewStageDraft = {
   name: string;
@@ -232,7 +233,7 @@ function formatDealsUsdTotal(
 }
 
 export default function CrmPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const api = useApi(token);
   const router = useRouter();
   const { t, stageName } = useI18n();
@@ -320,6 +321,8 @@ export default function CrmPage() {
   const [workflowAddStageAttempted, setWorkflowAddStageAttempted] = useState(false);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [workflowInfo, setWorkflowInfo] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<CrmStatusFilter>('ALL');
+  const [vendorFilter, setVendorFilter] = useState<string>('ALL');
   const [statusDropHover, setStatusDropHover] = useState<Stage['status'] | null>(null);
   const [workflowDraggedStageId, setWorkflowDraggedStageId] = useState<string | null>(null);
   const [workflowStageDropTarget, setWorkflowStageDropTarget] = useState<{
@@ -549,6 +552,32 @@ export default function CrmPage() {
     return map;
   }, [sortedStages]);
 
+  const vendorOptions = useMemo(() => {
+    if (!user?.tenantId) return [];
+    return [
+      {
+        id: user.tenantId,
+        label: user.tenantName || user.name || user.email || 'Current vendor',
+      },
+    ];
+  }, [user]);
+
+  const vendorScopedDeals = useMemo(() => {
+    if (vendorFilter === 'ALL') return deals;
+    if (user?.tenantId && vendorFilter === user.tenantId) return deals;
+    return [];
+  }, [deals, user?.tenantId, vendorFilter]);
+
+  const filteredDeals = useMemo(() => {
+    if (statusFilter === 'ALL') return vendorScopedDeals;
+    return vendorScopedDeals.filter((deal) => stageStatusById[deal.stageId] === statusFilter);
+  }, [stageStatusById, statusFilter, vendorScopedDeals]);
+
+  const visibleStages = useMemo(() => {
+    if (statusFilter === 'ALL') return sortedStages;
+    return sortedStages.filter((stage) => stage.status === statusFilter);
+  }, [sortedStages, statusFilter]);
+
   const firstWonStage = useMemo(() => {
     return sortedStages.find((stage) => stage.status === 'WON') || null;
   }, [sortedStages]);
@@ -558,16 +587,16 @@ export default function CrmPage() {
   }, [sortedStages]);
 
   const openLeadsCount = useMemo(() => {
-    return deals.reduce((sum, deal) => (stageStatusById[deal.stageId] === 'OPEN' ? sum + 1 : sum), 0);
-  }, [deals, stageStatusById]);
+    return filteredDeals.reduce((sum, deal) => (stageStatusById[deal.stageId] === 'OPEN' ? sum + 1 : sum), 0);
+  }, [filteredDeals, stageStatusById]);
 
   const wonDeals = useMemo(() => {
-    return deals.filter((deal) => stageStatusById[deal.stageId] === 'WON');
-  }, [deals, stageStatusById]);
+    return filteredDeals.filter((deal) => stageStatusById[deal.stageId] === 'WON');
+  }, [filteredDeals, stageStatusById]);
 
   const lostDeals = useMemo(() => {
-    return deals.filter((deal) => stageStatusById[deal.stageId] === 'LOST');
-  }, [deals, stageStatusById]);
+    return filteredDeals.filter((deal) => stageStatusById[deal.stageId] === 'LOST');
+  }, [filteredDeals, stageStatusById]);
 
   const wonTotalUsdLabel = useMemo(() => {
     return formatDealsUsdTotal(wonDeals, fx, fxLoading);
@@ -576,6 +605,13 @@ export default function CrmPage() {
   const lostTotalUsdLabel = useMemo(() => {
     return formatDealsUsdTotal(lostDeals, fx, fxLoading);
   }, [fx, fxLoading, lostDeals]);
+
+  const showStatusDropZones = statusFilter === 'ALL' || statusFilter === 'OPEN';
+  const summaryStatuses = useMemo(() => {
+    if (statusFilter === 'ALL') return ['WON', 'LOST'] as Stage['status'][];
+    if (statusFilter === 'OPEN') return [] as Stage['status'][];
+    return [statusFilter];
+  }, [statusFilter]);
 
   const updateWorkflowStageDropTarget = (
     event: DragEvent<HTMLDivElement>,
@@ -1335,46 +1371,80 @@ export default function CrmPage() {
   return (
     <Guard>
       <AppShell>
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-6 flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('nav.crm')}</p>
             <h1 className="text-3xl font-semibold">{t('crm.title')}</h1>
             <p className="mt-1 text-sm text-slate-400">
-              {t('crm.openLeads', { open: openLeadsCount, total: deals.length })}
+              {t('crm.openLeads', { open: openLeadsCount, total: filteredDeals.length })}
             </p>
           </div>
-          <div className="flex gap-3">
-            <select
-              className="btn-secondary text-sm"
-              value={pipelineId}
-              onChange={(e) => {
-                const next = e.target.value;
-                setPipelineId(next);
-                setRequestedStageId(null);
-                setHighlightStageId(null);
-                router.replace(`/crm?pipelineId=${next}`);
-              }}
-            >
-              {pipelines.map((pipeline) => (
-                <option key={pipeline.id} value={pipeline.id}>
-                  {pipeline.name}
-                </option>
-              ))}
-            </select>
-            <button
-              className="btn-secondary text-sm"
-              type="button"
-              onClick={() => openWorkflowEditor()}
-              disabled={!selectedPipeline}
-            >
-              {t('common.manage')} {t('tasks.section')}
-            </button>
-            <button className="btn-secondary text-sm" type="button" onClick={openNewWorkflowEditor}>
-              + {t('crm.newWorkflow')}
-            </button>
-            <button className="btn-primary" onClick={openCreateModal}>
-              {t('crm.newDeal')}
-            </button>
+          <div className="flex flex-col gap-2 xl:items-end">
+            <div className="flex flex-wrap gap-3">
+              <select
+                className="btn-secondary text-sm"
+                value={pipelineId}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setPipelineId(next);
+                  setRequestedStageId(null);
+                  setHighlightStageId(null);
+                  router.replace(`/crm?pipelineId=${next}`);
+                }}
+              >
+                {pipelines.map((pipeline) => (
+                  <option key={pipeline.id} value={pipeline.id}>
+                    {pipeline.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="btn-secondary text-sm"
+                type="button"
+                onClick={() => openWorkflowEditor()}
+                disabled={!selectedPipeline}
+              >
+                {t('common.manage')} {t('tasks.section')}
+              </button>
+              <button className="btn-secondary text-sm" type="button" onClick={openNewWorkflowEditor}>
+                + {t('crm.newWorkflow')}
+              </button>
+              <button className="btn-primary" onClick={openCreateModal}>
+                {t('crm.newDeal')}
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {(['ALL', 'OPEN', 'WON', 'LOST'] as CrmStatusFilter[]).map((filterValue) => {
+                const isActive = statusFilter === filterValue;
+                const label = filterValue === 'ALL' ? t('crm.filterAll') : t(`stageStatus.${filterValue}`);
+                return (
+                  <button
+                    key={filterValue}
+                    type="button"
+                    onClick={() => setStatusFilter(filterValue)}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition ${
+                      isActive
+                        ? 'border-cyan-300/60 bg-cyan-400/15 text-cyan-100'
+                        : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+              <select
+                className="btn-secondary min-w-[180px] text-sm"
+                value={vendorFilter}
+                onChange={(e) => setVendorFilter(e.target.value)}
+              >
+                <option value="ALL">{t('crm.allVendors')}</option>
+                {vendorOptions.map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>
+                    {vendor.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -1394,11 +1464,11 @@ export default function CrmPage() {
         {/* Keep all stages on one line (no wrap). Horizontal scroll if needed. */}
         <div className="overflow-x-auto pb-4 2xl:-ml-48 2xl:w-[calc(100%+24rem)]">
           <div className="flex w-max gap-4 pr-6">
-            {sortedStages.map((stage) => (
+            {visibleStages.map((stage) => (
               <StageColumn
                 key={stage.id}
                 stage={stage}
-                deals={deals.filter((deal) => deal.stageId === stage.id)}
+                deals={filteredDeals.filter((deal) => deal.stageId === stage.id)}
                 displayCurrency={crmDisplayCurrency}
                 fx={fx}
                 fxLoading={fxLoading}
@@ -1414,6 +1484,7 @@ export default function CrmPage() {
           </div>
         </div>
 
+        {showStatusDropZones ? (
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {(['WON', 'LOST'] as Stage['status'][]).map((status) => {
             const targetStage = status === 'WON' ? firstWonStage : firstLostStage;
@@ -1452,78 +1523,53 @@ export default function CrmPage() {
             );
           })}
         </div>
+        ) : null}
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="card p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-100">{t(`stageStatus.WON`)}</p>
-              <div className="text-right">
-                <p className="text-xs text-slate-400">
-                  {wonDeals.length} {t('crm.deals')}
-                </p>
-                <p className="text-[11px] text-slate-500">
-                  {t('crm.total')} USD: {wonTotalUsdLabel}
-                </p>
-              </div>
-            </div>
-            <div className="mt-3 space-y-2">
-              {wonDeals.map((deal) => (
-                <button
-                  key={deal.id}
-                  type="button"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:bg-white/10"
-                  onClick={() => openEditModal(deal)}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-semibold">{deal.title}</p>
-                    <p className="text-xs text-slate-400">
-                      {deal.currency} {Number(deal.value).toLocaleString()}
-                    </p>
-                  </div>
-                  {stageNameById[deal.stageId] ? (
-                    <p className="mt-1 text-xs text-slate-500">{stageName(stageNameById[deal.stageId])}</p>
-                  ) : null}
-                </button>
-              ))}
-              {wonDeals.length === 0 ? <p className="text-xs text-slate-500">{t('crm.noDeals')}</p> : null}
-            </div>
-          </div>
+        {summaryStatuses.length > 0 ? (
+          <div className={`mt-4 grid gap-4 ${summaryStatuses.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
+            {summaryStatuses.map((status) => {
+              const statusDeals = status === 'WON' ? wonDeals : lostDeals;
+              const totalLabel = status === 'WON' ? wonTotalUsdLabel : lostTotalUsdLabel;
 
-          <div className="card p-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-100">{t(`stageStatus.LOST`)}</p>
-              <div className="text-right">
-                <p className="text-xs text-slate-400">
-                  {lostDeals.length} {t('crm.deals')}
-                </p>
-                <p className="text-[11px] text-slate-500">
-                  {t('crm.total')} USD: {lostTotalUsdLabel}
-                </p>
-              </div>
-            </div>
-            <div className="mt-3 space-y-2">
-              {lostDeals.map((deal) => (
-                <button
-                  key={deal.id}
-                  type="button"
-                  className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:bg-white/10"
-                  onClick={() => openEditModal(deal)}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-semibold">{deal.title}</p>
-                    <p className="text-xs text-slate-400">
-                      {deal.currency} {Number(deal.value).toLocaleString()}
-                    </p>
+              return (
+                <div key={status} className="card p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-100">{t(`stageStatus.${status}`)}</p>
+                    <div className="text-right">
+                      <p className="text-xs text-slate-400">
+                        {statusDeals.length} {t('crm.deals')}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        {t('crm.total')} USD: {totalLabel}
+                      </p>
+                    </div>
                   </div>
-                  {stageNameById[deal.stageId] ? (
-                    <p className="mt-1 text-xs text-slate-500">{stageName(stageNameById[deal.stageId])}</p>
-                  ) : null}
-                </button>
-              ))}
-              {lostDeals.length === 0 ? <p className="text-xs text-slate-500">{t('crm.noDeals')}</p> : null}
-            </div>
+                  <div className="mt-3 space-y-2">
+                    {statusDeals.map((deal) => (
+                      <button
+                        key={deal.id}
+                        type="button"
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:bg-white/10"
+                        onClick={() => openEditModal(deal)}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="truncate text-sm font-semibold">{deal.title}</p>
+                          <p className="text-xs text-slate-400">
+                            {deal.currency} {Number(deal.value).toLocaleString()}
+                          </p>
+                        </div>
+                        {stageNameById[deal.stageId] ? (
+                          <p className="mt-1 text-xs text-slate-500">{stageName(stageNameById[deal.stageId])}</p>
+                        ) : null}
+                      </button>
+                    ))}
+                    {statusDeals.length === 0 ? <p className="text-xs text-slate-500">{t('crm.noDeals')}</p> : null}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+        ) : null}
 
         {showWorkflowModal && (
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-10">
