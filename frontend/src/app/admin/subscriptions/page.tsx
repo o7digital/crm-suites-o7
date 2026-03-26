@@ -22,7 +22,7 @@ type SubscriptionItem = {
   activatedUsersCount: number;
   activatedAt?: string | null;
   pendingInvitesCount: number;
-  canCancel: boolean;
+  canSuspend: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -105,14 +105,12 @@ function isValidEmailValue(value: string) {
   return SIMPLE_EMAIL_PATTERN.test(normalizeEmailInput(value).trim());
 }
 
-type AdminContextResponse = {
-  role?: 'OWNER' | 'ADMIN' | 'MEMBER';
-  isAdmin?: boolean;
-  canManageSubscriptions?: boolean;
-};
+function isSubscriptionActive(sub: Pick<SubscriptionItem, 'status'>) {
+  return sub.status === 'ACTIVE';
+}
 
 export default function AdminSubscriptionsPage() {
-  const { token } = useAuth();
+  const { token, loading: authLoading } = useAuth();
   const router = useRouter();
   const api = useApi(token);
   const { t, language } = useI18n();
@@ -143,46 +141,29 @@ export default function AdminSubscriptionsPage() {
   const [createInviteRows, setCreateInviteRows] = useState<CreateInviteRow[]>(() => [createInviteRow()]);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [accessStatus, setAccessStatus] = useState<'checking' | 'allowed' | 'denied'>('checking');
 
-  const load = useCallback(() => {
+  const load = useCallback(async () => {
     setLoading(true);
-    api<typeof items>('/admin/subscriptions')
-      .then((data) => {
-        setItems(data);
-        setError(null);
-      })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [api]);
-
-  useEffect(() => {
-    if (!token) return;
-    let active = true;
-
-    api<AdminContextResponse>('/admin/context', { method: 'GET' })
-      .then((data) => {
-        if (!active) return;
-        const allowed = Boolean(data?.isAdmin && data?.canManageSubscriptions);
-        setAccessStatus(allowed ? 'allowed' : 'denied');
-        if (!allowed) router.replace('/admin');
-      })
-      .catch(() => {
-        if (!active) return;
-        setAccessStatus('denied');
+    try {
+      const data = await api<typeof items>('/admin/subscriptions');
+      setItems(data);
+      setError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to load subscriptions';
+      if (message.includes('[401]') || message.includes('[403]')) {
         router.replace('/admin');
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [api, router, token]);
+        return;
+      }
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [api, router]);
 
   useEffect(() => {
-    if (!token) return;
-    if (accessStatus !== 'allowed') return;
-    load();
-  }, [accessStatus, token, load]);
+    if (authLoading || !token) return;
+    void load();
+  }, [authLoading, load, token]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -322,7 +303,7 @@ export default function AdminSubscriptionsPage() {
 
   const startEditingLink = useCallback(
     (sub: SubscriptionItem) => {
-      if (sub.status === 'CANCELED') return;
+      if (!isSubscriptionActive(sub)) return;
       setError(null);
       setInfo(null);
       setEditingSubscriptionId(sub.id);
@@ -568,15 +549,15 @@ export default function AdminSubscriptionsPage() {
   };
 
   const copyInvite = async (sub: SubscriptionItem) => {
-    if (sub.status === 'CANCELED') return;
+    if (!isSubscriptionActive(sub)) return;
     const draft = getLinkDraft(sub);
     await copyUrl(buildInviteUrlFromDraft(sub, draft));
   };
 
   const createSubscriptionInvite = useCallback(
     async (sub: SubscriptionItem) => {
-      if (sub.status === 'CANCELED') {
-        setError(t('adminSubscriptions.cancelBlocked'));
+      if (!isSubscriptionActive(sub)) {
+        setError(t('adminSubscriptions.inactiveBlocked'));
         return;
       }
       const inviteDraft = getInviteDraft(sub.id);
@@ -632,10 +613,10 @@ export default function AdminSubscriptionsPage() {
     [api, buildInviteUrl, copyUrl, getInviteDraft, getLinkDraft, pendingInvitesById, t],
   );
 
-  const cancelSubscription = useCallback(
+  const suspendSubscription = useCallback(
     async (sub: SubscriptionItem) => {
-      if (!sub.canCancel || sub.status === 'CANCELED') return;
-      if (typeof window !== 'undefined' && !window.confirm(t('adminSubscriptions.cancelConfirm'))) {
+      if (!sub.canSuspend || !isSubscriptionActive(sub)) return;
+      if (typeof window !== 'undefined' && !window.confirm(t('adminSubscriptions.suspendConfirm'))) {
         return;
       }
 
@@ -644,15 +625,14 @@ export default function AdminSubscriptionsPage() {
       setInfo(null);
 
       try {
-        const canceled = await api<SubscriptionItem>(`/admin/subscriptions/${sub.id}/cancel`, {
+        const suspended = await api<SubscriptionItem>(`/admin/subscriptions/${sub.id}/suspend`, {
           method: 'POST',
         });
-        setItems((prev) => prev.map((row) => (row.id === sub.id ? canceled : row)));
-        setPendingInvitesById((prev) => ({ ...prev, [sub.id]: [] }));
+        setItems((prev) => prev.map((row) => (row.id === sub.id ? suspended : row)));
         setEditingSubscriptionId((prev) => (prev === sub.id ? null : prev));
-        setInfo(t('adminSubscriptions.canceledInfo'));
+        setInfo(t('adminSubscriptions.suspendedInfo'));
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unable to cancel subscription';
+        const message = err instanceof Error ? err.message : 'Unable to suspend subscription';
         setError(message);
       } finally {
         setCancelingSubscriptionId((prev) => (prev === sub.id ? null : prev));
@@ -673,16 +653,6 @@ export default function AdminSubscriptionsPage() {
       })),
     [buildInviteUrlFromDraft, editingSubscriptionId, getInviteDraft, getLinkDraft, items, pendingInvitesById],
   );
-
-  if (accessStatus !== 'allowed') {
-    return (
-      <Guard>
-        <AppShell>
-          <p className="text-slate-300">{t('guard.checkingSession')}</p>
-        </AppShell>
-      </Guard>
-    );
-  }
 
   return (
     <Guard>
@@ -941,14 +911,24 @@ export default function AdminSubscriptionsPage() {
                       <td className="py-3 text-slate-300">
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1 ${
-                            sub.status === 'CANCELED'
+                            sub.status === 'PAUSED'
+                              ? 'bg-amber-500/15 text-amber-100 ring-amber-300/30'
+                              : sub.status === 'CANCELED'
                               ? 'bg-red-500/15 text-red-200 ring-red-300/30'
                               : 'bg-white/5 text-slate-200 ring-white/10'
                           }`}
                         >
-                          {sub.status}
+                          {sub.status === 'PAUSED'
+                            ? t('adminSubscriptions.status.paused')
+                            : sub.status === 'CANCELED'
+                              ? t('adminSubscriptions.status.canceled')
+                              : t('adminSubscriptions.status.active')}
                         </span>
-                        {sub.activatedUsersCount > 0 ? (
+                        {sub.status === 'PAUSED' ? (
+                          <p className="mt-2 text-xs text-amber-200">{t('adminSubscriptions.activity.suspended')}</p>
+                        ) : sub.status === 'CANCELED' ? (
+                          <p className="mt-2 text-xs text-red-200">{t('adminSubscriptions.activity.canceled')}</p>
+                        ) : sub.activatedUsersCount > 0 ? (
                           <>
                             <p className="mt-2 text-xs text-emerald-200">
                               {t('adminSubscriptions.activity.connectedUsers', { count: sub.activatedUsersCount })}
@@ -969,8 +949,8 @@ export default function AdminSubscriptionsPage() {
                             {t('adminSubscriptions.activity.pendingInvites', { count: sub.pendingInvitesCount })}
                           </p>
                         ) : null}
-                        {sub.canCancel ? (
-                          <p className="mt-1 text-xs text-slate-500">{t('adminSubscriptions.activity.cancelHint')}</p>
+                        {sub.canSuspend ? (
+                          <p className="mt-1 text-xs text-slate-500">{t('adminSubscriptions.activity.suspendHint')}</p>
                         ) : null}
                       </td>
                       <td className="py-3 text-slate-300">
@@ -1002,11 +982,11 @@ export default function AdminSubscriptionsPage() {
                             type="button"
                             className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10 disabled:opacity-50"
                             onClick={() => void copyInvite(sub)}
-                            disabled={!sub.inviteUrl || sub.status === 'CANCELED'}
+                            disabled={!sub.inviteUrl || !isSubscriptionActive(sub)}
                           >
                             {t('adminSubscriptions.copyLink')}
                           </button>
-                          {!sub.isEditing && sub.status !== 'CANCELED' ? (
+                          {!sub.isEditing && isSubscriptionActive(sub) ? (
                             <button
                               type="button"
                               className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10"
@@ -1015,21 +995,21 @@ export default function AdminSubscriptionsPage() {
                               {t('adminSubscriptions.editLink')}
                             </button>
                           ) : null}
-                          {sub.canCancel && !sub.isEditing ? (
+                          {sub.canSuspend && !sub.isEditing ? (
                             <button
                               type="button"
-                              className="rounded-lg bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-100 ring-1 ring-red-300/30 hover:bg-red-500/25 disabled:opacity-50"
-                              onClick={() => void cancelSubscription(sub)}
+                              className="rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-100 ring-1 ring-amber-300/30 hover:bg-amber-500/25 disabled:opacity-50"
+                              onClick={() => void suspendSubscription(sub)}
                               disabled={cancelingSubscriptionId === sub.id}
                             >
                               {cancelingSubscriptionId === sub.id
-                                ? t('adminSubscriptions.canceling')
-                                : t('adminSubscriptions.cancelAction')}
+                                ? t('adminSubscriptions.suspending')
+                                : t('adminSubscriptions.suspendAction')}
                             </button>
                           ) : null}
                         </div>
                         <p className="mt-2 break-all font-mono text-xs text-slate-300">
-                          {sub.status === 'CANCELED' ? '—' : sub.inviteUrl || '—'}
+                          {isSubscriptionActive(sub) ? sub.inviteUrl || '—' : '—'}
                         </p>
 
                         {sub.isEditing ? (

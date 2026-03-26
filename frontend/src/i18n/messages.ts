@@ -422,6 +422,17 @@ const CORE_MESSAGES = {
     "adminSubscriptions.saveLinkData": "Save and copy",
     "adminSubscriptions.saving": "Saving…",
     "adminSubscriptions.cancel": "Cancel",
+    "adminSubscriptions.status.active": "ACTIVE",
+    "adminSubscriptions.status.paused": "SUSPENDED",
+    "adminSubscriptions.status.canceled": "CANCELED",
+    "adminSubscriptions.suspendAction": "Suspend subscription",
+    "adminSubscriptions.suspending": "Suspending…",
+    "adminSubscriptions.suspendConfirm":
+      "Suspend this subscription? The account will move to suspended status.",
+    "adminSubscriptions.suspendedInfo":
+      "Subscription suspended before first customer login.",
+    "adminSubscriptions.inactiveBlocked":
+      "Inactive subscriptions cannot accept new invites.",
     "adminSubscriptions.cancelAction": "Cancel subscription",
     "adminSubscriptions.canceling": "Canceling…",
     "adminSubscriptions.cancelConfirm":
@@ -439,6 +450,10 @@ const CORE_MESSAGES = {
     "adminSubscriptions.activity.activatedAt": "Activated on {date}",
     "adminSubscriptions.activity.notConnected": "No customer login yet",
     "adminSubscriptions.activity.pendingInvites": "{count} pending invites",
+    "adminSubscriptions.activity.suspended": "Suspended account",
+    "adminSubscriptions.activity.canceled": "Canceled subscription",
+    "adminSubscriptions.activity.suspendHint":
+      "You can suspend while nobody has connected yet.",
     "adminSubscriptions.activity.cancelHint":
       "You can cancel while nobody has connected yet.",
     "adminSubscriptions.invites.title": "Invite users",
@@ -897,6 +912,17 @@ const CORE_MESSAGES = {
     "adminSubscriptions.saveLinkData": "Sauver et copier",
     "adminSubscriptions.saving": "Sauvegarde…",
     "adminSubscriptions.cancel": "Annuler",
+    "adminSubscriptions.status.active": "ACTIVE",
+    "adminSubscriptions.status.paused": "SUSPENDU",
+    "adminSubscriptions.status.canceled": "ANNULE",
+    "adminSubscriptions.suspendAction": "Suspendre abonnement",
+    "adminSubscriptions.suspending": "Suspension…",
+    "adminSubscriptions.suspendConfirm":
+      "Suspendre cet abonnement ? Le compte passera en statut suspendu.",
+    "adminSubscriptions.suspendedInfo":
+      "Abonnement suspendu avant la premiere connexion client.",
+    "adminSubscriptions.inactiveBlocked":
+      "Les abonnements inactifs ne peuvent plus accepter d'invitations.",
     "adminSubscriptions.cancelAction": "Annuler abonnement",
     "adminSubscriptions.canceling": "Annulation…",
     "adminSubscriptions.cancelConfirm":
@@ -917,6 +943,10 @@ const CORE_MESSAGES = {
       "Aucune connexion client pour le moment",
     "adminSubscriptions.activity.pendingInvites":
       "{count} invitations en attente",
+    "adminSubscriptions.activity.suspended": "Compte suspendu",
+    "adminSubscriptions.activity.canceled": "Abonnement annule",
+    "adminSubscriptions.activity.suspendHint":
+      "Vous pouvez suspendre tant que personne ne s'est connecte.",
     "adminSubscriptions.activity.cancelHint":
       "Vous pouvez annuler tant que personne ne s'est connecte.",
     "adminSubscriptions.invites.title": "Inviter des utilisateurs",
@@ -1371,6 +1401,17 @@ const CORE_MESSAGES = {
     "adminSubscriptions.saveLinkData": "Guardar y copiar",
     "adminSubscriptions.saving": "Guardando…",
     "adminSubscriptions.cancel": "Cancelar",
+    "adminSubscriptions.status.active": "ACTIVA",
+    "adminSubscriptions.status.paused": "SUSPENDIDA",
+    "adminSubscriptions.status.canceled": "CANCELADA",
+    "adminSubscriptions.suspendAction": "Suspender suscripcion",
+    "adminSubscriptions.suspending": "Suspendiendo…",
+    "adminSubscriptions.suspendConfirm":
+      "Suspender esta suscripcion? La cuenta pasara a estado suspendido.",
+    "adminSubscriptions.suspendedInfo":
+      "Suscripcion suspendida antes del primer acceso del cliente.",
+    "adminSubscriptions.inactiveBlocked":
+      "Las suscripciones inactivas ya no aceptan invitaciones.",
     "adminSubscriptions.cancelAction": "Cancelar suscripcion",
     "adminSubscriptions.canceling": "Cancelando…",
     "adminSubscriptions.cancelConfirm":
@@ -1392,6 +1433,10 @@ const CORE_MESSAGES = {
       "Todavia no hay acceso del cliente",
     "adminSubscriptions.activity.pendingInvites":
       "{count} invitaciones pendientes",
+    "adminSubscriptions.activity.suspended": "Cuenta suspendida",
+    "adminSubscriptions.activity.canceled": "Suscripcion cancelada",
+    "adminSubscriptions.activity.suspendHint":
+      "Puedes suspender mientras nadie se haya conectado.",
     "adminSubscriptions.activity.cancelHint":
       "Puedes cancelar mientras nadie se haya conectado.",
     "adminSubscriptions.invites.title": "Invitar usuarios",

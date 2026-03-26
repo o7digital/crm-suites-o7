@@ -43,6 +43,9 @@ export class BootstrapService {
       }
     }
     if (!existingUser && customerSubscription && customerSubscription.status !== 'ACTIVE') {
+      if (customerSubscription.status === 'PAUSED') {
+        throw new ForbiddenException('Account is suspended for this workspace.');
+      }
       throw new ForbiddenException('Subscription is not active for this workspace.');
     }
 

@@ -129,9 +129,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!active) return;
       const session = data.session;
       if (session) {
-        // Keep tenant bootstrap up-to-date for existing sessions (new pipelines/stages, etc.).
-        await bootstrapTenant(session.access_token, { ignoreErrors: true });
         syncSession(session);
+        setLoading(false);
+        // Refresh bootstrap data in the background without blocking the UI.
+        void bootstrapTenant(session.access_token, { ignoreErrors: true });
+        return;
       }
       setLoading(false);
     })();

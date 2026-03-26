@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException,
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
-import { Prisma } from '@prisma/client';
+import { InviteStatus, Prisma } from '@prisma/client';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { CreateUserInviteDto } from './dto/create-user-invite.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
@@ -225,83 +225,117 @@ export class AdminService {
   >(subscriptions: T[]) {
     if (subscriptions.length === 0) return [];
 
-    return Promise.all(
-      subscriptions.map(async (sub) => {
-        let activatedUsersCount = 0;
-        let activatedAt: Date | null = null;
-        let pendingInvitesCount = 0;
-        let acceptedInvitesCount = 0;
-        let firstAcceptedAt: Date | null = null;
-        let contactAccountCreatedAt: Date | null = null;
+    const customerTenantIds = [...new Set(subscriptions.map((sub) => sub.customerTenantId))];
+    const customerTenantIdSet = new Set(customerTenantIds);
+    const contactEmails = [...new Set(subscriptions.map((sub) => sub.contactEmail?.trim().toLowerCase()).filter(Boolean))] as string[];
 
-        try {
-          const [count, firstUser] = await Promise.all([
-            this.prisma.user.count({
-              where: { tenantId: sub.customerTenantId },
-            }),
-            this.prisma.user.findFirst({
-              where: { tenantId: sub.customerTenantId },
-              orderBy: { createdAt: 'asc' },
-              select: { createdAt: true },
-            }),
-          ]);
-          activatedUsersCount = count;
-          activatedAt = firstUser?.createdAt ?? null;
-        } catch (err) {
-          const mapped = this.mapSchemaError(err);
-          if (!mapped) throw err;
+    let userRows: Array<{ tenantId: string; email: string; createdAt: Date }> = [];
+    try {
+      userRows = await this.prisma.user.findMany({
+        where: {
+          OR: [
+            { tenantId: { in: customerTenantIds } },
+            ...(contactEmails.length > 0 ? [{ email: { in: contactEmails } }] : []),
+          ],
+        },
+        select: {
+          tenantId: true,
+          email: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (!mapped) throw err;
+    }
+
+    let inviteRows: Array<{ tenantId: string; status: InviteStatus; acceptedAt: Date | null }> = [];
+    try {
+      inviteRows = await this.prisma.userInvite.findMany({
+        where: {
+          tenantId: { in: customerTenantIds },
+          status: { in: ['PENDING', 'ACCEPTED'] },
+        },
+        select: {
+          tenantId: true,
+          status: true,
+          acceptedAt: true,
+        },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (!mapped) throw err;
+    }
+
+    const userMetricsByTenant = new Map<string, { activatedUsersCount: number; activatedAt: Date | null }>();
+    const contactAccountCreatedAtByEmail = new Map<string, Date>();
+
+    for (const row of userRows) {
+      const normalizedEmail = row.email.trim().toLowerCase();
+      if (!contactAccountCreatedAtByEmail.has(normalizedEmail)) {
+        contactAccountCreatedAtByEmail.set(normalizedEmail, row.createdAt);
+      }
+
+      if (!customerTenantIdSet.has(row.tenantId)) continue;
+      const current = userMetricsByTenant.get(row.tenantId);
+      if (!current) {
+        userMetricsByTenant.set(row.tenantId, {
+          activatedUsersCount: 1,
+          activatedAt: row.createdAt,
+        });
+        continue;
+      }
+      current.activatedUsersCount += 1;
+    }
+
+    const inviteMetricsByTenant = new Map<
+      string,
+      { pendingInvitesCount: number; acceptedInvitesCount: number; firstAcceptedAt: Date | null }
+    >();
+    for (const row of inviteRows) {
+      const current = inviteMetricsByTenant.get(row.tenantId) || {
+        pendingInvitesCount: 0,
+        acceptedInvitesCount: 0,
+        firstAcceptedAt: null,
+      };
+
+      if (row.status === 'PENDING') {
+        current.pendingInvitesCount += 1;
+      }
+      if (row.status === 'ACCEPTED') {
+        current.acceptedInvitesCount += 1;
+        if (row.acceptedAt && (!current.firstAcceptedAt || row.acceptedAt < current.firstAcceptedAt)) {
+          current.firstAcceptedAt = row.acceptedAt;
         }
+      }
 
-        try {
-          const [pendingCount, acceptedCount, firstAcceptedInvite] = await Promise.all([
-            this.prisma.userInvite.count({
-              where: { tenantId: sub.customerTenantId, status: 'PENDING' },
-            }),
-            this.prisma.userInvite.count({
-              where: { tenantId: sub.customerTenantId, status: 'ACCEPTED' },
-            }),
-            this.prisma.userInvite.findFirst({
-              where: { tenantId: sub.customerTenantId, status: 'ACCEPTED' },
-              orderBy: { acceptedAt: 'asc' },
-              select: { acceptedAt: true },
-            }),
-          ]);
-          pendingInvitesCount = pendingCount;
-          acceptedInvitesCount = acceptedCount;
-          firstAcceptedAt = firstAcceptedInvite?.acceptedAt ?? null;
-        } catch (err) {
-          const mapped = this.mapSchemaError(err);
-          if (!mapped) throw err;
-        }
+      inviteMetricsByTenant.set(row.tenantId, current);
+    }
 
-        try {
-          const email = sub.contactEmail?.trim().toLowerCase();
-          if (email) {
-            const contactUser = await this.prisma.user.findUnique({
-              where: { email },
-              select: { createdAt: true },
-            });
-            contactAccountCreatedAt = contactUser?.createdAt ?? null;
-          }
-        } catch (err) {
-          const mapped = this.mapSchemaError(err);
-          if (!mapped) throw err;
-        }
+    return subscriptions.map((sub) => {
+      let activatedUsersCount = userMetricsByTenant.get(sub.customerTenantId)?.activatedUsersCount ?? 0;
+      let activatedAt = userMetricsByTenant.get(sub.customerTenantId)?.activatedAt ?? null;
+      const inviteMetrics = inviteMetricsByTenant.get(sub.customerTenantId);
+      const pendingInvitesCount = inviteMetrics?.pendingInvitesCount ?? 0;
+      const acceptedInvitesCount = inviteMetrics?.acceptedInvitesCount ?? 0;
+      const firstAcceptedAt = inviteMetrics?.firstAcceptedAt ?? null;
+      const contactAccountCreatedAt =
+        (sub.contactEmail && contactAccountCreatedAtByEmail.get(sub.contactEmail.trim().toLowerCase())) || null;
 
-        if (activatedUsersCount === 0) {
-          activatedUsersCount = Math.max(acceptedInvitesCount, contactAccountCreatedAt ? 1 : 0);
-          activatedAt = firstAcceptedAt ?? contactAccountCreatedAt ?? null;
-        }
+      if (activatedUsersCount === 0) {
+        activatedUsersCount = Math.max(acceptedInvitesCount, contactAccountCreatedAt ? 1 : 0);
+        activatedAt = firstAcceptedAt ?? contactAccountCreatedAt ?? null;
+      }
 
-        return {
-          ...sub,
-          activatedUsersCount,
-          activatedAt,
-          pendingInvitesCount,
-          canCancel: sub.status !== 'CANCELED' && activatedUsersCount === 0,
-        };
-      }),
-    );
+      return {
+        ...sub,
+        activatedUsersCount,
+        activatedAt,
+        pendingInvitesCount,
+        canSuspend: sub.status === 'ACTIVE' && activatedUsersCount === 0,
+      };
+    });
   }
 
   async listUsers(user: RequestUser) {
@@ -465,7 +499,7 @@ export class AdminService {
     await this.ensureSubscriptionManager(user);
     const subscription = await this.getOwnedSubscription(id, user.tenantId);
     if (subscription.status !== 'ACTIVE') {
-      throw new BadRequestException('Cannot invite users to a canceled subscription');
+      throw new BadRequestException('Cannot invite users to an inactive subscription');
     }
     return this.createUserInviteForTenant(dto, subscription.customerTenantId, user.userId);
   }
@@ -645,31 +679,29 @@ export class AdminService {
     }
   }
 
-  async cancelSubscription(id: string, user: RequestUser) {
+  async suspendSubscription(id: string, user: RequestUser) {
     await this.ensureSubscriptionManager(user);
 
     try {
       const existing = await this.getOwnedSubscription(id, user.tenantId);
+      if (existing.status === 'PAUSED') {
+        throw new BadRequestException('Subscription is already suspended');
+      }
       if (existing.status === 'CANCELED') {
-        throw new BadRequestException('Subscription is already canceled');
+        throw new BadRequestException('Canceled subscriptions cannot be suspended');
       }
 
       const customerUsersCount = await this.prisma.user.count({
         where: { tenantId: existing.customerTenantId },
       });
       if (customerUsersCount > 0) {
-        throw new ForbiddenException('Cannot cancel a subscription after customer users have connected');
+        throw new ForbiddenException('Cannot suspend a subscription after customer users have connected');
       }
 
       return await this.prisma.$transaction(async (tx) => {
-        await tx.userInvite.updateMany({
-          where: { tenantId: existing.customerTenantId, status: 'PENDING' },
-          data: { status: 'REVOKED' },
-        });
-
-        const canceled = await tx.subscription.update({
+        const suspended = await tx.subscription.update({
           where: { id: existing.id },
-          data: { status: 'CANCELED' },
+          data: { status: 'PAUSED' },
           select: {
             id: true,
             customerName: true,
@@ -686,7 +718,7 @@ export class AdminService {
           },
         });
 
-        const [decorated] = await this.decorateSubscriptions([canceled]);
+        const [decorated] = await this.decorateSubscriptions([suspended]);
         return decorated;
       });
     } catch (err) {
@@ -694,5 +726,9 @@ export class AdminService {
       if (mapped) throw mapped;
       throw err;
     }
+  }
+
+  async cancelSubscription(id: string, user: RequestUser) {
+    return this.suspendSubscription(id, user);
   }
 }

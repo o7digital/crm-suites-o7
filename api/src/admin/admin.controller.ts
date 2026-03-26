@@ -58,6 +58,11 @@ export class AdminController {
     return this.adminService.updateSubscription(id, dto, user);
   }
 
+  @Post('subscriptions/:id/suspend')
+  suspendSubscription(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.adminService.suspendSubscription(id, user);
+  }
+
   @Post('subscriptions/:id/cancel')
   cancelSubscription(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.adminService.cancelSubscription(id, user);
