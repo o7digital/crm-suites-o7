@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Prisma } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import jwksRsa from 'jwks-rsa';
+import { PrismaService } from '../prisma/prisma.service';
 
 export interface JwtPayload {
   sub: string;
@@ -16,7 +18,7 @@ export interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(configService: ConfigService) {
+  constructor(configService: ConfigService, private prisma: PrismaService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -110,6 +112,26 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       payload.user_metadata?.tenant_id ||
       payload.user_metadata?.tenantId ||
       payload.sub;
+
+    try {
+      const customerSubscription = await this.prisma.subscription.findFirst({
+        where: { customerTenantId: tenantId },
+        select: { status: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (customerSubscription && customerSubscription.status !== 'ACTIVE') {
+        if (customerSubscription.status === 'PAUSED') {
+          throw new ForbiddenException('Account is suspended for this workspace.');
+        }
+        throw new ForbiddenException('Subscription is not active for this workspace.');
+      }
+    } catch (err) {
+      if (err instanceof ForbiddenException) throw err;
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || (err.code !== 'P2021' && err.code !== 'P2022')) {
+        throw err;
+      }
+    }
+
     const name =
       (payload.user_metadata && payload.user_metadata.name) ||
       payload.name ||

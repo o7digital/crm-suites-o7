@@ -42,7 +42,7 @@ export class BootstrapService {
         throw err;
       }
     }
-    if (!existingUser && customerSubscription && customerSubscription.status !== 'ACTIVE') {
+    if (customerSubscription && customerSubscription.status !== 'ACTIVE') {
       if (customerSubscription.status === 'PAUSED') {
         throw new ForbiddenException('Account is suspended for this workspace.');
       }

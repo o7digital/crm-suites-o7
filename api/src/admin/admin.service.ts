@@ -30,7 +30,7 @@ export class AdminService {
 
       const ownsSubscriptions = Boolean(ownedSubscription);
       const isCustomerTenant = Boolean(linkedAsCustomer);
-      const canManageSubscriptions = ownsSubscriptions || !isCustomerTenant;
+      const canManageSubscriptions = ownsSubscriptions;
 
       return {
         ownsSubscriptions,
@@ -333,7 +333,7 @@ export class AdminService {
         activatedUsersCount,
         activatedAt,
         pendingInvitesCount,
-        canSuspend: sub.status === 'ACTIVE' && activatedUsersCount === 0,
+        canSuspend: sub.status === 'ACTIVE',
       };
     });
   }
@@ -691,13 +691,6 @@ export class AdminService {
         throw new BadRequestException('Canceled subscriptions cannot be suspended');
       }
 
-      const customerUsersCount = await this.prisma.user.count({
-        where: { tenantId: existing.customerTenantId },
-      });
-      if (customerUsersCount > 0) {
-        throw new ForbiddenException('Cannot suspend a subscription after customer users have connected');
-      }
-
       return await this.prisma.$transaction(async (tx) => {
         const suspended = await tx.subscription.update({
           where: { id: existing.id },
@@ -721,6 +714,46 @@ export class AdminService {
         const [decorated] = await this.decorateSubscriptions([suspended]);
         return decorated;
       });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  async activateSubscription(id: string, user: RequestUser) {
+    await this.ensureSubscriptionManager(user);
+
+    try {
+      const existing = await this.getOwnedSubscription(id, user.tenantId);
+      if (existing.status === 'ACTIVE') {
+        throw new BadRequestException('Subscription is already active');
+      }
+      if (existing.status === 'CANCELED') {
+        throw new BadRequestException('Canceled subscriptions cannot be reactivated');
+      }
+
+      const activated = await this.prisma.subscription.update({
+        where: { id: existing.id },
+        data: { status: 'ACTIVE' },
+        select: {
+          id: true,
+          customerName: true,
+          customerTenantId: true,
+          contactFirstName: true,
+          contactLastName: true,
+          contactEmail: true,
+          plan: true,
+          seats: true,
+          trialEndsAt: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      const [decorated] = await this.decorateSubscriptions([activated]);
+      return decorated;
     } catch (err) {
       const mapped = this.mapSchemaError(err);
       if (mapped) throw mapped;

@@ -63,6 +63,11 @@ export class AdminController {
     return this.adminService.suspendSubscription(id, user);
   }
 
+  @Post('subscriptions/:id/activate')
+  activateSubscription(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.adminService.activateSubscription(id, user);
+  }
+
   @Post('subscriptions/:id/cancel')
   cancelSubscription(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.adminService.cancelSubscription(id, user);
