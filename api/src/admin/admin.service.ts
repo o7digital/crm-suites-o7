@@ -224,53 +224,48 @@ export class AdminService {
   >(subscriptions: T[]) {
     if (subscriptions.length === 0) return [];
 
-    try {
-      const customerTenantIds = [...new Set(subscriptions.map((sub) => sub.customerTenantId))];
-      const [userMetrics, pendingInviteMetrics] = await Promise.all([
-        this.prisma.user.groupBy({
-          by: ['tenantId'],
-          where: { tenantId: { in: customerTenantIds } },
-          _count: { _all: true },
-          _min: { createdAt: true },
-        }),
-        this.prisma.userInvite.groupBy({
-          by: ['tenantId'],
-          where: { tenantId: { in: customerTenantIds }, status: 'PENDING' },
-          _count: { _all: true },
-        }),
-      ]);
+    return Promise.all(
+      subscriptions.map(async (sub) => {
+        let activatedUsersCount = 0;
+        let activatedAt: Date | null = null;
+        let pendingInvitesCount = 0;
 
-      const userMetricsByTenant = new Map(
-        userMetrics.map((entry) => [
-          entry.tenantId,
-          {
-            activatedUsersCount: entry._count._all,
-            activatedAt: entry._min.createdAt ?? null,
-          },
-        ]),
-      );
-      const pendingInvitesByTenant = new Map(
-        pendingInviteMetrics.map((entry) => [entry.tenantId, entry._count._all]),
-      );
+        try {
+          const [count, firstUser] = await Promise.all([
+            this.prisma.user.count({
+              where: { tenantId: sub.customerTenantId },
+            }),
+            this.prisma.user.findFirst({
+              where: { tenantId: sub.customerTenantId },
+              orderBy: { createdAt: 'asc' },
+              select: { createdAt: true },
+            }),
+          ]);
+          activatedUsersCount = count;
+          activatedAt = firstUser?.createdAt ?? null;
+        } catch (err) {
+          const mapped = this.mapSchemaError(err);
+          if (!mapped) throw err;
+        }
 
-      return subscriptions.map((sub) => {
-        const userMetric = userMetricsByTenant.get(sub.customerTenantId);
-        const activatedUsersCount = userMetric?.activatedUsersCount ?? 0;
-        const pendingInvitesCount = pendingInvitesByTenant.get(sub.customerTenantId) ?? 0;
+        try {
+          pendingInvitesCount = await this.prisma.userInvite.count({
+            where: { tenantId: sub.customerTenantId, status: 'PENDING' },
+          });
+        } catch (err) {
+          const mapped = this.mapSchemaError(err);
+          if (!mapped) throw err;
+        }
 
         return {
           ...sub,
           activatedUsersCount,
-          activatedAt: userMetric?.activatedAt ?? null,
+          activatedAt,
           pendingInvitesCount,
           canCancel: sub.status !== 'CANCELED' && activatedUsersCount === 0,
         };
-      });
-    } catch (err) {
-      const mapped = this.mapSchemaError(err);
-      if (mapped) throw mapped;
-      throw err;
-    }
+      }),
+    );
   }
 
   async listUsers(user: RequestUser) {
