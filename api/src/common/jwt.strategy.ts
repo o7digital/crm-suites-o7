@@ -104,14 +104,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    const tenantId = payload.tenant_id || payload.tenantId || payload.sub;
+    const tenantId =
+      payload.tenant_id ||
+      payload.tenantId ||
+      payload.user_metadata?.tenant_id ||
+      payload.user_metadata?.tenantId ||
+      payload.sub;
     const name =
       (payload.user_metadata && payload.user_metadata.name) ||
       payload.name ||
       payload.email ||
       'User';
-    const tenantName = payload.user_metadata?.tenant_name;
-    const inviteToken = payload.user_metadata?.invite_token;
+    const tenantName = payload.user_metadata?.tenant_name || payload.user_metadata?.tenantName;
+    const inviteToken = payload.user_metadata?.invite_token || payload.user_metadata?.inviteToken;
     return { userId: payload.sub, tenantId, email: payload.email, name, tenantName, inviteToken };
   }
 }

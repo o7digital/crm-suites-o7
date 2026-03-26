@@ -21,10 +21,14 @@ export class BootstrapService {
     });
 
     // Assign OWNER to the first user of a tenant. Future users default to MEMBER.
-    const existingUser = await this.prisma.user.findFirst({
-      where: { id: user.userId, tenantId: user.tenantId },
-      select: { id: true, role: true },
+    const existingUserById = await this.prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { id: true, role: true, tenantId: true },
     });
+    const existingUser =
+      existingUserById && existingUserById.tenantId === user.tenantId
+        ? { id: existingUserById.id, role: existingUserById.role }
+        : null;
 
     let customerSubscription: { status: 'ACTIVE' | 'PAUSED' | 'CANCELED' } | null = null;
     try {
@@ -87,14 +91,24 @@ export class BootstrapService {
       else if (pendingInvite?.role) role = pendingInvite.role === 'OWNER' ? 'MEMBER' : pendingInvite.role;
     }
 
+    const nextRole =
+      existingUser?.role === 'OWNER'
+        ? 'OWNER'
+        : !existingUser
+          ? role
+          : pendingInvite
+            ? pendingInvite.role === 'OWNER'
+              ? 'ADMIN'
+              : pendingInvite.role
+            : undefined;
+
     await this.prisma.user.upsert({
       where: { id: user.userId },
       update: {
         email: user.email,
         name: meta.name || user.email || 'User',
-        ...(pendingInvite && existingUser?.role !== 'OWNER'
-          ? { role: pendingInvite.role === 'OWNER' ? 'ADMIN' : pendingInvite.role }
-          : {}),
+        tenantId: user.tenantId,
+        ...(nextRole ? { role: nextRole } : {}),
       },
       create: {
         id: user.userId,

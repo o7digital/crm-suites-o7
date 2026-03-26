@@ -217,6 +217,7 @@ export class AdminService {
     T extends {
       id: string;
       customerTenantId: string;
+      contactEmail?: string | null;
       status: 'ACTIVE' | 'PAUSED' | 'CANCELED';
       createdAt: Date;
       updatedAt: Date;
@@ -229,6 +230,9 @@ export class AdminService {
         let activatedUsersCount = 0;
         let activatedAt: Date | null = null;
         let pendingInvitesCount = 0;
+        let acceptedInvitesCount = 0;
+        let firstAcceptedAt: Date | null = null;
+        let contactAccountCreatedAt: Date | null = null;
 
         try {
           const [count, firstUser] = await Promise.all([
@@ -249,12 +253,44 @@ export class AdminService {
         }
 
         try {
-          pendingInvitesCount = await this.prisma.userInvite.count({
-            where: { tenantId: sub.customerTenantId, status: 'PENDING' },
-          });
+          const [pendingCount, acceptedCount, firstAcceptedInvite] = await Promise.all([
+            this.prisma.userInvite.count({
+              where: { tenantId: sub.customerTenantId, status: 'PENDING' },
+            }),
+            this.prisma.userInvite.count({
+              where: { tenantId: sub.customerTenantId, status: 'ACCEPTED' },
+            }),
+            this.prisma.userInvite.findFirst({
+              where: { tenantId: sub.customerTenantId, status: 'ACCEPTED' },
+              orderBy: { acceptedAt: 'asc' },
+              select: { acceptedAt: true },
+            }),
+          ]);
+          pendingInvitesCount = pendingCount;
+          acceptedInvitesCount = acceptedCount;
+          firstAcceptedAt = firstAcceptedInvite?.acceptedAt ?? null;
         } catch (err) {
           const mapped = this.mapSchemaError(err);
           if (!mapped) throw err;
+        }
+
+        try {
+          const email = sub.contactEmail?.trim().toLowerCase();
+          if (email) {
+            const contactUser = await this.prisma.user.findUnique({
+              where: { email },
+              select: { createdAt: true },
+            });
+            contactAccountCreatedAt = contactUser?.createdAt ?? null;
+          }
+        } catch (err) {
+          const mapped = this.mapSchemaError(err);
+          if (!mapped) throw err;
+        }
+
+        if (activatedUsersCount === 0) {
+          activatedUsersCount = Math.max(acceptedInvitesCount, contactAccountCreatedAt ? 1 : 0);
+          activatedAt = firstAcceptedAt ?? contactAccountCreatedAt ?? null;
         }
 
         return {
