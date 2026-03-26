@@ -19,6 +19,10 @@ type SubscriptionItem = {
   seats?: number | null;
   trialEndsAt?: string | null;
   status: 'ACTIVE' | 'PAUSED' | 'CANCELED';
+  activatedUsersCount: number;
+  activatedAt?: string | null;
+  pendingInvitesCount: number;
+  canCancel: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -120,6 +124,7 @@ export default function AdminSubscriptionsPage() {
   const [creating, setCreating] = useState(false);
   const [savingSubscriptionId, setSavingSubscriptionId] = useState<string | null>(null);
   const [editingSubscriptionId, setEditingSubscriptionId] = useState<string | null>(null);
+  const [cancelingSubscriptionId, setCancelingSubscriptionId] = useState<string | null>(null);
   const [linkDraftsById, setLinkDraftsById] = useState<Record<string, LinkDraft>>({});
   const [inviteDraftsById, setInviteDraftsById] = useState<Record<string, InviteDraft>>({});
   const [pendingInvitesById, setPendingInvitesById] = useState<Record<string, PendingInvite[]>>({});
@@ -301,6 +306,9 @@ export default function AdminSubscriptionsPage() {
       try {
         const pending = await api<PendingInvite[]>(`/admin/subscriptions/${subscriptionId}/user-invites`);
         setPendingInvitesById((prev) => ({ ...prev, [subscriptionId]: pending }));
+        setItems((prev) =>
+          prev.map((row) => (row.id === subscriptionId ? { ...row, pendingInvitesCount: pending.length } : row)),
+        );
         setError(null);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unable to load invites';
@@ -314,6 +322,7 @@ export default function AdminSubscriptionsPage() {
 
   const startEditingLink = useCallback(
     (sub: SubscriptionItem) => {
+      if (sub.status === 'CANCELED') return;
       setError(null);
       setInfo(null);
       setEditingSubscriptionId(sub.id);
@@ -512,7 +521,13 @@ export default function AdminSubscriptionsPage() {
         }
       }
 
-      setItems((prev) => [created, ...prev]);
+      setItems((prev) => [
+        {
+          ...created,
+          pendingInvitesCount: inviteSuccessCount,
+        },
+        ...prev,
+      ]);
       setCustomerName('');
       setContactFirstName('');
       setContactLastName('');
@@ -553,12 +568,17 @@ export default function AdminSubscriptionsPage() {
   };
 
   const copyInvite = async (sub: SubscriptionItem) => {
+    if (sub.status === 'CANCELED') return;
     const draft = getLinkDraft(sub);
     await copyUrl(buildInviteUrlFromDraft(sub, draft));
   };
 
   const createSubscriptionInvite = useCallback(
     async (sub: SubscriptionItem) => {
+      if (sub.status === 'CANCELED') {
+        setError(t('adminSubscriptions.cancelBlocked'));
+        return;
+      }
       const inviteDraft = getInviteDraft(sub.id);
       const email = normalizeEmailValue(inviteDraft.email);
       if (!email) return;
@@ -580,11 +600,15 @@ export default function AdminSubscriptionsPage() {
             role: inviteDraft.role,
           }),
         });
+        const nextPendingInvites = [created, ...(pendingInvitesById[sub.id] || []).filter((inv) => inv.id !== created.id)];
 
         setPendingInvitesById((prev) => ({
           ...prev,
-          [sub.id]: [created, ...(prev[sub.id] || []).filter((inv) => inv.id !== created.id)],
+          [sub.id]: nextPendingInvites,
         }));
+        setItems((prev) =>
+          prev.map((row) => (row.id === sub.id ? { ...row, pendingInvitesCount: nextPendingInvites.length } : row)),
+        );
         setInviteDraftsById((prev) => ({
           ...prev,
           [sub.id]: DEFAULT_INVITE_DRAFT,
@@ -605,7 +629,36 @@ export default function AdminSubscriptionsPage() {
         setSavingInviteSubscriptionId((prev) => (prev === sub.id ? null : prev));
       }
     },
-    [api, buildInviteUrl, copyUrl, getInviteDraft, getLinkDraft, t],
+    [api, buildInviteUrl, copyUrl, getInviteDraft, getLinkDraft, pendingInvitesById, t],
+  );
+
+  const cancelSubscription = useCallback(
+    async (sub: SubscriptionItem) => {
+      if (!sub.canCancel || sub.status === 'CANCELED') return;
+      if (typeof window !== 'undefined' && !window.confirm(t('adminSubscriptions.cancelConfirm'))) {
+        return;
+      }
+
+      setCancelingSubscriptionId(sub.id);
+      setError(null);
+      setInfo(null);
+
+      try {
+        const canceled = await api<SubscriptionItem>(`/admin/subscriptions/${sub.id}/cancel`, {
+          method: 'POST',
+        });
+        setItems((prev) => prev.map((row) => (row.id === sub.id ? canceled : row)));
+        setPendingInvitesById((prev) => ({ ...prev, [sub.id]: [] }));
+        setEditingSubscriptionId((prev) => (prev === sub.id ? null : prev));
+        setInfo(t('adminSubscriptions.canceledInfo'));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to cancel subscription';
+        setError(message);
+      } finally {
+        setCancelingSubscriptionId((prev) => (prev === sub.id ? null : prev));
+      }
+    },
+    [api, t],
   );
 
   const rows = useMemo(
@@ -886,9 +939,39 @@ export default function AdminSubscriptionsPage() {
                         ) : null}
                       </td>
                       <td className="py-3 text-slate-300">
-                        <span className="inline-flex items-center rounded-full bg-white/5 px-2 py-0.5 text-xs text-slate-200 ring-1 ring-white/10">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1 ${
+                            sub.status === 'CANCELED'
+                              ? 'bg-red-500/15 text-red-200 ring-red-300/30'
+                              : 'bg-white/5 text-slate-200 ring-white/10'
+                          }`}
+                        >
                           {sub.status}
                         </span>
+                        {sub.activatedUsersCount > 0 ? (
+                          <>
+                            <p className="mt-2 text-xs text-emerald-200">
+                              {t('adminSubscriptions.activity.connectedUsers', { count: sub.activatedUsersCount })}
+                            </p>
+                            {sub.activatedAt ? (
+                              <p className="mt-1 text-xs text-slate-400">
+                                {t('adminSubscriptions.activity.activatedAt', {
+                                  date: new Date(sub.activatedAt).toLocaleDateString(),
+                                })}
+                              </p>
+                            ) : null}
+                          </>
+                        ) : (
+                          <p className="mt-2 text-xs text-amber-200">{t('adminSubscriptions.activity.notConnected')}</p>
+                        )}
+                        {sub.pendingInvitesCount > 0 ? (
+                          <p className="mt-1 text-xs text-slate-400">
+                            {t('adminSubscriptions.activity.pendingInvites', { count: sub.pendingInvitesCount })}
+                          </p>
+                        ) : null}
+                        {sub.canCancel ? (
+                          <p className="mt-1 text-xs text-slate-500">{t('adminSubscriptions.activity.cancelHint')}</p>
+                        ) : null}
                       </td>
                       <td className="py-3 text-slate-300">
                         <p className="text-xs text-slate-200">
@@ -919,11 +1002,11 @@ export default function AdminSubscriptionsPage() {
                             type="button"
                             className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10 disabled:opacity-50"
                             onClick={() => void copyInvite(sub)}
-                            disabled={!sub.inviteUrl}
+                            disabled={!sub.inviteUrl || sub.status === 'CANCELED'}
                           >
                             {t('adminSubscriptions.copyLink')}
                           </button>
-                          {!sub.isEditing ? (
+                          {!sub.isEditing && sub.status !== 'CANCELED' ? (
                             <button
                               type="button"
                               className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10"
@@ -932,8 +1015,22 @@ export default function AdminSubscriptionsPage() {
                               {t('adminSubscriptions.editLink')}
                             </button>
                           ) : null}
+                          {sub.canCancel && !sub.isEditing ? (
+                            <button
+                              type="button"
+                              className="rounded-lg bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-100 ring-1 ring-red-300/30 hover:bg-red-500/25 disabled:opacity-50"
+                              onClick={() => void cancelSubscription(sub)}
+                              disabled={cancelingSubscriptionId === sub.id}
+                            >
+                              {cancelingSubscriptionId === sub.id
+                                ? t('adminSubscriptions.canceling')
+                                : t('adminSubscriptions.cancelAction')}
+                            </button>
+                          ) : null}
                         </div>
-                        <p className="mt-2 break-all font-mono text-xs text-slate-300">{sub.inviteUrl || '—'}</p>
+                        <p className="mt-2 break-all font-mono text-xs text-slate-300">
+                          {sub.status === 'CANCELED' ? '—' : sub.inviteUrl || '—'}
+                        </p>
 
                         {sub.isEditing ? (
                           <div className="mt-3 rounded-lg bg-white/5 p-3 ring-1 ring-white/10">

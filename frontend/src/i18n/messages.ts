@@ -422,11 +422,25 @@ const CORE_MESSAGES = {
     "adminSubscriptions.saveLinkData": "Save and copy",
     "adminSubscriptions.saving": "Saving…",
     "adminSubscriptions.cancel": "Cancel",
+    "adminSubscriptions.cancelAction": "Cancel subscription",
+    "adminSubscriptions.canceling": "Canceling…",
+    "adminSubscriptions.cancelConfirm":
+      "Cancel this subscription? Pending invite links will stop working.",
+    "adminSubscriptions.canceledInfo":
+      "Subscription canceled before first customer login.",
+    "adminSubscriptions.cancelBlocked":
+      "Canceled subscriptions cannot accept new invites.",
     "adminSubscriptions.updatedAndCopied":
       "Customer data updated and link copied.",
     "adminSubscriptions.customerNameRequired": "Customer name is required.",
     "adminSubscriptions.contactEmailInvalid":
       "Enter a valid customer email. You can also paste Name <email>.",
+    "adminSubscriptions.activity.connectedUsers": "{count} connected users",
+    "adminSubscriptions.activity.activatedAt": "Activated on {date}",
+    "adminSubscriptions.activity.notConnected": "No customer login yet",
+    "adminSubscriptions.activity.pendingInvites": "{count} pending invites",
+    "adminSubscriptions.activity.cancelHint":
+      "You can cancel while nobody has connected yet.",
     "adminSubscriptions.invites.title": "Invite users",
     "adminSubscriptions.invites.subtitle":
       "Add users to this customer workspace with a role.",
@@ -883,11 +897,28 @@ const CORE_MESSAGES = {
     "adminSubscriptions.saveLinkData": "Sauver et copier",
     "adminSubscriptions.saving": "Sauvegarde…",
     "adminSubscriptions.cancel": "Annuler",
+    "adminSubscriptions.cancelAction": "Annuler abonnement",
+    "adminSubscriptions.canceling": "Annulation…",
+    "adminSubscriptions.cancelConfirm":
+      "Annuler cet abonnement ? Les liens d'invitation en attente ne fonctionneront plus.",
+    "adminSubscriptions.canceledInfo":
+      "Abonnement annule avant la premiere connexion client.",
+    "adminSubscriptions.cancelBlocked":
+      "Les abonnements annules ne peuvent plus accepter d'invitations.",
     "adminSubscriptions.updatedAndCopied":
       "Donnees client mises a jour et lien copie.",
     "adminSubscriptions.customerNameRequired": "Raison sociale obligatoire.",
     "adminSubscriptions.contactEmailInvalid":
       "Saisissez un email client valide. Vous pouvez aussi coller Nom <email>.",
+    "adminSubscriptions.activity.connectedUsers":
+      "{count} utilisateurs connectes",
+    "adminSubscriptions.activity.activatedAt": "Active le {date}",
+    "adminSubscriptions.activity.notConnected":
+      "Aucune connexion client pour le moment",
+    "adminSubscriptions.activity.pendingInvites":
+      "{count} invitations en attente",
+    "adminSubscriptions.activity.cancelHint":
+      "Vous pouvez annuler tant que personne ne s'est connecte.",
     "adminSubscriptions.invites.title": "Inviter des utilisateurs",
     "adminSubscriptions.invites.subtitle":
       "Ajoutez des utilisateurs a cet espace client avec un role.",
@@ -1340,12 +1371,29 @@ const CORE_MESSAGES = {
     "adminSubscriptions.saveLinkData": "Guardar y copiar",
     "adminSubscriptions.saving": "Guardando…",
     "adminSubscriptions.cancel": "Cancelar",
+    "adminSubscriptions.cancelAction": "Cancelar suscripcion",
+    "adminSubscriptions.canceling": "Cancelando…",
+    "adminSubscriptions.cancelConfirm":
+      "Cancelar esta suscripcion? Los enlaces de invitacion pendientes dejaran de funcionar.",
+    "adminSubscriptions.canceledInfo":
+      "Suscripcion cancelada antes del primer acceso del cliente.",
+    "adminSubscriptions.cancelBlocked":
+      "Las suscripciones canceladas ya no aceptan invitaciones.",
     "adminSubscriptions.updatedAndCopied":
       "Datos del cliente actualizados y enlace copiado.",
     "adminSubscriptions.customerNameRequired":
       "La razon social es obligatoria.",
     "adminSubscriptions.contactEmailInvalid":
       "Ingresa un email de cliente valido. Tambien puedes pegar Nombre <email>.",
+    "adminSubscriptions.activity.connectedUsers":
+      "{count} usuarios conectados",
+    "adminSubscriptions.activity.activatedAt": "Activado el {date}",
+    "adminSubscriptions.activity.notConnected":
+      "Todavia no hay acceso del cliente",
+    "adminSubscriptions.activity.pendingInvites":
+      "{count} invitaciones pendientes",
+    "adminSubscriptions.activity.cancelHint":
+      "Puedes cancelar mientras nadie se haya conectado.",
     "adminSubscriptions.invites.title": "Invitar usuarios",
     "adminSubscriptions.invites.subtitle":
       "Agrega usuarios a este espacio cliente con un rol.",

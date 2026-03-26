@@ -26,6 +26,22 @@ export class BootstrapService {
       select: { id: true, role: true },
     });
 
+    let customerSubscription: { status: 'ACTIVE' | 'PAUSED' | 'CANCELED' } | null = null;
+    try {
+      customerSubscription = await this.prisma.subscription.findFirst({
+        where: { customerTenantId: user.tenantId },
+        select: { status: true },
+        orderBy: { createdAt: 'desc' },
+      });
+    } catch (err) {
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || (err.code !== 'P2021' && err.code !== 'P2022')) {
+        throw err;
+      }
+    }
+    if (!existingUser && customerSubscription && customerSubscription.status !== 'ACTIVE') {
+      throw new ForbiddenException('Subscription is not active for this workspace.');
+    }
+
     if (!existingUser) {
       const seatLimit = await this.getSeatLimit(user.tenantId);
       if (seatLimit !== null) {

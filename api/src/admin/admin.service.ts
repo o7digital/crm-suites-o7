@@ -202,10 +202,70 @@ export class AdminService {
     try {
       const existing = await this.prisma.subscription.findFirst({
         where: { id, tenantId: ownerTenantId },
-        select: { id: true, customerTenantId: true },
+        select: { id: true, customerTenantId: true, status: true },
       });
       if (!existing) throw new NotFoundException('Subscription not found');
       return existing;
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  private async decorateSubscriptions<
+    T extends {
+      id: string;
+      customerTenantId: string;
+      status: 'ACTIVE' | 'PAUSED' | 'CANCELED';
+      createdAt: Date;
+      updatedAt: Date;
+    },
+  >(subscriptions: T[]) {
+    if (subscriptions.length === 0) return [];
+
+    try {
+      const customerTenantIds = [...new Set(subscriptions.map((sub) => sub.customerTenantId))];
+      const [userMetrics, pendingInviteMetrics] = await Promise.all([
+        this.prisma.user.groupBy({
+          by: ['tenantId'],
+          where: { tenantId: { in: customerTenantIds } },
+          _count: { _all: true },
+          _min: { createdAt: true },
+        }),
+        this.prisma.userInvite.groupBy({
+          by: ['tenantId'],
+          where: { tenantId: { in: customerTenantIds }, status: 'PENDING' },
+          _count: { _all: true },
+        }),
+      ]);
+
+      const userMetricsByTenant = new Map(
+        userMetrics.map((entry) => [
+          entry.tenantId,
+          {
+            activatedUsersCount: entry._count._all,
+            activatedAt: entry._min.createdAt ?? null,
+          },
+        ]),
+      );
+      const pendingInvitesByTenant = new Map(
+        pendingInviteMetrics.map((entry) => [entry.tenantId, entry._count._all]),
+      );
+
+      return subscriptions.map((sub) => {
+        const userMetric = userMetricsByTenant.get(sub.customerTenantId);
+        const activatedUsersCount = userMetric?.activatedUsersCount ?? 0;
+        const pendingInvitesCount = pendingInvitesByTenant.get(sub.customerTenantId) ?? 0;
+
+        return {
+          ...sub,
+          activatedUsersCount,
+          activatedAt: userMetric?.activatedAt ?? null,
+          pendingInvitesCount,
+          canCancel: sub.status !== 'CANCELED' && activatedUsersCount === 0,
+        };
+      });
     } catch (err) {
       const mapped = this.mapSchemaError(err);
       if (mapped) throw mapped;
@@ -319,7 +379,7 @@ export class AdminService {
   async listSubscriptions(user: RequestUser) {
     await this.ensureSubscriptionManager(user);
     try {
-      return await this.prisma.subscription.findMany({
+      const subscriptions = await this.prisma.subscription.findMany({
         where: { tenantId: user.tenantId },
         orderBy: { createdAt: 'desc' },
         select: {
@@ -337,6 +397,7 @@ export class AdminService {
           updatedAt: true,
         },
       });
+      return this.decorateSubscriptions(subscriptions);
     } catch (err) {
       const mapped = this.mapSchemaError(err);
       if (mapped) throw mapped;
@@ -372,6 +433,9 @@ export class AdminService {
   async createSubscriptionUserInvite(id: string, dto: CreateUserInviteDto, user: RequestUser) {
     await this.ensureSubscriptionManager(user);
     const subscription = await this.getOwnedSubscription(id, user.tenantId);
+    if (subscription.status !== 'ACTIVE') {
+      throw new BadRequestException('Cannot invite users to a canceled subscription');
+    }
     return this.createUserInviteForTenant(dto, subscription.customerTenantId, user.userId);
   }
 
@@ -441,7 +505,7 @@ export class AdminService {
           },
         });
 
-        return tx.subscription.create({
+        const created = await tx.subscription.create({
           data: {
             tenantId: user.tenantId,
             customerTenantId,
@@ -468,6 +532,8 @@ export class AdminService {
             updatedAt: true,
           },
         });
+        const [decorated] = await this.decorateSubscriptions([created]);
+        return decorated;
       });
     } catch (err) {
       const mapped = this.mapSchemaError(err);
@@ -514,7 +580,7 @@ export class AdminService {
           });
         }
 
-        return tx.subscription.update({
+        const updated = await tx.subscription.update({
           where: { id: existing.id },
           data: {
             customerName: trimmedCustomerName || undefined,
@@ -538,6 +604,59 @@ export class AdminService {
             updatedAt: true,
           },
         });
+        const [decorated] = await this.decorateSubscriptions([updated]);
+        return decorated;
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  async cancelSubscription(id: string, user: RequestUser) {
+    await this.ensureSubscriptionManager(user);
+
+    try {
+      const existing = await this.getOwnedSubscription(id, user.tenantId);
+      if (existing.status === 'CANCELED') {
+        throw new BadRequestException('Subscription is already canceled');
+      }
+
+      const customerUsersCount = await this.prisma.user.count({
+        where: { tenantId: existing.customerTenantId },
+      });
+      if (customerUsersCount > 0) {
+        throw new ForbiddenException('Cannot cancel a subscription after customer users have connected');
+      }
+
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.userInvite.updateMany({
+          where: { tenantId: existing.customerTenantId, status: 'PENDING' },
+          data: { status: 'REVOKED' },
+        });
+
+        const canceled = await tx.subscription.update({
+          where: { id: existing.id },
+          data: { status: 'CANCELED' },
+          select: {
+            id: true,
+            customerName: true,
+            customerTenantId: true,
+            contactFirstName: true,
+            contactLastName: true,
+            contactEmail: true,
+            plan: true,
+            seats: true,
+            trialEndsAt: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
+
+        const [decorated] = await this.decorateSubscriptions([canceled]);
+        return decorated;
       });
     } catch (err) {
       const mapped = this.mapSchemaError(err);
