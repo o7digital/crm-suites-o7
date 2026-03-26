@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useApi, useAuth } from '../../../contexts/AuthContext';
@@ -100,8 +101,15 @@ function isValidEmailValue(value: string) {
   return SIMPLE_EMAIL_PATTERN.test(normalizeEmailInput(value).trim());
 }
 
+type AdminContextResponse = {
+  role?: 'OWNER' | 'ADMIN' | 'MEMBER';
+  isAdmin?: boolean;
+  canManageSubscriptions?: boolean;
+};
+
 export default function AdminSubscriptionsPage() {
   const { token } = useAuth();
+  const router = useRouter();
   const api = useApi(token);
   const { t, language } = useI18n();
   const INDUSTRY_GROUPS = industryGroups();
@@ -130,6 +138,7 @@ export default function AdminSubscriptionsPage() {
   const [createInviteRows, setCreateInviteRows] = useState<CreateInviteRow[]>(() => [createInviteRow()]);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [accessStatus, setAccessStatus] = useState<'checking' | 'allowed' | 'denied'>('checking');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -144,8 +153,31 @@ export default function AdminSubscriptionsPage() {
 
   useEffect(() => {
     if (!token) return;
+    let active = true;
+
+    api<AdminContextResponse>('/admin/context', { method: 'GET' })
+      .then((data) => {
+        if (!active) return;
+        const allowed = Boolean(data?.isAdmin && data?.canManageSubscriptions);
+        setAccessStatus(allowed ? 'allowed' : 'denied');
+        if (!allowed) router.replace('/admin');
+      })
+      .catch(() => {
+        if (!active) return;
+        setAccessStatus('denied');
+        router.replace('/admin');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [api, router, token]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (accessStatus !== 'allowed') return;
     load();
-  }, [token, load]);
+  }, [accessStatus, token, load]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -588,6 +620,16 @@ export default function AdminSubscriptionsPage() {
       })),
     [buildInviteUrlFromDraft, editingSubscriptionId, getInviteDraft, getLinkDraft, items, pendingInvitesById],
   );
+
+  if (accessStatus !== 'allowed') {
+    return (
+      <Guard>
+        <AppShell>
+          <p className="text-slate-300">{t('guard.checkingSession')}</p>
+        </AppShell>
+      </Guard>
+    );
+  }
 
   return (
     <Guard>

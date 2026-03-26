@@ -116,6 +116,20 @@ export class TenantService {
     }
   }
 
+  private async ensureWorkspaceUser(user: RequestUser) {
+    try {
+      const dbUser = await this.prisma.user.findFirst({
+        where: { id: user.userId, tenantId: user.tenantId },
+        select: { id: true },
+      });
+      if (!dbUser) throw new NotFoundException('User not found');
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
   private async ensureAdmin(user: RequestUser) {
     const role = await this.getUserRole(user);
     if (role !== 'OWNER' && role !== 'ADMIN') {
@@ -429,7 +443,7 @@ export class TenantService {
   }
 
   async updateBranding(dto: UpdateBrandingDto, user: RequestUser) {
-    await this.ensureAdmin(user);
+    await this.ensureWorkspaceUser(user);
 
     const normalize = (value: string | null | undefined) => {
       if (value === null) return null;

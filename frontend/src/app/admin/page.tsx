@@ -20,13 +20,16 @@ const tiles = [
 ] as const;
 
 type AdminContextResponse = {
+  role?: 'OWNER' | 'ADMIN' | 'MEMBER';
+  isAdmin?: boolean;
   isCustomerWorkspace?: boolean;
+  canManageSubscriptions?: boolean;
 };
 
 export default function AdminHomePage() {
   const { token } = useAuth();
   const api = useApi(token);
-  const [hideSubscriptionsTile, setHideSubscriptionsTile] = useState(false);
+  const [canShowSubscriptionsTile, setCanShowSubscriptionsTile] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -35,11 +38,11 @@ export default function AdminHomePage() {
     api<AdminContextResponse>('/admin/context', { method: 'GET' })
       .then((data) => {
         if (!active) return;
-        setHideSubscriptionsTile(Boolean(data?.isCustomerWorkspace));
+        setCanShowSubscriptionsTile(Boolean(data?.isAdmin && data?.canManageSubscriptions));
       })
       .catch(() => {
         if (!active) return;
-        setHideSubscriptionsTile(false);
+        setCanShowSubscriptionsTile(false);
       });
 
     return () => {
@@ -48,8 +51,8 @@ export default function AdminHomePage() {
   }, [api, token]);
 
   const visibleTiles = useMemo(
-    () => (hideSubscriptionsTile ? tiles.filter((tile) => tile.href !== '/admin/subscriptions') : tiles),
-    [hideSubscriptionsTile],
+    () => (canShowSubscriptionsTile ? tiles : tiles.filter((tile) => tile.href !== '/admin/subscriptions')),
+    [canShowSubscriptionsTile],
   );
 
   return (

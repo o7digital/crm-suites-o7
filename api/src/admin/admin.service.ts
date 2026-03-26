@@ -11,6 +11,10 @@ import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 export class AdminService {
   constructor(private prisma: PrismaService) {}
 
+  private isWorkspaceAdmin(role: 'OWNER' | 'ADMIN' | 'MEMBER') {
+    return role === 'OWNER' || role === 'ADMIN';
+  }
+
   private async getSubscriptionWorkspaceContext(tenantId: string) {
     try {
       const [ownedSubscription, linkedAsCustomer] = await Promise.all([
@@ -52,8 +56,8 @@ export class AdminService {
     return null;
   }
 
-  private async ensureAdmin(user: RequestUser) {
-    let dbUser: { role: string } | null = null;
+  private async getUserRole(user: RequestUser): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
+    let dbUser: { role: 'OWNER' | 'ADMIN' | 'MEMBER' } | null = null;
     try {
       dbUser = await this.prisma.user.findFirst({
         where: { id: user.userId, tenantId: user.tenantId },
@@ -65,9 +69,15 @@ export class AdminService {
       throw err;
     }
     if (!dbUser) throw new NotFoundException('User not found');
-    if (dbUser.role !== 'OWNER' && dbUser.role !== 'ADMIN') {
+    return dbUser.role;
+  }
+
+  private async ensureAdmin(user: RequestUser) {
+    const role = await this.getUserRole(user);
+    if (!this.isWorkspaceAdmin(role)) {
       throw new ForbiddenException('Admin access required');
     }
+    return role;
   }
 
   private async ensureSubscriptionManager(user: RequestUser) {
@@ -294,9 +304,11 @@ export class AdminService {
   }
 
   async getContext(user: RequestUser) {
-    await this.ensureAdmin(user);
+    const role = await this.getUserRole(user);
     const context = await this.getSubscriptionWorkspaceContext(user.tenantId);
     return {
+      role,
+      isAdmin: this.isWorkspaceAdmin(role),
       isCustomerWorkspace: context.isCustomerTenant && !context.ownsSubscriptions,
       canManageSubscriptions: context.canManageSubscriptions,
       ownsSubscriptions: context.ownsSubscriptions,
