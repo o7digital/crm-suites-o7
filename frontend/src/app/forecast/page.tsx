@@ -14,6 +14,10 @@ const USD = new Intl.NumberFormat('en-US', {
 });
 const INT = new Intl.NumberFormat('en-US');
 
+function formatUsdAmount(value: number) {
+  return `${USD.format(value)} USD`;
+}
+
 type Pipeline = {
   id: string;
   name: string;
@@ -118,14 +122,12 @@ export default function ForecastPage() {
 
         {forecast && (
           <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4">
               <div className="card p-5">
-                <p className="text-sm text-slate-400">{t('forecast.pipelineTotal')}</p>
-                <p className="mt-2 text-3xl font-semibold">{USD.format(forecast.total)}</p>
-              </div>
-              <div className="card p-5">
-                <p className="text-sm text-slate-400">{t('forecast.weightedTotal')}</p>
-                <p className="mt-2 text-3xl font-semibold">{USD.format(forecast.weightedTotal)}</p>
+                <p className="text-sm text-slate-400">{t('forecast.weightedTotal')} (USD)</p>
+                <p className="mt-2 text-3xl font-semibold">
+                  {formatUsdAmount(forecast.weightedTotal)}
+                </p>
               </div>
             </div>
 
@@ -144,8 +146,8 @@ export default function ForecastPage() {
                       <th className="pb-2 text-left">{t('forecast.table.status')}</th>
                       <th className="pb-2 text-right">{t('forecast.table.deals')}</th>
                       <th className="pb-2 text-right">{t('forecast.table.probability')}</th>
-                      <th className="pb-2 text-right">{t('forecast.table.total')}</th>
-                      <th className="pb-2 text-right">{t('forecast.table.weighted')}</th>
+                      <th className="pb-2 text-right">{t('forecast.table.total')} (USD)</th>
+                      <th className="pb-2 text-right">{t('forecast.table.weighted')} (USD)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -166,8 +168,8 @@ export default function ForecastPage() {
                         </td>
                         <td className="py-2 text-right">{INT.format(row.count)}</td>
                         <td className="py-2 text-right">{Math.round(row.probability * 100)}%</td>
-                        <td className="py-2 text-right">{USD.format(row.total)}</td>
-                        <td className="py-2 text-right">{USD.format(row.weightedTotal)}</td>
+                        <td className="py-2 text-right">{formatUsdAmount(row.total)}</td>
+                        <td className="py-2 text-right">{formatUsdAmount(row.weightedTotal)}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -664,71 +664,129 @@ function ClientsPageContent() {
         </div>
       )}
 
-      <div className="mt-6 space-y-3">
-        {clients.map((client) => {
-          const clientStatusLabel = getClientStatusLabel(
-            client.clientStatus,
-            t,
-          );
-          return (
-            <div
-              key={client.id}
-              className="card flex cursor-pointer flex-col gap-2 p-4 transition hover:bg-white/5 sm:flex-row sm:items-center sm:justify-between"
-              role="button"
-              tabIndex={0}
-              onClick={() =>
-                router.push(
-                  `/clients?clientId=${encodeURIComponent(client.id)}`,
-                )
-              }
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  router.push(
-                    `/clients?clientId=${encodeURIComponent(client.id)}`,
+      <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/30">
+        {clients.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead className="bg-white/5 text-slate-400">
+                <tr>
+                  <th className="px-4 py-3 text-left">
+                    {t("clients.table.status")}
+                  </th>
+                  <th className="px-4 py-3 text-left">
+                    {t("clients.table.client")}
+                  </th>
+                  <th className="px-4 py-3 text-left">
+                    {t("clients.table.company")}
+                  </th>
+                  <th className="px-4 py-3 text-left">
+                    {t("clients.table.contact")}
+                  </th>
+                  <th className="px-4 py-3 text-right">
+                    {t("clients.table.actions")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {clients.map((client) => {
+                  const clientStatus = normalizeClientStatus(
+                    client.clientStatus,
                   );
-                }
-              }}
-            >
-              <div>
-                {clientStatusLabel ? (
-                  <p className="text-xs uppercase tracking-[0.15em] text-cyan-300">
-                    {clientStatusLabel}
-                  </p>
-                ) : null}
-                <p className="text-lg font-semibold">
-                  {getClientDisplayName(client)}
-                </p>
-                <p className="text-sm text-slate-400">
-                  {client.email || "—"} ·{" "}
-                  {client.company || t("clients.noCompany")}
-                  {client.companySector ? ` · ${client.companySector}` : ""}
-                  {client.function ? ` · ${client.function}` : ""}
-                  {client.taxId
-                    ? ` · ${t("clients.taxId")}: ${client.taxId}`
-                    : ""}
-                </p>
-                {client.website ? (
-                  <p className="text-xs text-slate-500">{client.website}</p>
-                ) : null}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(client.id);
-                  }}
-                >
-                  {t("common.delete")}
-                </button>
-              </div>
-            </div>
-          );
-        })}
-        {clients.length === 0 && !loading && (
-          <p className="text-sm text-slate-400">{t("clients.empty")}</p>
-        )}
+                  const clientStatusLabel = getClientStatusLabel(
+                    client.clientStatus,
+                    t,
+                  );
+
+                  return (
+                    <tr
+                      key={client.id}
+                      className="cursor-pointer border-t border-white/5 transition hover:bg-white/5"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() =>
+                        router.push(
+                          `/clients?clientId=${encodeURIComponent(client.id)}`,
+                        )
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          router.push(
+                            `/clients?clientId=${encodeURIComponent(client.id)}`,
+                          );
+                        }
+                      }}
+                    >
+                      <td className="px-4 py-4">
+                        {clientStatusLabel ? (
+                          <span
+                            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.12em] ${
+                              clientStatus === "CLIENT"
+                                ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-200"
+                                : clientStatus === "PROSPECT"
+                                  ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                                  : "border-rose-400/30 bg-rose-400/10 text-rose-200"
+                            }`}
+                          >
+                            {clientStatusLabel}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-4">
+                        <p className="font-semibold text-slate-100">
+                          {getClientDisplayName(client)}
+                        </p>
+                        {client.function ? (
+                          <p className="text-xs text-slate-500">
+                            {client.function}
+                          </p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-4 text-slate-300">
+                        <p>{client.company || t("clients.noCompany")}</p>
+                        {client.companySector ? (
+                          <p className="text-xs text-slate-500">
+                            {client.companySector}
+                          </p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-4 text-slate-300">
+                        <p>{client.email || "—"}</p>
+                        <p className="text-xs text-slate-500">
+                          {client.phone || "—"}
+                          {client.taxId
+                            ? ` · ${t("clients.taxId")}: ${client.taxId}`
+                            : ""}
+                        </p>
+                        {client.website ? (
+                          <p className="text-xs text-slate-500">
+                            {client.website}
+                          </p>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-4 text-right">
+                        <button
+                          className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(client.id);
+                          }}
+                        >
+                          {t("common.delete")}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+        {clients.length === 0 && !loading ? (
+          <p className="p-4 text-sm text-slate-400">{t("clients.empty")}</p>
+        ) : null}
       </div>
 
       {importOpen && (
