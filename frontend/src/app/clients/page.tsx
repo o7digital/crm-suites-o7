@@ -359,6 +359,25 @@ function ClientsPageContent() {
     loadClientDetails(detailsClientId);
   }, [detailsClientId, loadClientDetails, token]);
 
+  useEffect(() => {
+    if (!detailsClientId && !importOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+
+      if (detailsClientId) {
+        closeDetails();
+        return;
+      }
+
+      if (importOpen && !importing) {
+        setImportOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closeDetails, detailsClientId, importOpen, importing]);
+
   const handleSaveDetails = useCallback(async () => {
     if (!detailsClientId) return;
     setDetailsSaving(true);
@@ -790,8 +809,17 @@ function ClientsPageContent() {
       </div>
 
       {importOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <div className="card w-full max-w-xl p-6">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          onClick={() => {
+            if (importing) return;
+            setImportOpen(false);
+          }}
+        >
+          <div
+            className="card w-full max-w-xl p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">
                 {t("clients.importModal.title")}
@@ -1000,8 +1028,14 @@ function ClientsPageContent() {
       )}
 
       {detailsClientId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-          <div className="card max-h-[90vh] w-full max-w-4xl overflow-y-auto p-6">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          onClick={closeDetails}
+        >
+          <div
+            className="card max-h-[90vh] w-full max-w-4xl overflow-y-auto p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm uppercase tracking-[0.15em] text-slate-400">

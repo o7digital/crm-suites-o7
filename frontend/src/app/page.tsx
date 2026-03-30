@@ -46,6 +46,7 @@ type PipelineTotal = {
 
 type DashboardApiPayload = {
   clients: number;
+  prospects?: number;
   tasks: Record<string, number>;
   leads: {
     open: number;
@@ -278,7 +279,10 @@ export default function DashboardPage() {
             <MetricCard
               title={t('nav.clients')}
               value={INT.format(data.clients)}
-              hint={t('dashboard.clientsHint')}
+              hint={t('dashboard.clientsHint', {
+                clients: INT.format(data.clients ?? 0),
+                prospects: INT.format(data.prospects ?? 0),
+              })}
             />
             <MetricCard
               title={t('dashboard.openTasks')}

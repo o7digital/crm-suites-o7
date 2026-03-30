@@ -13,7 +13,10 @@ describe('DashboardService', () => {
         { column_name: 'probability' },
       ]),
       client: {
-        count: jest.fn().mockResolvedValue(50),
+        groupBy: jest.fn().mockResolvedValue([
+          { clientStatus: 'CLIENT', _count: 12 },
+          { clientStatus: 'PROSPECT', _count: 41 },
+        ]),
       },
       task: {
         groupBy: jest.fn().mockResolvedValue([{ status: 'PENDING', _count: 5 }]),
@@ -77,5 +80,7 @@ describe('DashboardService', () => {
     ]);
     expect(result.leads.amountUsd).toBe(500);
     expect(result.leads.openValueUsd).toBe(20_500);
+    expect(result.clients).toBe(12);
+    expect(result.prospects).toBe(41);
   });
 });

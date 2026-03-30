@@ -69,9 +69,13 @@ export class DashboardService {
     const { hasOwnerId, hasProbability } = await this.getDealSchemaCaps();
     const dealVisibilityWhere = hasOwnerId && role === 'MEMBER' ? { ownerId: user.userId } : {};
 
-    const [clientCount, taskCounts, openDeals, leadTotalCount, invoiceAgg, recentInvoices] =
+    const [clientStatusCounts, taskCounts, openDeals, leadTotalCount, invoiceAgg, recentInvoices] =
       await Promise.all([
-        this.prisma.client.count({ where: { tenantId } }),
+        this.prisma.client.groupBy({
+          by: ['clientStatus'],
+          where: { tenantId },
+          _count: true,
+        }),
         this.prisma.task.groupBy({
           by: ['status'],
           where: { tenantId },
@@ -109,6 +113,17 @@ export class DashboardService {
           take: 5,
         }),
       ]);
+
+    let clientCount = 0;
+    let prospectCount = 0;
+    for (const row of clientStatusCounts) {
+      const status = String(row.clientStatus || '').toUpperCase();
+      if (status === 'CLIENT') {
+        clientCount += row._count;
+      } else if (status === 'PROSPECT') {
+        prospectCount += row._count;
+      }
+    }
 
     const taskByStatus: Record<string, number> = {};
     for (const { status, _count } of taskCounts) {
@@ -165,6 +180,7 @@ export class DashboardService {
 
     return {
       clients: clientCount,
+      prospects: prospectCount,
       tasks: taskByStatus,
       leads: {
         open: openCount,
