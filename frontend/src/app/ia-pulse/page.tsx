@@ -806,6 +806,11 @@ function toErrorMessage(err: unknown): string {
   }
 }
 
+function isMissingCrm360Route(message: string): boolean {
+  const value = String(message || '').toLowerCase();
+  return value.includes('crm-360') && value.includes('404');
+}
+
 function normalizeContactName(raw: string): string {
   const value = raw.trim();
   if (!value) return 'client';
@@ -989,6 +994,84 @@ function getCrm360Alerts(snapshot: Crm360Payload | null, locale: IaPulseLocale):
   }
 
   return alerts;
+}
+
+function buildLocalCrm360Fallback(
+  deal: Deal | null,
+  stage: Stage | null,
+  pipeline: Pipeline | null,
+  locale: IaPulseLocale,
+): Crm360Payload | null {
+  if (!deal) return null;
+
+  const stageName = stage?.name || deal.stage?.name || 'Unknown';
+  const stageStatus = stage?.status || deal.stage?.status || 'OPEN';
+
+  return {
+    lead: {
+      dealId: deal.id,
+      title: deal.title,
+      pipelineId: deal.pipelineId,
+      pipelineName: pipeline?.name || deal.pipelineId,
+      stageId: deal.stageId,
+      stageName,
+      stageStatus,
+      value: Number(deal.value || 0),
+      currency: String(deal.currency || 'USD').toUpperCase(),
+      expectedCloseDate: deal.expectedCloseDate || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      daysInStage: 0,
+      hasProposal: false,
+      productNames: [],
+    },
+    client: deal.client
+      ? {
+          id: deal.client.id || null,
+          name: getClientLabel(deal.client) || null,
+          status: null,
+          company: deal.client.company || null,
+          email: deal.client.email || null,
+          phone: deal.client.phone || null,
+          website: deal.client.website || null,
+          address: deal.client.address || null,
+          notes: deal.client.notes || null,
+        }
+      : null,
+    tasks: [],
+    invoices: [],
+    relatedDeals: [],
+    stageHistory: [],
+    signals: {
+      openTasks: 0,
+      overdueTasks: 0,
+      totalInvoices: 0,
+      totalInvoiceAmount: 0,
+      openRelatedDeals: 0,
+      staleStage: false,
+      closingLate: false,
+      noRecentTask: true,
+      noClient: !deal.client,
+      hasProposal: false,
+      daysInStage: 0,
+      daysSinceUpdate: 0,
+    },
+    coach: {
+      priority: deal.client ? 'MEDIUM' : 'HIGH',
+      summary: deal.client
+        ? 'Fallback 360 mode: backend context unavailable, using current CRM selection only.'
+        : 'Fallback 360 mode: link a client and create the next action.',
+      proofPoints: deal.client ? ['Client already linked on this deal.'] : [],
+      blockers: deal.client ? [] : [locale.noClientLinked],
+      suggestedActions: [
+        {
+          kind: 'TASK',
+          label: deal.client ? 'Create a dated follow-up task' : 'Link client and create follow-up task',
+          dueInDays: 1,
+        },
+      ],
+    },
+  };
 }
 
 function IaPulsePageContent() {
@@ -1207,6 +1290,11 @@ function IaPulsePageContent() {
         return result;
       } catch (err) {
         const message = toErrorMessage(err);
+        if (isMissingCrm360Route(message)) {
+          setErrorCrm360(null);
+          setCrm360(null);
+          return null;
+        }
         setErrorCrm360(message);
         setCrm360(null);
         return null;
@@ -1239,6 +1327,10 @@ function IaPulsePageContent() {
   }, [stages]);
 
   const selectedDeal = useMemo(() => deals.find((deal) => deal.id === dealId) || null, [dealId, deals]);
+  const selectedPipeline = useMemo(
+    () => pipelines.find((pipeline) => pipeline.id === (selectedDeal?.pipelineId || pipelineId)) || null,
+    [pipelineId, pipelines, selectedDeal?.pipelineId],
+  );
   const selectedDealStage =
     (selectedDeal ? stageById[selectedDeal.stageId] : null) ||
     (selectedDeal?.stage
@@ -1251,6 +1343,11 @@ function IaPulsePageContent() {
           pipelineId: selectedDeal.pipelineId,
         }
       : null);
+  const fallbackCrm360 = useMemo(
+    () => buildLocalCrm360Fallback(selectedDeal, selectedDealStage, selectedPipeline, locale),
+    [locale, selectedDeal, selectedDealStage, selectedPipeline],
+  );
+  const displayCrm360 = crm360 || fallbackCrm360;
 
   const crmActionPlan = useMemo(
     () => (leadAnalysis ? buildCrmActionPlan(leadAnalysis, locale) : []),
@@ -1272,8 +1369,8 @@ function IaPulsePageContent() {
     [crmActionPlan, crmContactName, leadAnalysis, locale],
   );
 
-  const crm360Context = useMemo(() => buildCrm360Context(crm360), [crm360]);
-  const crm360Alerts = useMemo(() => getCrm360Alerts(crm360, locale), [crm360, locale]);
+  const crm360Context = useMemo(() => buildCrm360Context(displayCrm360), [displayCrm360]);
+  const crm360Alerts = useMemo(() => getCrm360Alerts(displayCrm360, locale), [displayCrm360, locale]);
 
   const copyToClipboard = useCallback(async (value: string, label: string) => {
     if (!value.trim()) return;
@@ -1381,7 +1478,7 @@ function IaPulsePageContent() {
   };
 
   const selectedDealClientId = selectedDeal?.client?.id || '';
-  const effectiveClientId = selectedDealClientId || crm360?.client?.id || '';
+  const effectiveClientId = selectedDealClientId || displayCrm360?.client?.id || '';
   const extractedFieldEntries = useMemo(
     () =>
       Object.entries(contractExtraction).filter(
@@ -1683,7 +1780,7 @@ function IaPulsePageContent() {
               </Card.Body>
             </Card.Root>
 
-            {(dealId || crm360) ? (
+            {(dealId || displayCrm360) ? (
               <SimpleGrid columns={{ base: 1, xl: 2 }} gap={4}>
                 <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
                   <Card.Body>
@@ -1711,44 +1808,44 @@ function IaPulsePageContent() {
                       </Alert.Root>
                     ) : null}
 
-                    {crm360 ? (
+                    {displayCrm360 ? (
                       <Stack gap={4}>
                         <SimpleGrid columns={{ base: 2, md: 4 }} gap={3}>
                           <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                             <Text fontSize="xs" color="whiteAlpha.600">{locale.stage}</Text>
-                            <Text fontSize="sm" fontWeight="semibold">{crm360.lead.stageName}</Text>
-                            <Text fontSize="xs" color="whiteAlpha.500">{crm360.signals.daysInStage}d</Text>
+                            <Text fontSize="sm" fontWeight="semibold">{displayCrm360.lead.stageName}</Text>
+                            <Text fontSize="xs" color="whiteAlpha.500">{displayCrm360.signals.daysInStage}d</Text>
                           </Box>
                           <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                             <Text fontSize="xs" color="whiteAlpha.600">{locale.signals}</Text>
-                            <Text fontSize="sm" fontWeight="semibold">{crm360.signals.openTasks} {locale.recentTasks.toLowerCase()}</Text>
-                            <Text fontSize="xs" color="whiteAlpha.500">{crm360.signals.overdueTasks} overdue</Text>
+                            <Text fontSize="sm" fontWeight="semibold">{displayCrm360.signals.openTasks} {locale.recentTasks.toLowerCase()}</Text>
+                            <Text fontSize="xs" color="whiteAlpha.500">{displayCrm360.signals.overdueTasks} overdue</Text>
                           </Box>
                           <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                             <Text fontSize="xs" color="whiteAlpha.600">{locale.invoices}</Text>
-                            <Text fontSize="sm" fontWeight="semibold">{crm360.signals.totalInvoices}</Text>
-                            <Text fontSize="xs" color="whiteAlpha.500">{crm360.signals.totalInvoiceAmount.toLocaleString()} total</Text>
+                            <Text fontSize="sm" fontWeight="semibold">{displayCrm360.signals.totalInvoices}</Text>
+                            <Text fontSize="xs" color="whiteAlpha.500">{displayCrm360.signals.totalInvoiceAmount.toLocaleString()} total</Text>
                           </Box>
                           <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                             <Text fontSize="xs" color="whiteAlpha.600">{locale.relatedDeals}</Text>
-                            <Text fontSize="sm" fontWeight="semibold">{crm360.signals.openRelatedDeals}</Text>
-                            <Text fontSize="xs" color="whiteAlpha.500">{crm360.lead.productNames.length} products</Text>
+                            <Text fontSize="sm" fontWeight="semibold">{displayCrm360.signals.openRelatedDeals}</Text>
+                            <Text fontSize="xs" color="whiteAlpha.500">{displayCrm360.lead.productNames.length} products</Text>
                           </Box>
                         </SimpleGrid>
 
                         <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                           <Text fontSize="xs" color="whiteAlpha.600" mb={1}>{locale.client}</Text>
-                          {crm360.client ? (
+                          {displayCrm360.client ? (
                             <Stack gap={1}>
                               <Text fontSize="sm" fontWeight="semibold">
-                                {crm360.client.name || locale.na}
-                                {crm360.client.company ? ` · ${crm360.client.company}` : ''}
+                                {displayCrm360.client.name || locale.na}
+                                {displayCrm360.client.company ? ` · ${displayCrm360.client.company}` : ''}
                               </Text>
                               <Text fontSize="xs" color="whiteAlpha.700">
-                                {crm360.client.email || locale.na}
-                                {crm360.client.phone ? ` · ${crm360.client.phone}` : ''}
+                                {displayCrm360.client.email || locale.na}
+                                {displayCrm360.client.phone ? ` · ${displayCrm360.client.phone}` : ''}
                               </Text>
-                              {crm360.client.notes ? (
+                              {displayCrm360.client.notes ? (
                                 <Text
                                   fontSize="xs"
                                   color="whiteAlpha.600"
@@ -1759,7 +1856,7 @@ function IaPulsePageContent() {
                                     overflow: 'hidden',
                                   }}
                                 >
-                                  {crm360.client.notes}
+                                  {displayCrm360.client.notes}
                                 </Text>
                               ) : null}
                             </Stack>
@@ -1785,7 +1882,7 @@ function IaPulsePageContent() {
                           <Box>
                             <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.recentTasks}</Text>
                             <Stack gap={2}>
-                              {crm360.tasks.slice(0, 4).map((task) => (
+                              {displayCrm360.tasks.slice(0, 4).map((task) => (
                                 <Box key={task.id} p={2} borderRadius="md" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                                   <Text fontSize="sm" fontWeight="medium">{task.title}</Text>
                                   <Text fontSize="xs" color="whiteAlpha.600">
@@ -1794,14 +1891,14 @@ function IaPulsePageContent() {
                                   </Text>
                                 </Box>
                               ))}
-                              {crm360.tasks.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noTasksYet}</Text> : null}
+                              {displayCrm360.tasks.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noTasksYet}</Text> : null}
                             </Stack>
                           </Box>
 
                           <Box>
                             <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.stageHistory}</Text>
                             <Stack gap={2}>
-                              {crm360.stageHistory.slice(0, 4).map((row) => (
+                              {displayCrm360.stageHistory.slice(0, 4).map((row) => (
                                 <Box key={row.id} p={2} borderRadius="md" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                                   <Text fontSize="sm" fontWeight="medium">
                                     {(row.fromStageName || locale.startLabel)}{' -> '}{row.toStageName}
@@ -1809,14 +1906,14 @@ function IaPulsePageContent() {
                                   <Text fontSize="xs" color="whiteAlpha.600">{new Date(row.movedAt).toLocaleDateString()}</Text>
                                 </Box>
                               ))}
-                              {crm360.stageHistory.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noStageHistory}</Text> : null}
+                              {displayCrm360.stageHistory.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noStageHistory}</Text> : null}
                             </Stack>
                           </Box>
 
                           <Box>
                             <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.recentInvoices}</Text>
                             <Stack gap={2}>
-                              {crm360.invoices.slice(0, 4).map((invoice) => (
+                              {displayCrm360.invoices.slice(0, 4).map((invoice) => (
                                 <Box key={invoice.id} p={2} borderRadius="md" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                                   <Text fontSize="sm" fontWeight="medium">
                                     {invoice.currency} {Number(invoice.amount).toLocaleString()}
@@ -1826,14 +1923,14 @@ function IaPulsePageContent() {
                                   </Text>
                                 </Box>
                               ))}
-                              {crm360.invoices.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noInvoicesYet}</Text> : null}
+                              {displayCrm360.invoices.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noInvoicesYet}</Text> : null}
                             </Stack>
                           </Box>
 
                           <Box>
                             <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.relatedDeals}</Text>
                             <Stack gap={2}>
-                              {crm360.relatedDeals.slice(0, 4).map((item) => (
+                              {displayCrm360.relatedDeals.slice(0, 4).map((item) => (
                                 <Box key={item.id} p={2} borderRadius="md" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                                   <Text fontSize="sm" fontWeight="medium">{item.title}</Text>
                                   <Text fontSize="xs" color="whiteAlpha.600">
@@ -1841,7 +1938,7 @@ function IaPulsePageContent() {
                                   </Text>
                                 </Box>
                               ))}
-                              {crm360.relatedDeals.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noRelatedDeals}</Text> : null}
+                              {displayCrm360.relatedDeals.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noRelatedDeals}</Text> : null}
                             </Stack>
                           </Box>
                         </SimpleGrid>
@@ -1858,33 +1955,33 @@ function IaPulsePageContent() {
                   <Card.Body>
                     <Heading size="sm" mb={3}>{locale.actionCenter}</Heading>
 
-                    {crm360 ? (
+                    {displayCrm360 ? (
                       <Stack gap={4}>
                         <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
                           <Text fontSize="xs" color="whiteAlpha.600">{locale.priority}</Text>
                           <Text fontSize="lg" fontWeight="bold">
-                            {locale.priorities[crm360.coach.priority]}
+                            {locale.priorities[displayCrm360.coach.priority]}
                           </Text>
-                          <Text mt={1} fontSize="sm" color="whiteAlpha.800">{crm360.coach.summary}</Text>
+                          <Text mt={1} fontSize="sm" color="whiteAlpha.800">{displayCrm360.coach.summary}</Text>
                         </Box>
 
                         <SimpleGrid columns={{ base: 1, md: 2 }} gap={3}>
                           <Box>
                             <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.proofPoints}</Text>
                             <Stack gap={1}>
-                              {crm360.coach.proofPoints.map((item) => (
+                              {displayCrm360.coach.proofPoints.map((item) => (
                                 <Text key={item} fontSize="sm" color="emerald.200">• {item}</Text>
                               ))}
-                              {crm360.coach.proofPoints.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.na}</Text> : null}
+                              {displayCrm360.coach.proofPoints.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.na}</Text> : null}
                             </Stack>
                           </Box>
                           <Box>
                             <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.blockers}</Text>
                             <Stack gap={1}>
-                              {crm360.coach.blockers.map((item) => (
+                              {displayCrm360.coach.blockers.map((item) => (
                                 <Text key={item} fontSize="sm" color="orange.200">• {item}</Text>
                               ))}
-                              {crm360.coach.blockers.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noAlerts}</Text> : null}
+                              {displayCrm360.coach.blockers.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noAlerts}</Text> : null}
                             </Stack>
                           </Box>
                         </SimpleGrid>
@@ -1914,7 +2011,7 @@ function IaPulsePageContent() {
                         <Box>
                           <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.nextBestActions}</Text>
                           <Stack gap={2}>
-                            {crm360.coach.suggestedActions.map((action) => (
+                            {displayCrm360.coach.suggestedActions.map((action) => (
                               <Box
                                 key={`${action.kind}-${action.label}`}
                                 p={3}
