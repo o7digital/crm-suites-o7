@@ -14,6 +14,7 @@ import { SummaryDto } from './dto/summary.dto';
 import { DraftEmailDto } from './dto/draft-email.dto';
 import { ImproveProposalDto } from './dto/improve-proposal.dto';
 import { LeadAnalysisDto } from './dto/lead-analysis.dto';
+import { Crm360Dto } from './dto/crm-360.dto';
 import { CurrentUser } from '../common/user.decorator';
 import type { RequestUser } from '../common/user.decorator';
 import { DealsService } from '../deals/deals.service';
@@ -176,6 +177,229 @@ export class IaController {
     };
   }
 
+  @Post('crm-360')
+  async crm360(@Body() body: Crm360Dto, @CurrentUser() user: RequestUser) {
+    const deal = (await this.dealsService.findOne(
+      body.dealId,
+      user,
+    )) as unknown as Crm360Deal;
+    const [pipeline, stages, enteredCurrentStage, historyRows, tasks, invoices] =
+      await Promise.all([
+        this.prisma.pipeline.findFirst({
+          where: { id: deal.pipelineId, tenantId: user.tenantId },
+          select: { id: true, name: true },
+        }),
+        this.prisma.stage.findMany({
+          where: { pipelineId: deal.pipelineId, tenantId: user.tenantId },
+          orderBy: { position: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            position: true,
+            probability: true,
+          },
+        }),
+        this.prisma.dealStageHistory.findFirst({
+          where: {
+            tenantId: user.tenantId,
+            dealId: deal.id,
+            toStageId: deal.stageId,
+          },
+          orderBy: { movedAt: 'desc' },
+          select: { movedAt: true },
+        }),
+        this.prisma.dealStageHistory.findMany({
+          where: { tenantId: user.tenantId, dealId: deal.id },
+          orderBy: { movedAt: 'desc' },
+          take: 8,
+          select: {
+            id: true,
+            movedAt: true,
+            fromStage: { select: { name: true } },
+            toStage: { select: { name: true } },
+          },
+        }),
+        deal.clientId
+          ? this.prisma.task.findMany({
+              where: { tenantId: user.tenantId, clientId: deal.clientId },
+              orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
+              take: 12,
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                dueDate: true,
+                createdAt: true,
+              },
+            })
+          : Promise.resolve([] as Crm360TaskRow[]),
+        deal.clientId
+          ? this.prisma.invoice.findMany({
+              where: { tenantId: user.tenantId, clientId: deal.clientId },
+              orderBy: { createdAt: 'desc' },
+              take: 8,
+              select: {
+                id: true,
+                amount: true,
+                currency: true,
+                status: true,
+                createdAt: true,
+                dueDate: true,
+              },
+            })
+          : Promise.resolve([] as Crm360InvoiceRow[]),
+      ]);
+
+    const currentStage = stages.find((stage) => stage.id === deal.stageId) || null;
+    const createdAt = toDateOrNow(deal.createdAt);
+    const updatedAt = toDateOrNow(deal.updatedAt);
+    const stageEnteredAt = enteredCurrentStage?.movedAt || createdAt;
+    const expectedCloseDate = toDateOrNull(deal.expectedCloseDate);
+    const daysInStage = daysSince(stageEnteredAt);
+    const daysSinceUpdate = daysSince(updatedAt);
+
+    const relatedDeals = deal.clientId
+      ? await this.prisma.deal.findMany({
+          where: {
+            tenantId: user.tenantId,
+            clientId: deal.clientId,
+            id: { not: deal.id },
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 8,
+          select: {
+            id: true,
+            title: true,
+            value: true,
+            currency: true,
+            updatedAt: true,
+            expectedCloseDate: true,
+            pipeline: { select: { name: true } },
+            stage: { select: { name: true, status: true } },
+          },
+        })
+      : [];
+
+    const openTasks = tasks.filter((task) => task.status !== 'DONE').length;
+    const overdueTasks = tasks.filter(
+      (task) => task.status !== 'DONE' && isPastDue(task.dueDate),
+    ).length;
+    const openRelatedDeals = relatedDeals.filter(
+      (item) => item.stage?.status === 'OPEN',
+    ).length;
+    const totalInvoiceAmount = invoices.reduce((sum, invoice) => {
+      const amount = Number(invoice.amount);
+      return Number.isFinite(amount) ? sum + amount : sum;
+    }, 0);
+
+    const signals = {
+      openTasks,
+      overdueTasks,
+      totalInvoices: invoices.length,
+      totalInvoiceAmount: round2(totalInvoiceAmount),
+      openRelatedDeals,
+      staleStage: daysInStage >= 14,
+      closingLate: expectedCloseDate ? daysUntil(expectedCloseDate) < 0 : false,
+      noRecentTask: tasks.length === 0,
+      noClient: !deal.clientId,
+      hasProposal: Boolean(deal.proposalFilePath),
+      daysInStage,
+      daysSinceUpdate,
+    };
+
+    return {
+      lead: {
+        dealId: deal.id,
+        title: deal.title,
+        pipelineId: deal.pipelineId,
+        pipelineName: pipeline?.name || deal.pipelineId,
+        stageId: deal.stageId,
+        stageName: currentStage?.name || deal.stage?.name || 'Unknown',
+        stageStatus: currentStage?.status || deal.stage?.status || 'OPEN',
+        value: Number(deal.value),
+        currency: String(deal.currency || 'USD').toUpperCase(),
+        expectedCloseDate: expectedCloseDate ? expectedCloseDate.toISOString() : null,
+        createdAt: createdAt.toISOString(),
+        updatedAt: updatedAt.toISOString(),
+        daysInStage,
+        hasProposal: signals.hasProposal,
+        productNames: (deal.items || [])
+          .map((item) => String(item.product?.name || '').trim())
+          .filter(Boolean)
+          .slice(0, 8),
+      },
+      client: deal.client
+        ? {
+            id: deal.clientId,
+            name:
+              [deal.client.firstName, deal.client.name]
+                .map((part) => String(part || '').trim())
+                .filter(Boolean)
+                .join(' ')
+                .trim() || String(deal.client.name || '').trim() || null,
+            status: String(deal.client.clientStatus || '').toUpperCase() || null,
+            company: deal.client.company || null,
+            email: deal.client.email || null,
+            phone: deal.client.phone || null,
+            website: deal.client.website || null,
+            address: deal.client.address || null,
+            notes: deal.client.notes || null,
+          }
+        : null,
+      tasks: tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+        createdAt: task.createdAt.toISOString(),
+      })),
+      invoices: invoices.map((invoice) => ({
+        id: invoice.id,
+        amount: Number(invoice.amount),
+        currency: String(invoice.currency || 'USD').toUpperCase(),
+        status: invoice.status,
+        createdAt: invoice.createdAt.toISOString(),
+        dueDate: invoice.dueDate ? invoice.dueDate.toISOString() : null,
+      })),
+      relatedDeals: relatedDeals.map((item) => ({
+        id: item.id,
+        title: item.title,
+        pipelineName: item.pipeline?.name || null,
+        stageName: item.stage?.name || null,
+        stageStatus: item.stage?.status || 'OPEN',
+        value: Number(item.value),
+        currency: String(item.currency || 'USD').toUpperCase(),
+        updatedAt: item.updatedAt.toISOString(),
+        expectedCloseDate: item.expectedCloseDate
+          ? item.expectedCloseDate.toISOString()
+          : null,
+      })),
+      stageHistory: historyRows.map((row) => ({
+        id: row.id,
+        fromStageName: row.fromStage?.name || null,
+        toStageName: row.toStage.name,
+        movedAt: row.movedAt.toISOString(),
+      })),
+      signals,
+      coach: buildCrm360Coach({
+        dealTitle: deal.title,
+        stageName: currentStage?.name || deal.stage?.name || 'Unknown',
+        stageStatus: currentStage?.status || deal.stage?.status || 'OPEN',
+        hasClient: Boolean(deal.clientId),
+        openTasks,
+        overdueTasks,
+        totalInvoices: invoices.length,
+        openRelatedDeals,
+        staleStage: signals.staleStage,
+        closingLate: signals.closingLate,
+        hasProposal: signals.hasProposal,
+        daysInStage,
+        daysSinceUpdate,
+      }),
+    };
+  }
+
   @Post('sentiment')
   async sentiment(@Body() body: SentimentDto) {
     try {
@@ -316,6 +540,33 @@ type CrmLeadDeal = {
   } | null;
 };
 
+type Crm360Deal = CrmLeadDeal & {
+  proposalFilePath?: string | null;
+  stage?: {
+    id?: string;
+    name?: string;
+    status?: StageStatus;
+    probability?: number;
+    position?: number;
+  } | null;
+  items?: Array<{
+    product?: {
+      name?: string | null;
+    } | null;
+  }>;
+  client?: {
+    firstName?: string | null;
+    name?: string | null;
+    company?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    website?: string | null;
+    address?: string | null;
+    notes?: string | null;
+    clientStatus?: string | null;
+  } | null;
+};
+
 type StageLite = {
   id: string;
   name: string;
@@ -357,6 +608,39 @@ type LeadScoreResult = {
     recommendedStageName: string | null;
     explanation: string;
   };
+};
+
+type Crm360CoachInput = {
+  dealTitle: string;
+  stageName: string;
+  stageStatus: StageStatus;
+  hasClient: boolean;
+  openTasks: number;
+  overdueTasks: number;
+  totalInvoices: number;
+  openRelatedDeals: number;
+  staleStage: boolean;
+  closingLate: boolean;
+  hasProposal: boolean;
+  daysInStage: number;
+  daysSinceUpdate: number;
+};
+
+type Crm360TaskRow = {
+  id: string;
+  title: string;
+  status: 'PENDING' | 'IN_PROGRESS' | 'DONE';
+  dueDate: Date | null;
+  createdAt: Date;
+};
+
+type Crm360InvoiceRow = {
+  id: string;
+  amount: number | string;
+  currency: string;
+  status: string;
+  createdAt: Date;
+  dueDate: Date | null;
 };
 
 function buildLeadScoreAnalysis(input: LeadScoreInput): LeadScoreResult {
@@ -592,6 +876,114 @@ function buildLeadScoreAnalysis(input: LeadScoreInput): LeadScoreResult {
   };
 }
 
+function buildCrm360Coach(input: Crm360CoachInput) {
+  const proofPoints: string[] = [];
+  const blockers: string[] = [];
+  const suggestedActions: Array<{
+    kind: 'TASK' | 'EMAIL' | 'WHATSAPP' | 'ADVANCE_STAGE' | 'PROPOSAL';
+    label: string;
+    dueInDays: number | null;
+  }> = [];
+
+  if (input.hasClient) {
+    proofPoints.push('Lead relie a un client CRM identifiable.');
+  } else {
+    blockers.push('Aucun client relie a cette opportunite.');
+    suggestedActions.push({
+      kind: 'TASK',
+      label: 'Qualifier le decisionnaire et relier le lead a un client CRM',
+      dueInDays: 1,
+    });
+  }
+
+  if (input.openTasks > 0) {
+    proofPoints.push(`${input.openTasks} tache(s) ouverte(s) deja rattachee(s) au client.`);
+  } else {
+    blockers.push('Aucune tache ouverte pour piloter la prochaine action.');
+    suggestedActions.push({
+      kind: 'TASK',
+      label: 'Creer une tache de suivi datee sous 24h',
+      dueInDays: 1,
+    });
+  }
+
+  if (input.overdueTasks > 0) {
+    blockers.push(`${input.overdueTasks} tache(s) en retard sur ce compte.`);
+  }
+
+  if (input.staleStage) {
+    blockers.push(`Lead fige depuis ${input.daysInStage} jours dans l etape "${input.stageName}".`);
+    suggestedActions.push({
+      kind: 'EMAIL',
+      label: 'Envoyer une relance decisionnaire avec prochaine etape datee',
+      dueInDays: 0,
+    });
+  } else {
+    proofPoints.push(`Mouvement recent conserve dans l etape actuelle (${input.daysInStage} jours).`);
+  }
+
+  if (input.closingLate) {
+    blockers.push('Date de closing depassee: le planning doit etre revalide.');
+    suggestedActions.push({
+      kind: 'WHATSAPP',
+      label: 'Revalider tout de suite timing et blocage principal',
+      dueInDays: 0,
+    });
+  }
+
+  if (input.hasProposal) {
+    proofPoints.push('Une proposition commerciale est deja disponible sur le deal.');
+  } else if (input.stageStatus === 'OPEN') {
+    suggestedActions.push({
+      kind: 'PROPOSAL',
+      label: 'Preparer une proposition ou recap clair des livrables',
+      dueInDays: 2,
+    });
+  }
+
+  if (input.totalInvoices > 0) {
+    proofPoints.push(`${input.totalInvoices} facture(s) historique(s) existent sur ce client.`);
+  }
+
+  if (input.openRelatedDeals > 0) {
+    proofPoints.push(`${input.openRelatedDeals} autre(s) deal(s) ouvert(s) sur le meme compte.`);
+  }
+
+  if (input.stageStatus === 'OPEN' && !input.staleStage && input.daysSinceUpdate <= 3) {
+    suggestedActions.push({
+      kind: 'ADVANCE_STAGE',
+      label: 'Verifier si le lead peut avancer a l etape suivante',
+      dueInDays: 1,
+    });
+  }
+
+  const priority: 'LOW' | 'MEDIUM' | 'HIGH' =
+    input.overdueTasks > 0 || input.closingLate || (!input.hasClient && input.stageStatus === 'OPEN')
+      ? 'HIGH'
+      : input.staleStage || input.openTasks === 0
+        ? 'MEDIUM'
+        : 'LOW';
+
+  const summary =
+    priority === 'HIGH'
+      ? `Attention immediate requise sur "${input.dealTitle}".`
+      : priority === 'MEDIUM'
+        ? `Lead a reprendre activement pour maintenir le momentum.`
+        : `Lead globalement sous controle, avec marge pour accelerer.`;
+
+  return {
+    priority,
+    summary,
+    proofPoints: uniqueText(proofPoints).slice(0, 6),
+    blockers: uniqueText(blockers).slice(0, 6),
+    suggestedActions: uniqueText(
+      suggestedActions.map((item) => JSON.stringify(item)),
+    )
+      .map((item) => JSON.parse(item) as (typeof suggestedActions)[number])
+      .slice(0, 6),
+  };
+}
+
 function detectTextSignals(text: string): {
   positiveHits: string[];
   negativeHits: string[];
@@ -650,6 +1042,11 @@ function daysSince(value: Date): number {
 function daysUntil(value: Date): number {
   const diffMs = value.getTime() - Date.now();
   return Math.ceil(diffMs / 86_400_000);
+}
+
+function isPastDue(value: Date | null | undefined): boolean {
+  if (!value) return false;
+  return value.getTime() < Date.now();
 }
 
 function clamp(value: number, min: number, max: number): number {

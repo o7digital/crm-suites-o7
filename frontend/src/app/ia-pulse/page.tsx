@@ -72,6 +72,98 @@ type Deal = {
   };
 };
 
+type TaskItem = {
+  id: string;
+  title: string;
+  status: 'PENDING' | 'IN_PROGRESS' | 'DONE';
+  dueDate?: string | null;
+  createdAt: string;
+};
+
+type InvoiceItem = {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  createdAt: string;
+  dueDate?: string | null;
+};
+
+type Crm360Payload = {
+  lead: {
+    dealId: string;
+    title: string;
+    pipelineId: string;
+    pipelineName: string;
+    stageId: string;
+    stageName: string;
+    stageStatus: 'OPEN' | 'WON' | 'LOST';
+    value: number;
+    currency: string;
+    expectedCloseDate?: string | null;
+    createdAt: string;
+    updatedAt: string;
+    daysInStage: number;
+    hasProposal: boolean;
+    productNames: string[];
+  };
+  client: {
+    id?: string | null;
+    name?: string | null;
+    status?: string | null;
+    company?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    website?: string | null;
+    address?: string | null;
+    notes?: string | null;
+  } | null;
+  tasks: TaskItem[];
+  invoices: InvoiceItem[];
+  relatedDeals: Array<{
+    id: string;
+    title: string;
+    pipelineName?: string | null;
+    stageName?: string | null;
+    stageStatus: 'OPEN' | 'WON' | 'LOST';
+    value: number;
+    currency: string;
+    updatedAt: string;
+    expectedCloseDate?: string | null;
+  }>;
+  stageHistory: Array<{
+    id: string;
+    fromStageName?: string | null;
+    toStageName: string;
+    movedAt: string;
+  }>;
+  signals: {
+    openTasks: number;
+    overdueTasks: number;
+    totalInvoices: number;
+    totalInvoiceAmount: number;
+    openRelatedDeals: number;
+    staleStage: boolean;
+    closingLate: boolean;
+    noRecentTask: boolean;
+    noClient: boolean;
+    hasProposal: boolean;
+    daysInStage: number;
+    daysSinceUpdate: number;
+  };
+  coach: {
+    priority: 'LOW' | 'MEDIUM' | 'HIGH';
+    summary: string;
+    proofPoints: string[];
+    blockers: string[];
+    suggestedActions: Array<{
+      kind: 'TASK' | 'EMAIL' | 'WHATSAPP' | 'ADVANCE_STAGE' | 'PROPOSAL';
+      label: string;
+      dueInDays: number | null;
+    }>;
+  };
+};
+
 type ContractClientFieldKey =
   | 'firstName'
   | 'name'
@@ -130,6 +222,38 @@ type IaPulseLocale = {
   aiDiagnostics: string;
   clearAll: string;
   error: string;
+  lead360: string;
+  actionCenter: string;
+  refresh360: string;
+  use360Context: string;
+  copy360Brief: string;
+  openClientRecord: string;
+  proofPoints: string;
+  blockers: string;
+  recentTasks: string;
+  recentInvoices: string;
+  relatedDeals: string;
+  stageHistory: string;
+  alerts: string;
+  noAlerts: string;
+  signals: string;
+  taskCreated: string;
+  taskCreateFailed: string;
+  crm360Loaded: string;
+  priority: string;
+  priorities: Record<'LOW' | 'MEDIUM' | 'HIGH', string>;
+  createTask: string;
+  noClientLinked: string;
+  noTasksYet: string;
+  noInvoicesYet: string;
+  noRelatedDeals: string;
+  noStageHistory: string;
+  alertClosingLate: string;
+  alertStaleStage: string;
+  alertOverdueTasks: string;
+  alertNoClient: string;
+  alertNoProposal: string;
+  startLabel: string;
   crmLeadAnalysis: string;
   score: string;
   winProbability: string;
@@ -219,6 +343,42 @@ const IA_PULSE_LOCALE_CORE: Record<'en' | 'fr' | 'es', IaPulseLocale> = {
     aiDiagnostics: 'AI diagnostics',
     clearAll: 'Clear all',
     error: 'Error',
+    lead360: 'Lead 360',
+    actionCenter: 'Action center',
+    refresh360: 'Refresh 360',
+    use360Context: 'Use 360 context',
+    copy360Brief: 'Copy 360 brief',
+    openClientRecord: 'Open client record',
+    proofPoints: 'Proof points',
+    blockers: 'Blockers',
+    recentTasks: 'Recent tasks',
+    recentInvoices: 'Recent invoices',
+    relatedDeals: 'Related deals',
+    stageHistory: 'Stage history',
+    alerts: 'Alerts',
+    noAlerts: 'No critical alerts for now.',
+    signals: 'Signals',
+    taskCreated: 'Task created: {title}',
+    taskCreateFailed: 'Unable to create task: {title}',
+    crm360Loaded: '360 context refreshed.',
+    priority: 'Priority',
+    priorities: {
+      LOW: 'Low',
+      MEDIUM: 'Medium',
+      HIGH: 'High',
+    },
+    createTask: 'Create task',
+    noClientLinked: 'No client linked to this lead yet.',
+    noTasksYet: 'No tasks yet.',
+    noInvoicesYet: 'No invoices yet.',
+    noRelatedDeals: 'No related deals.',
+    noStageHistory: 'No stage history yet.',
+    alertClosingLate: 'Closing date exceeded.',
+    alertStaleStage: 'Lead stalled for {days} days in the same stage.',
+    alertOverdueTasks: '{count} overdue task(s) on this account.',
+    alertNoClient: 'No client linked to this lead.',
+    alertNoProposal: 'No proposal attached yet for an active lead.',
+    startLabel: 'Start',
     crmLeadAnalysis: 'CRM lead analysis',
     score: 'Score',
     winProbability: 'Win Probability',
@@ -334,6 +494,42 @@ const IA_PULSE_LOCALE_CORE: Record<'en' | 'fr' | 'es', IaPulseLocale> = {
     aiDiagnostics: 'Diagnostic IA',
     clearAll: 'Effacer tout',
     error: 'Erreur',
+    lead360: 'Vue 360',
+    actionCenter: 'Centre d actions',
+    refresh360: 'Rafraichir 360',
+    use360Context: 'Utiliser contexte 360',
+    copy360Brief: 'Copier brief 360',
+    openClientRecord: 'Ouvrir fiche client',
+    proofPoints: 'Points de preuve',
+    blockers: 'Blocages',
+    recentTasks: 'Taches recentes',
+    recentInvoices: 'Factures recentes',
+    relatedDeals: 'Deals lies',
+    stageHistory: 'Historique des etapes',
+    alerts: 'Alertes',
+    noAlerts: 'Aucune alerte critique pour le moment.',
+    signals: 'Signaux',
+    taskCreated: 'Tache creee : {title}',
+    taskCreateFailed: 'Impossible de creer la tache : {title}',
+    crm360Loaded: 'Contexte 360 rafraichi.',
+    priority: 'Priorite',
+    priorities: {
+      LOW: 'Basse',
+      MEDIUM: 'Moyenne',
+      HIGH: 'Haute',
+    },
+    createTask: 'Creer tache',
+    noClientLinked: 'Aucun client relie a ce lead pour le moment.',
+    noTasksYet: 'Aucune tache pour le moment.',
+    noInvoicesYet: 'Aucune facture pour le moment.',
+    noRelatedDeals: 'Aucun deal lie.',
+    noStageHistory: 'Aucun historique d etape pour le moment.',
+    alertClosingLate: 'Date de closing depassee.',
+    alertStaleStage: 'Lead fige depuis {days} jours dans la meme etape.',
+    alertOverdueTasks: '{count} tache(s) en retard sur ce compte.',
+    alertNoClient: 'Aucun client relie a ce lead.',
+    alertNoProposal: 'Aucune proposition attachee pour un lead actif.',
+    startLabel: 'Depart',
     crmLeadAnalysis: 'Analyse lead CRM',
     score: 'Score',
     winProbability: 'Win Probability',
@@ -449,6 +645,42 @@ const IA_PULSE_LOCALE_CORE: Record<'en' | 'fr' | 'es', IaPulseLocale> = {
     aiDiagnostics: 'Diagnostico IA',
     clearAll: 'Limpiar todo',
     error: 'Error',
+    lead360: 'Vista 360',
+    actionCenter: 'Centro de accion',
+    refresh360: 'Refrescar 360',
+    use360Context: 'Usar contexto 360',
+    copy360Brief: 'Copiar brief 360',
+    openClientRecord: 'Abrir ficha cliente',
+    proofPoints: 'Puntos de prueba',
+    blockers: 'Bloqueos',
+    recentTasks: 'Tareas recientes',
+    recentInvoices: 'Facturas recientes',
+    relatedDeals: 'Deals relacionados',
+    stageHistory: 'Historial de etapas',
+    alerts: 'Alertas',
+    noAlerts: 'Sin alertas criticas por ahora.',
+    signals: 'Senales',
+    taskCreated: 'Tarea creada: {title}',
+    taskCreateFailed: 'No se pudo crear la tarea: {title}',
+    crm360Loaded: 'Contexto 360 actualizado.',
+    priority: 'Prioridad',
+    priorities: {
+      LOW: 'Baja',
+      MEDIUM: 'Media',
+      HIGH: 'Alta',
+    },
+    createTask: 'Crear tarea',
+    noClientLinked: 'Todavia no hay cliente vinculado a este lead.',
+    noTasksYet: 'Sin tareas todavia.',
+    noInvoicesYet: 'Sin facturas todavia.',
+    noRelatedDeals: 'Sin deals relacionados.',
+    noStageHistory: 'Sin historial de etapa todavia.',
+    alertClosingLate: 'La fecha de cierre ya paso.',
+    alertStaleStage: 'Lead bloqueado durante {days} dias en la misma etapa.',
+    alertOverdueTasks: '{count} tarea(s) vencida(s) en esta cuenta.',
+    alertNoClient: 'No hay cliente vinculado a este lead.',
+    alertNoProposal: 'Todavia no hay propuesta adjunta para un lead activo.',
+    startLabel: 'Inicio',
     crmLeadAnalysis: 'Analisis lead CRM',
     score: 'Puntuacion',
     winProbability: 'Probabilidad de cierre',
@@ -695,6 +927,70 @@ function buildCrmWhatsappDraft(
   ].join(' ');
 }
 
+function formatDueDate(days: number | null): string | undefined {
+  if (days === null || !Number.isFinite(days)) return undefined;
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString();
+}
+
+function buildCrm360Context(snapshot: Crm360Payload | null): string {
+  if (!snapshot) return '';
+
+  const lines: string[] = [
+    `Lead: ${snapshot.lead.title}`,
+    `Pipeline: ${snapshot.lead.pipelineName}`,
+    `Stage: ${snapshot.lead.stageName} (${snapshot.lead.stageStatus})`,
+    `Value: ${snapshot.lead.currency} ${Number(snapshot.lead.value || 0).toLocaleString()}`,
+    `Days in stage: ${snapshot.lead.daysInStage}`,
+    `Tasks open: ${snapshot.signals.openTasks}`,
+    `Tasks overdue: ${snapshot.signals.overdueTasks}`,
+    `Invoices: ${snapshot.signals.totalInvoices}`,
+    `Related open deals: ${snapshot.signals.openRelatedDeals}`,
+  ];
+
+  if (snapshot.client?.name) {
+    lines.push(`Client: ${snapshot.client.name}`);
+  }
+  if (snapshot.client?.company) {
+    lines.push(`Company: ${snapshot.client.company}`);
+  }
+  if (snapshot.lead.productNames.length > 0) {
+    lines.push(`Products: ${snapshot.lead.productNames.join(', ')}`);
+  }
+  if (snapshot.coach.blockers.length > 0) {
+    lines.push(`Blockers: ${snapshot.coach.blockers.join(' | ')}`);
+  }
+  if (snapshot.coach.proofPoints.length > 0) {
+    lines.push(`Proof points: ${snapshot.coach.proofPoints.join(' | ')}`);
+  }
+
+  return lines.join('\n');
+}
+
+function getCrm360Alerts(snapshot: Crm360Payload | null, locale: IaPulseLocale): string[] {
+  if (!snapshot) return [];
+  const alerts: string[] = [];
+
+  if (snapshot.signals.closingLate) {
+    alerts.push(locale.alertClosingLate);
+  }
+  if (snapshot.signals.staleStage) {
+    alerts.push(templateText(locale.alertStaleStage, { days: snapshot.signals.daysInStage }));
+  }
+  if (snapshot.signals.overdueTasks > 0) {
+    alerts.push(templateText(locale.alertOverdueTasks, { count: snapshot.signals.overdueTasks }));
+  }
+  if (snapshot.signals.noClient) {
+    alerts.push(locale.alertNoClient);
+  }
+  if (!snapshot.signals.hasProposal && snapshot.lead.stageStatus === 'OPEN') {
+    alerts.push(locale.alertNoProposal);
+  }
+
+  return alerts;
+}
+
 function IaPulsePageContent() {
   const searchParams = useSearchParams();
   const prefilledDealId = searchParams.get('dealId') || '';
@@ -715,9 +1011,14 @@ function IaPulsePageContent() {
   const [dealId, setDealId] = useState('');
   const [loadingCrm, setLoadingCrm] = useState(false);
   const [errorCrm, setErrorCrm] = useState<string | null>(null);
+  const [crm360, setCrm360] = useState<Crm360Payload | null>(null);
+  const [loadingCrm360, setLoadingCrm360] = useState(false);
+  const [errorCrm360, setErrorCrm360] = useState<string | null>(null);
   const [applyInfo, setApplyInfo] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [shareInfo, setShareInfo] = useState<string | null>(null);
+  const [taskActionInfo, setTaskActionInfo] = useState<string | null>(null);
+  const [creatingTaskLabel, setCreatingTaskLabel] = useState('');
   const [applyingRecommendation, setApplyingRecommendation] = useState(false);
   const [contractSetup, setContractSetup] = useState<ContractSetup | null>(null);
   const [contractTemplateCache, setContractTemplateCache] = useState<Record<string, string>>({});
@@ -887,6 +1188,44 @@ function IaPulsePageContent() {
     autoAnalyzeDealIdRef.current = '';
   }, [prefilledDealId]);
 
+  const loadCrm360 = useCallback(
+    async (targetDealId: string) => {
+      if (!targetDealId) {
+        setCrm360(null);
+        setErrorCrm360(null);
+        return null;
+      }
+
+      setLoadingCrm360(true);
+      setErrorCrm360(null);
+      try {
+        const result = await api<Crm360Payload>('/ia/crm-360', {
+          method: 'POST',
+          body: JSON.stringify({ dealId: targetDealId }),
+        });
+        setCrm360(result);
+        return result;
+      } catch (err) {
+        const message = toErrorMessage(err);
+        setErrorCrm360(message);
+        setCrm360(null);
+        return null;
+      } finally {
+        setLoadingCrm360(false);
+      }
+    },
+    [api],
+  );
+
+  useEffect(() => {
+    if (!token || !dealId) {
+      setCrm360(null);
+      setErrorCrm360(null);
+      return;
+    }
+    void loadCrm360(dealId);
+  }, [dealId, loadCrm360, token]);
+
   const canUseText = useMemo(() => text.trim().length > 0, [text]);
   const canGenerateEmail = useMemo(
     () => canUseText && leadName.trim().length > 0,
@@ -933,6 +1272,9 @@ function IaPulsePageContent() {
     [crmActionPlan, crmContactName, leadAnalysis, locale],
   );
 
+  const crm360Context = useMemo(() => buildCrm360Context(crm360), [crm360]);
+  const crm360Alerts = useMemo(() => getCrm360Alerts(crm360, locale), [crm360, locale]);
+
   const copyToClipboard = useCallback(async (value: string, label: string) => {
     if (!value.trim()) return;
     try {
@@ -960,6 +1302,7 @@ function IaPulsePageContent() {
     setContractWarnings([]);
     setContractExtraction({});
     setContractFileName('');
+    setTaskActionInfo(null);
     reset();
   };
 
@@ -979,7 +1322,8 @@ function IaPulsePageContent() {
     setApplyError(null);
     setShareInfo(null);
     try {
-      const result = await analyzeCrmLead(dealId, text.trim() || undefined);
+      const mergedContext = [crm360Context, text.trim()].filter(Boolean).join('\n\n');
+      const result = await analyzeCrmLead(dealId, mergedContext || undefined);
       setLeadName((prev) => {
         if (prev.trim()) return prev;
         if (result.lead.clientName) return result.lead.clientName;
@@ -1025,8 +1369,10 @@ function IaPulsePageContent() {
         }),
       );
 
+      await loadCrm360(leadAnalysis.lead.dealId);
       await loadPipelineContext(leadAnalysis.lead.pipelineId, leadAnalysis.lead.dealId);
-      await analyzeCrmLead(leadAnalysis.lead.dealId, text.trim() || undefined);
+      const mergedContext = [crm360Context, text.trim()].filter(Boolean).join('\n\n');
+      await analyzeCrmLead(leadAnalysis.lead.dealId, mergedContext || undefined);
     } catch (err) {
       setApplyError(toErrorMessage(err));
     } finally {
@@ -1035,12 +1381,62 @@ function IaPulsePageContent() {
   };
 
   const selectedDealClientId = selectedDeal?.client?.id || '';
+  const effectiveClientId = selectedDealClientId || crm360?.client?.id || '';
   const extractedFieldEntries = useMemo(
     () =>
       Object.entries(contractExtraction).filter(
         (entry): entry is [ContractClientFieldKey, string] => Boolean(entry[0] && String(entry[1] || '').trim()),
       ),
     [contractExtraction],
+  );
+
+  const useCrm360AsContext = useCallback(() => {
+    if (!crm360Context) return;
+    setText(crm360Context);
+    setShareInfo(locale.crm360Loaded);
+  }, [crm360Context, locale.crm360Loaded]);
+
+  const copyCrm360Brief = useCallback(async () => {
+    if (!crm360Context) return;
+    await copyToClipboard(crm360Context, locale.lead360);
+  }, [copyToClipboard, crm360Context, locale.lead360]);
+
+  const createActionTask = useCallback(
+    async (title: string, dueInDays: number | null) => {
+      if (!effectiveClientId) {
+        setTaskActionInfo(locale.noClientLinked);
+        return;
+      }
+
+      setCreatingTaskLabel(title);
+      setTaskActionInfo(null);
+      try {
+        await api('/tasks', {
+          method: 'POST',
+          body: JSON.stringify({
+            title,
+            status: 'PENDING',
+            dueDate: formatDueDate(dueInDays),
+            clientId: effectiveClientId,
+          }),
+        });
+        setTaskActionInfo(templateText(locale.taskCreated, { title }));
+        await loadCrm360(dealId);
+      } catch {
+        setTaskActionInfo(templateText(locale.taskCreateFailed, { title }));
+      } finally {
+        setCreatingTaskLabel('');
+      }
+    },
+    [
+      api,
+      dealId,
+      effectiveClientId,
+      loadCrm360,
+      locale.noClientLinked,
+      locale.taskCreateFailed,
+      locale.taskCreated,
+    ],
   );
 
   const loadContractTemplate = useCallback(
@@ -1129,10 +1525,10 @@ function IaPulsePageContent() {
     [contractSetup, loadContractTemplate, locale.configureContractSetupFirst, locale.contractLoadedNoValues, locale.contractParsedFields, locale.warningNoValueExtracted, locale.warningPlaceholderUnresolved],
   );
 
-  const canApplyContractToClient = Boolean(selectedDealClientId) && extractedFieldEntries.length > 0;
+  const canApplyContractToClient = Boolean(effectiveClientId) && extractedFieldEntries.length > 0;
 
   const applyExtractedContractToClient = useCallback(async () => {
-    if (!selectedDealClientId || extractedFieldEntries.length === 0) return;
+    if (!effectiveClientId || extractedFieldEntries.length === 0) return;
     setApplyingContractFields(true);
     setContractError(null);
     setContractInfo(null);
@@ -1141,7 +1537,7 @@ function IaPulsePageContent() {
         acc[field] = value;
         return acc;
       }, {});
-      await api(`/clients/${selectedDealClientId}`, {
+      await api(`/clients/${effectiveClientId}`, {
         method: 'PATCH',
         body: JSON.stringify(payload),
       });
@@ -1165,7 +1561,7 @@ function IaPulsePageContent() {
     } finally {
       setApplyingContractFields(false);
     }
-  }, [api, extractedFieldEntries, locale.clientFieldsUpdated, selectedDeal?.id, selectedDealClientId]);
+  }, [api, effectiveClientId, extractedFieldEntries, locale.clientFieldsUpdated, selectedDeal?.id]);
 
   return (
     <Guard>
@@ -1286,6 +1682,283 @@ function IaPulsePageContent() {
                 ) : null}
               </Card.Body>
             </Card.Root>
+
+            {(dealId || crm360) ? (
+              <SimpleGrid columns={{ base: 1, xl: 2 }} gap={4}>
+                <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
+                  <Card.Body>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" gap={3} mb={3}>
+                      <Heading size="sm">{locale.lead360}</Heading>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        borderColor="whiteAlpha.300"
+                        onClick={() => void loadCrm360(dealId)}
+                        disabled={!dealId || loadingCrm360}
+                        borderRadius="lg"
+                      >
+                        {loadingCrm360 ? <Spinner size="sm" /> : locale.refresh360}
+                      </Button>
+                    </Box>
+
+                    {errorCrm360 ? (
+                      <Alert.Root status="warning" mb={3} borderRadius="md">
+                        <Alert.Indicator />
+                        <Alert.Content>
+                          <Alert.Title>{locale.lead360}</Alert.Title>
+                          <Alert.Description>{errorCrm360}</Alert.Description>
+                        </Alert.Content>
+                      </Alert.Root>
+                    ) : null}
+
+                    {crm360 ? (
+                      <Stack gap={4}>
+                        <SimpleGrid columns={{ base: 2, md: 4 }} gap={3}>
+                          <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                            <Text fontSize="xs" color="whiteAlpha.600">{locale.stage}</Text>
+                            <Text fontSize="sm" fontWeight="semibold">{crm360.lead.stageName}</Text>
+                            <Text fontSize="xs" color="whiteAlpha.500">{crm360.signals.daysInStage}d</Text>
+                          </Box>
+                          <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                            <Text fontSize="xs" color="whiteAlpha.600">{locale.signals}</Text>
+                            <Text fontSize="sm" fontWeight="semibold">{crm360.signals.openTasks} {locale.recentTasks.toLowerCase()}</Text>
+                            <Text fontSize="xs" color="whiteAlpha.500">{crm360.signals.overdueTasks} overdue</Text>
+                          </Box>
+                          <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                            <Text fontSize="xs" color="whiteAlpha.600">{locale.invoices}</Text>
+                            <Text fontSize="sm" fontWeight="semibold">{crm360.signals.totalInvoices}</Text>
+                            <Text fontSize="xs" color="whiteAlpha.500">{crm360.signals.totalInvoiceAmount.toLocaleString()} total</Text>
+                          </Box>
+                          <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                            <Text fontSize="xs" color="whiteAlpha.600">{locale.relatedDeals}</Text>
+                            <Text fontSize="sm" fontWeight="semibold">{crm360.signals.openRelatedDeals}</Text>
+                            <Text fontSize="xs" color="whiteAlpha.500">{crm360.lead.productNames.length} products</Text>
+                          </Box>
+                        </SimpleGrid>
+
+                        <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                          <Text fontSize="xs" color="whiteAlpha.600" mb={1}>{locale.client}</Text>
+                          {crm360.client ? (
+                            <Stack gap={1}>
+                              <Text fontSize="sm" fontWeight="semibold">
+                                {crm360.client.name || locale.na}
+                                {crm360.client.company ? ` · ${crm360.client.company}` : ''}
+                              </Text>
+                              <Text fontSize="xs" color="whiteAlpha.700">
+                                {crm360.client.email || locale.na}
+                                {crm360.client.phone ? ` · ${crm360.client.phone}` : ''}
+                              </Text>
+                              {crm360.client.notes ? (
+                                <Text
+                                  fontSize="xs"
+                                  color="whiteAlpha.600"
+                                  style={{
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 3,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                  }}
+                                >
+                                  {crm360.client.notes}
+                                </Text>
+                              ) : null}
+                            </Stack>
+                          ) : (
+                            <Text fontSize="sm" color="whiteAlpha.700">{locale.noClientLinked}</Text>
+                          )}
+                        </Box>
+
+                        <Box>
+                          <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.alerts}</Text>
+                          {crm360Alerts.length > 0 ? (
+                            <Stack gap={1}>
+                              {crm360Alerts.map((alert) => (
+                                <Text key={alert} fontSize="sm" color="orange.200">• {alert}</Text>
+                              ))}
+                            </Stack>
+                          ) : (
+                            <Text fontSize="sm" color="emerald.200">{locale.noAlerts}</Text>
+                          )}
+                        </Box>
+
+                        <SimpleGrid columns={{ base: 1, md: 2 }} gap={3}>
+                          <Box>
+                            <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.recentTasks}</Text>
+                            <Stack gap={2}>
+                              {crm360.tasks.slice(0, 4).map((task) => (
+                                <Box key={task.id} p={2} borderRadius="md" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                                  <Text fontSize="sm" fontWeight="medium">{task.title}</Text>
+                                  <Text fontSize="xs" color="whiteAlpha.600">
+                                    {task.status}
+                                    {task.dueDate ? ` · ${new Date(task.dueDate).toLocaleDateString()}` : ''}
+                                  </Text>
+                                </Box>
+                              ))}
+                              {crm360.tasks.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noTasksYet}</Text> : null}
+                            </Stack>
+                          </Box>
+
+                          <Box>
+                            <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.stageHistory}</Text>
+                            <Stack gap={2}>
+                              {crm360.stageHistory.slice(0, 4).map((row) => (
+                                <Box key={row.id} p={2} borderRadius="md" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                                  <Text fontSize="sm" fontWeight="medium">
+                                    {(row.fromStageName || locale.startLabel)}{' -> '}{row.toStageName}
+                                  </Text>
+                                  <Text fontSize="xs" color="whiteAlpha.600">{new Date(row.movedAt).toLocaleDateString()}</Text>
+                                </Box>
+                              ))}
+                              {crm360.stageHistory.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noStageHistory}</Text> : null}
+                            </Stack>
+                          </Box>
+
+                          <Box>
+                            <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.recentInvoices}</Text>
+                            <Stack gap={2}>
+                              {crm360.invoices.slice(0, 4).map((invoice) => (
+                                <Box key={invoice.id} p={2} borderRadius="md" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                                  <Text fontSize="sm" fontWeight="medium">
+                                    {invoice.currency} {Number(invoice.amount).toLocaleString()}
+                                  </Text>
+                                  <Text fontSize="xs" color="whiteAlpha.600">
+                                    {invoice.status} · {new Date(invoice.createdAt).toLocaleDateString()}
+                                  </Text>
+                                </Box>
+                              ))}
+                              {crm360.invoices.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noInvoicesYet}</Text> : null}
+                            </Stack>
+                          </Box>
+
+                          <Box>
+                            <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.relatedDeals}</Text>
+                            <Stack gap={2}>
+                              {crm360.relatedDeals.slice(0, 4).map((item) => (
+                                <Box key={item.id} p={2} borderRadius="md" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                                  <Text fontSize="sm" fontWeight="medium">{item.title}</Text>
+                                  <Text fontSize="xs" color="whiteAlpha.600">
+                                    {item.stageName || item.stageStatus} · {item.currency} {Number(item.value).toLocaleString()}
+                                  </Text>
+                                </Box>
+                              ))}
+                              {crm360.relatedDeals.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noRelatedDeals}</Text> : null}
+                            </Stack>
+                          </Box>
+                        </SimpleGrid>
+                      </Stack>
+                    ) : loadingCrm360 ? (
+                      <Box py={6} display="flex" justifyContent="center">
+                        <Spinner />
+                      </Box>
+                    ) : null}
+                  </Card.Body>
+                </Card.Root>
+
+                <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
+                  <Card.Body>
+                    <Heading size="sm" mb={3}>{locale.actionCenter}</Heading>
+
+                    {crm360 ? (
+                      <Stack gap={4}>
+                        <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                          <Text fontSize="xs" color="whiteAlpha.600">{locale.priority}</Text>
+                          <Text fontSize="lg" fontWeight="bold">
+                            {locale.priorities[crm360.coach.priority]}
+                          </Text>
+                          <Text mt={1} fontSize="sm" color="whiteAlpha.800">{crm360.coach.summary}</Text>
+                        </Box>
+
+                        <SimpleGrid columns={{ base: 1, md: 2 }} gap={3}>
+                          <Box>
+                            <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.proofPoints}</Text>
+                            <Stack gap={1}>
+                              {crm360.coach.proofPoints.map((item) => (
+                                <Text key={item} fontSize="sm" color="emerald.200">• {item}</Text>
+                              ))}
+                              {crm360.coach.proofPoints.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.na}</Text> : null}
+                            </Stack>
+                          </Box>
+                          <Box>
+                            <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.blockers}</Text>
+                            <Stack gap={1}>
+                              {crm360.coach.blockers.map((item) => (
+                                <Text key={item} fontSize="sm" color="orange.200">• {item}</Text>
+                              ))}
+                              {crm360.coach.blockers.length === 0 ? <Text fontSize="sm" color="whiteAlpha.600">{locale.noAlerts}</Text> : null}
+                            </Stack>
+                          </Box>
+                        </SimpleGrid>
+
+                        <Box display="flex" gap={2} flexWrap="wrap">
+                          <Button size="sm" variant="outline" borderColor="whiteAlpha.300" onClick={useCrm360AsContext} borderRadius="lg">
+                            {locale.use360Context}
+                          </Button>
+                          <Button size="sm" variant="outline" borderColor="whiteAlpha.300" onClick={() => void copyCrm360Brief()} borderRadius="lg">
+                            {locale.copy360Brief}
+                          </Button>
+                          {effectiveClientId ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              borderColor="whiteAlpha.300"
+                              borderRadius="lg"
+                              onClick={() => {
+                                window.location.href = `/clients?clientId=${encodeURIComponent(effectiveClientId)}`;
+                              }}
+                            >
+                              {locale.openClientRecord}
+                            </Button>
+                          ) : null}
+                        </Box>
+
+                        <Box>
+                          <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.nextBestActions}</Text>
+                          <Stack gap={2}>
+                            {crm360.coach.suggestedActions.map((action) => (
+                              <Box
+                                key={`${action.kind}-${action.label}`}
+                                p={3}
+                                borderRadius="lg"
+                                bg="blackAlpha.300"
+                                borderWidth="1px"
+                                borderColor="whiteAlpha.200"
+                              >
+                                <Box display="flex" justifyContent="space-between" alignItems="center" gap={3}>
+                                  <Box>
+                                    <Text fontSize="sm" fontWeight="semibold">{action.label}</Text>
+                                    <Text fontSize="xs" color="whiteAlpha.600">
+                                      {action.kind}
+                                      {action.dueInDays !== null ? ` · D+${action.dueInDays}` : ''}
+                                    </Text>
+                                  </Box>
+                                  <Button
+                                    size="sm"
+                                    colorPalette="cyan"
+                                    borderRadius="lg"
+                                    disabled={creatingTaskLabel === action.label}
+                                    onClick={() => void createActionTask(action.label, action.dueInDays)}
+                                  >
+                                    {creatingTaskLabel === action.label ? <Spinner size="sm" /> : locale.createTask}
+                                  </Button>
+                                </Box>
+                              </Box>
+                            ))}
+                          </Stack>
+                        </Box>
+
+                        {taskActionInfo ? (
+                          <Text fontSize="sm" color="emerald.200">{taskActionInfo}</Text>
+                        ) : null}
+                      </Stack>
+                    ) : loadingCrm360 ? (
+                      <Box py={6} display="flex" justifyContent="center">
+                        <Spinner />
+                      </Box>
+                    ) : null}
+                  </Card.Body>
+                </Card.Root>
+              </SimpleGrid>
+            ) : null}
 
             <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
               <Card.Body>
@@ -1613,6 +2286,36 @@ function IaPulsePageContent() {
                         {leadAnalysis.analysis.reasons.map((reason) => (
                           <Text key={reason} fontSize="sm" color="whiteAlpha.800">
                             • {reason}
+                          </Text>
+                        ))}
+                      </Stack>
+                    </Box>
+                  ) : null}
+
+                  {leadAnalysis.analysis.strengths.length > 0 ? (
+                    <Box mt={3}>
+                      <Text fontWeight="semibold" mb={1}>
+                        {locale.proofPoints}
+                      </Text>
+                      <Stack gap={1}>
+                        {leadAnalysis.analysis.strengths.map((item) => (
+                          <Text key={item} fontSize="sm" color="emerald.200">
+                            • {item}
+                          </Text>
+                        ))}
+                      </Stack>
+                    </Box>
+                  ) : null}
+
+                  {leadAnalysis.analysis.risks.length > 0 ? (
+                    <Box mt={3}>
+                      <Text fontWeight="semibold" mb={1}>
+                        {locale.blockers}
+                      </Text>
+                      <Stack gap={1}>
+                        {leadAnalysis.analysis.risks.map((item) => (
+                          <Text key={item} fontSize="sm" color="orange.200">
+                            • {item}
                           </Text>
                         ))}
                       </Stack>
