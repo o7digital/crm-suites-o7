@@ -1561,6 +1561,15 @@ export default function CrmPage() {
                         {stageNameById[deal.stageId] ? (
                           <p className="mt-1 text-xs text-slate-500">{stageName(stageNameById[deal.stageId])}</p>
                         ) : null}
+                        <div className="mt-2 flex justify-end">
+                          <Link
+                            href={`/ia-pulse?dealId=${deal.id}`}
+                            className="inline-flex items-center rounded-md border border-cyan-300/30 bg-cyan-400/10 px-2 py-1 text-[11px] font-medium text-cyan-100 transition hover:bg-cyan-400/20"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            IA Pulse
+                          </Link>
+                        </div>
                       </button>
                     ))}
                     {statusDeals.length === 0 ? <p className="text-xs text-slate-500">{t('crm.noDeals')}</p> : null}
@@ -2398,7 +2407,7 @@ function StageColumn({
             <div className="mt-1 flex justify-end">
               <Link
                 href={`/ia-pulse?dealId=${deal.id}`}
-                className="text-[11px] text-cyan-200 hover:underline"
+                className="inline-flex items-center rounded-md border border-cyan-300/30 bg-cyan-400/10 px-2 py-1 text-[11px] font-medium text-cyan-100 transition hover:bg-cyan-400/20"
                 onClick={(event) => event.stopPropagation()}
               >
                 IA Pulse

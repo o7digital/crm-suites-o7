@@ -729,6 +729,7 @@ function IaPulsePageContent() {
   const [loadingContractExtraction, setLoadingContractExtraction] = useState(false);
   const [applyingContractFields, setApplyingContractFields] = useState(false);
   const contractInputRef = useRef<HTMLInputElement | null>(null);
+  const autoAnalyzeDealIdRef = useRef('');
 
   const {
     analyzeLead,
@@ -882,6 +883,10 @@ function IaPulsePageContent() {
     void loadPipelineContext(pipelineId, prefilledDealId || undefined);
   }, [loadPipelineContext, pipelineId, prefilledDealId, token]);
 
+  useEffect(() => {
+    autoAnalyzeDealIdRef.current = '';
+  }, [prefilledDealId]);
+
   const canUseText = useMemo(() => text.trim().length > 0, [text]);
   const canGenerateEmail = useMemo(
     () => canUseText && leadName.trim().length > 0,
@@ -984,6 +989,16 @@ function IaPulsePageContent() {
       // Error is surfaced via hook state.
     }
   };
+
+  useEffect(() => {
+    if (!prefilledDealId) return;
+    if (!dealId || dealId !== prefilledDealId) return;
+    if (loadingCrm || loadingLeadAnalysis) return;
+    if (autoAnalyzeDealIdRef.current === dealId) return;
+
+    autoAnalyzeDealIdRef.current = dealId;
+    void handleAnalyzeSelectedLead();
+  }, [dealId, handleAnalyzeSelectedLead, loadingCrm, loadingLeadAnalysis, prefilledDealId]);
 
   const canApplyRecommendation = useMemo(() => {
     if (!leadAnalysis) return false;

@@ -279,8 +279,7 @@ export default function DashboardPage() {
             <MetricCard
               title={t('nav.clients')}
               value={INT.format(data.clients)}
-              hint={t('dashboard.clientsHint', {
-                clients: INT.format(data.clients ?? 0),
+              hint={t('dashboard.prospectsHint', {
                 prospects: INT.format(data.prospects ?? 0),
               })}
             />
