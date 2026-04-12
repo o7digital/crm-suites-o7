@@ -19,7 +19,6 @@ import { ProductsModule } from './products/products.module';
 import { FxModule } from './fx/fx.module';
 import { IaModule } from './ia/ia.module';
 import { TenantModule } from './tenant/tenant.module';
-import { PostSalesModule } from './post-sales/post-sales.module';
 
 @Module({
   imports: [
@@ -41,7 +40,6 @@ import { PostSalesModule } from './post-sales/post-sales.module';
     AdminModule,
     ProductsModule,
     TenantModule,
-    PostSalesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

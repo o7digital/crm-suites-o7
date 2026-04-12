@@ -42,10 +42,6 @@ model Tenant {
   userInvites               UserInvite[]
   googleCalendarConnections GoogleCalendarConnection[]
   clientCollaborators       ClientCollaborator[]
-  projects                  Project[]
-  projectSections           ProjectSection[]
-  projectTasks              ProjectTask[]
-  taskComments              TaskComment[]
 }
 
 enum UserRole {
@@ -79,9 +75,6 @@ model User {
   tenant                   Tenant                    @relation(fields: [tenantId], references: [id])
   deals                    Deal[]                    @relation("DealOwner")
   googleCalendarConnection GoogleCalendarConnection?
-  ownedProjects            Project[]                 @relation("ProjectOwner")
-  assignedProjectTasks     ProjectTask[]             @relation("ProjectTaskAssignee")
-  projectTaskComments      TaskComment[]             @relation("ProjectTaskCommentAuthor")
 }
 
 model Subscription {
@@ -148,8 +141,6 @@ model Client {
   invoices      Invoice[]
   deals         Deal[]
   collaborators ClientCollaborator[]
-  projects      Project[]
-  projectTasks  ProjectTask[]
 }
 
 model ClientCollaborator {
@@ -281,7 +272,6 @@ model Deal {
   stage    Stage              @relation(fields: [stageId], references: [id])
   history  DealStageHistory[]
   items    DealItem[]
-  projects Project[]
 
   @@index([ownerId])
 }
@@ -353,140 +343,4 @@ enum StageStatus {
   OPEN
   WON
   LOST
-}
-
-enum ProjectStatus {
-  DRAFT          @map("draft")
-  ACTIVE         @map("active")
-  WAITING_CLIENT @map("waiting_client")
-  COMPLETED      @map("completed")
-}
-
-enum ProjectPriority {
-  LOW    @map("low")
-  MEDIUM @map("medium")
-  HIGH   @map("high")
-}
-
-enum ProjectHealthStatus {
-  HEALTHY  @map("healthy")
-  RISK     @map("risk")
-  CRITICAL @map("critical")
-}
-
-enum ProjectTaskStatus {
-  TODO           @map("todo")
-  IN_PROGRESS    @map("in_progress")
-  WAITING_CLIENT @map("waiting_client")
-  DONE           @map("done")
-}
-
-enum ProjectTaskPriority {
-  LOW    @map("low")
-  MEDIUM @map("medium")
-  HIGH   @map("high")
-}
-
-model Project {
-  id           String              @id @default(uuid())
-  tenantId     String              @map("tenant_id")
-  clientId     String              @map("client_id")
-  dealId       String?             @map("deal_id")
-  name         String
-  description  String?
-  status       ProjectStatus       @default(DRAFT)
-  priority     ProjectPriority     @default(MEDIUM)
-  healthStatus ProjectHealthStatus @default(HEALTHY) @map("health_status")
-  ownerUserId  String?             @map("owner_user_id")
-  startDate    DateTime?           @map("start_date")
-  dueDate      DateTime?           @map("due_date")
-  createdAt    DateTime            @default(now()) @map("created_at")
-  updatedAt    DateTime            @updatedAt @map("updated_at")
-
-  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client   Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  deal     Deal?            @relation(fields: [dealId], references: [id], onDelete: SetNull)
-  owner    User?            @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  sections ProjectSection[]
-  tasks    ProjectTask[]
-
-  @@index([tenantId])
-  @@index([clientId])
-  @@index([dealId])
-  @@index([ownerUserId])
-  @@map("projects")
-}
-
-model ProjectSection {
-  id        String @id @default(uuid())
-  tenantId  String @map("tenant_id")
-  projectId String @map("project_id")
-  name      String
-  position  Int
-
-  tenant  Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  tasks   ProjectTask[]
-
-  @@unique([projectId, position])
-  @@index([tenantId])
-  @@index([projectId])
-  @@map("project_sections")
-}
-
-model ProjectTask {
-  id             String              @id @default(uuid())
-  tenantId       String              @map("tenant_id")
-  projectId      String              @map("project_id")
-  sectionId      String?             @map("section_id")
-  clientId       String?             @map("client_id")
-  title          String
-  description    String?
-  status         ProjectTaskStatus   @default(TODO)
-  priority       ProjectTaskPriority @default(MEDIUM)
-  assigneeUserId String?             @map("assignee_user_id")
-  startDate      DateTime?           @map("start_date")
-  dueDate        DateTime?           @map("due_date")
-  estimatedHours Decimal?            @map("estimated_hours") @db.Decimal(8, 2)
-  spentHours     Decimal?            @map("spent_hours") @db.Decimal(8, 2)
-  parentTaskId   String?             @map("parent_task_id")
-  position       Int                 @default(0)
-  createdAt      DateTime            @default(now()) @map("created_at")
-  updatedAt      DateTime            @updatedAt @map("updated_at")
-
-  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  project  Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  section  ProjectSection? @relation(fields: [sectionId], references: [id], onDelete: SetNull)
-  client   Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  assignee User?           @relation("ProjectTaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
-  parent   ProjectTask?    @relation("ProjectTaskParent", fields: [parentTaskId], references: [id], onDelete: SetNull)
-  children ProjectTask[]   @relation("ProjectTaskParent")
-  comments TaskComment[]
-
-  @@index([tenantId])
-  @@index([projectId])
-  @@index([sectionId])
-  @@index([clientId])
-  @@index([assigneeUserId])
-  @@index([parentTaskId])
-  @@index([projectId, sectionId, position])
-  @@map("project_tasks")
-}
-
-model TaskComment {
-  id           String   @id @default(uuid())
-  tenantId     String   @map("tenant_id")
-  taskId       String   @map("task_id")
-  authorUserId String?  @map("author_user_id")
-  body         String
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  task   ProjectTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  author User?       @relation("ProjectTaskCommentAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
-
-  @@index([tenantId])
-  @@index([taskId])
-  @@index([authorUserId])
-  @@map("task_comments")
 }
