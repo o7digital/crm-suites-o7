@@ -69,6 +69,10 @@ type Deal = {
   items?: DealItem[];
 };
 
+type PostSalesProject = {
+  id: string;
+};
+
 type TenantSettings = {
   crmMode: 'B2B' | 'B2C';
   crmDisplayCurrency?: DealCurrency;
@@ -1088,6 +1092,7 @@ export default function CrmPage() {
 
   const handleMoveDeal = async (dealId: string, stageId: string) => {
     try {
+      const movedDeal = deals.find((deal) => deal.id === dealId) || null;
       await api(`/deals/${dealId}/move-stage`, {
         method: 'POST',
         body: JSON.stringify({ stageId }),
@@ -1095,6 +1100,40 @@ export default function CrmPage() {
       setDeals((prev) =>
         prev.map((deal) => (deal.id === dealId ? { ...deal, stageId } : deal)),
       );
+
+      const targetStatus = stageStatusById[stageId];
+      if (targetStatus === 'WON' && movedDeal) {
+        if (!movedDeal.clientId) {
+          setError('Deal moved to WON, but no client is linked. Link a client before creating a project.');
+          return;
+        }
+
+        const existingProjects = await api<PostSalesProject[]>(
+          `/post-sales/projects?dealId=${encodeURIComponent(movedDeal.id)}`,
+        );
+        if (existingProjects.length > 0) return;
+
+        const shouldCreate = window.confirm(
+          `Deal "${movedDeal.title}" is now WON. Create a delivery project in Post-Sales?`,
+        );
+        if (!shouldCreate) return;
+
+        const createdProject = await api<PostSalesProject>('/post-sales/projects', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: movedDeal.title || 'Delivery Project',
+            clientId: movedDeal.clientId,
+            dealId: movedDeal.id,
+            status: 'ACTIVE',
+            priority: 'MEDIUM',
+          }),
+        });
+
+        const openNow = window.confirm('Project created. Open it now?');
+        if (openNow) {
+          router.push(`/post-sales/projects/${createdProject.id}`);
+        }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to move deal';
       setError(message);
