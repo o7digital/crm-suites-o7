@@ -128,6 +128,21 @@ export class DealsService {
     }
   }
 
+  private isPostSalesHandoffStage(
+    stageStatus: 'OPEN' | 'WON' | 'LOST' | null,
+    stageName?: string | null,
+  ) {
+    if (stageStatus === 'WON') return true;
+    const normalized = (stageName || '').trim().toLowerCase();
+    if (!normalized) return false;
+    return (
+      normalized.includes('operacion') ||
+      normalized.includes('operation') ||
+      normalized.includes('post sales') ||
+      normalized.includes('post-sales')
+    );
+  }
+
   async create(dto: CreateDealDto, user: RequestUser) {
     const caps = await this.getSchemaCaps();
     if (dto.probability !== undefined && !caps.hasProbability) {
@@ -143,6 +158,7 @@ export class DealsService {
 
     let stageId = dto.stageId;
     let targetStageStatus: 'OPEN' | 'WON' | 'LOST' | null = null;
+    let targetStageName: string | null = null;
     if (stageId) {
       const stage = await this.prisma.stage.findFirst({
         where: {
@@ -150,19 +166,21 @@ export class DealsService {
           tenantId: user.tenantId,
           pipelineId: dto.pipelineId,
         },
-        select: { id: true, status: true },
+        select: { id: true, status: true, name: true },
       });
       if (!stage) throw new BadRequestException('Stage not found for pipeline');
       targetStageStatus = stage.status;
+      targetStageName = stage.name;
     } else {
       const stage = await this.prisma.stage.findFirst({
         where: { tenantId: user.tenantId, pipelineId: dto.pipelineId },
         orderBy: { position: 'asc' },
-        select: { id: true, status: true },
+        select: { id: true, status: true, name: true },
       });
       if (!stage) throw new BadRequestException('Pipeline has no stages');
       stageId = stage.id;
       targetStageStatus = stage.status;
+      targetStageName = stage.name;
     }
 
     const uniqueProductIds = Array.from(
@@ -244,7 +262,7 @@ export class DealsService {
         });
       }
 
-      if (targetStageStatus === 'WON') {
+      if (this.isPostSalesHandoffStage(targetStageStatus, targetStageName)) {
         await this.ensurePostSalesCaseForDeal(tx, deal.id, user.tenantId, user.userId);
       }
 
@@ -401,6 +419,7 @@ export class DealsService {
     let targetStageId = requestedStageId ?? existing.stageId;
     let resolvedTargetStageId: string | null = null;
     let targetStageStatus: 'OPEN' | 'WON' | 'LOST' | null = null;
+    let targetStageName: string | null = null;
 
     if (requestedPipelineId && requestedPipelineId !== existing.pipelineId) {
       const pipeline = await this.prisma.pipeline.findFirst({
@@ -413,12 +432,13 @@ export class DealsService {
         const firstStage = await this.prisma.stage.findFirst({
           where: { tenantId: user.tenantId, pipelineId: requestedPipelineId },
           orderBy: { position: 'asc' },
-          select: { id: true, status: true },
+          select: { id: true, status: true, name: true },
         });
         if (!firstStage) throw new BadRequestException('Pipeline has no stages');
         targetStageId = firstStage.id;
         resolvedTargetStageId = firstStage.id;
         targetStageStatus = firstStage.status;
+        targetStageName = firstStage.name;
       }
     }
 
@@ -430,13 +450,14 @@ export class DealsService {
             tenantId: user.tenantId,
             pipelineId: targetPipelineId,
           },
-          select: { id: true, status: true },
+          select: { id: true, status: true, name: true },
         });
         if (!targetStage) {
           throw new BadRequestException('Stage not found for pipeline');
         }
         resolvedTargetStageId = targetStage.id;
         targetStageStatus = targetStage.status;
+        targetStageName = targetStage.name;
       }
       targetStageId = resolvedTargetStageId;
     }
@@ -482,7 +503,7 @@ export class DealsService {
         select: this.dealSelect(caps),
       });
 
-      if (targetStageStatus === 'WON') {
+      if (this.isPostSalesHandoffStage(targetStageStatus, targetStageName)) {
         await this.ensurePostSalesCaseForDeal(tx, existing.id, user.tenantId, user.userId);
       }
 
@@ -595,7 +616,7 @@ export class DealsService {
         select: { id: true, stageId: true },
       });
 
-      if (stage.status === 'WON') {
+      if (this.isPostSalesHandoffStage(stage.status, stage.name)) {
         await this.ensurePostSalesCaseForDeal(tx, deal.id, user.tenantId, user.userId);
       }
 

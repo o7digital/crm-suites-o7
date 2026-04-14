@@ -25,5 +25,11 @@ SELECT
 FROM "Deal" d
 JOIN "Stage" s ON s."id" = d."stageId"
 LEFT JOIN "PostSalesCase" psc ON psc."dealId" = d."id"
-WHERE s."status" = 'WON'::"StageStatus"
+WHERE (
+  s."status" = 'WON'::"StageStatus"
+  OR LOWER(s."name") LIKE '%operacion%'
+  OR LOWER(s."name") LIKE '%operation%'
+  OR LOWER(s."name") LIKE '%post sales%'
+  OR LOWER(s."name") LIKE '%post-sales%'
+)
   AND psc."id" IS NULL;

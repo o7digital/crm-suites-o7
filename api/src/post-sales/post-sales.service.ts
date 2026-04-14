@@ -90,10 +90,16 @@ export class PostSalesService {
   }
 
   private async backfillWonDealsForTenant(user: RequestUser) {
-    const wonDeals = await this.prisma.deal.findMany({
+    const handoffDeals = await this.prisma.deal.findMany({
       where: {
         tenantId: user.tenantId,
-        stage: { status: 'WON' },
+        OR: [
+          { stage: { status: 'WON' } },
+          { stage: { name: { contains: 'operacion', mode: 'insensitive' } } },
+          { stage: { name: { contains: 'operation', mode: 'insensitive' } } },
+          { stage: { name: { contains: 'post sales', mode: 'insensitive' } } },
+          { stage: { name: { contains: 'post-sales', mode: 'insensitive' } } },
+        ],
       },
       select: {
         id: true,
@@ -103,22 +109,22 @@ export class PostSalesService {
       },
     });
 
-    if (!wonDeals.length) {
+    if (!handoffDeals.length) {
       return { wonDeals: 0, created: 0 };
     }
 
     const existingCases = await this.prisma.postSalesCase.findMany({
       where: {
         tenantId: user.tenantId,
-        dealId: { in: wonDeals.map((deal) => deal.id) },
+        dealId: { in: handoffDeals.map((deal) => deal.id) },
       },
       select: { dealId: true },
     });
     const existingDealIds = new Set(existingCases.map((item) => item.dealId).filter(Boolean));
 
-    const missing = wonDeals.filter((deal) => !existingDealIds.has(deal.id));
+    const missing = handoffDeals.filter((deal) => !existingDealIds.has(deal.id));
     if (!missing.length) {
-      return { wonDeals: wonDeals.length, created: 0 };
+      return { wonDeals: handoffDeals.length, created: 0 };
     }
 
     const created = await this.prisma.postSalesCase.createMany({
@@ -134,7 +140,7 @@ export class PostSalesService {
       skipDuplicates: true,
     });
 
-    return { wonDeals: wonDeals.length, created: created.count };
+    return { wonDeals: handoffDeals.length, created: created.count };
   }
 
   private async ensureBelongs(id: string, tenantId: string) {
