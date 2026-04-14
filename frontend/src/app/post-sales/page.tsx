@@ -96,9 +96,9 @@ const POST_SALES_STATUSES: Array<{ key: PostSalesStatus; label: string }> = [
 
 const PRIORITY_BADGE: Record<PostSalesPriority, string> = {
   low: 'bg-slate-500/20 text-slate-200 ring-slate-400/30',
-  medium: 'bg-cyan-500/20 text-cyan-100 ring-cyan-400/30',
-  high: 'bg-amber-500/20 text-amber-100 ring-amber-400/30',
-  urgent: 'bg-rose-500/20 text-rose-100 ring-rose-400/30',
+  medium: 'bg-amber-500/20 text-amber-100 ring-amber-400/30',
+  high: 'bg-rose-500/20 text-rose-100 ring-rose-400/30',
+  urgent: 'bg-rose-500/30 text-rose-100 ring-rose-300/40',
 };
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
@@ -122,6 +122,7 @@ export default function PostSalesPage() {
   const [hoursDraftByTask, setHoursDraftByTask] = useState<Record<string, string>>({});
   const [savingHoursTaskId, setSavingHoursTaskId] = useState<string | null>(null);
   const [movingCaseId, setMovingCaseId] = useState<string | null>(null);
+  const [draggingCaseId, setDraggingCaseId] = useState<string | null>(null);
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -531,54 +532,81 @@ export default function PostSalesPage() {
 
                       <div className="space-y-3">
                         {cases.map((caseItem) => (
-                        <article
-                          key={caseItem.id}
-                          draggable={movingCaseId !== caseItem.id}
-                          onDragStart={(event) => {
-                            event.dataTransfer.setData('text/plain', caseItem.id);
-                            event.dataTransfer.effectAllowed = 'move';
-                          }}
-                          role="button"
-                          tabIndex={0}
-                          title="Open details"
-                          onClick={() => openCaseDetails(caseItem)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              openCaseDetails(caseItem);
-                            }
-                          }}
-                          className="w-full cursor-pointer rounded-xl bg-slate-900/60 p-4 ring-1 ring-white/10 transition hover:bg-slate-900/80 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
-                        >
+                          <article
+                            key={caseItem.id}
+                            draggable={movingCaseId !== caseItem.id}
+                            onDragStart={(event) => {
+                              setDraggingCaseId(caseItem.id);
+                              event.dataTransfer.setData('text/plain', caseItem.id);
+                              event.dataTransfer.effectAllowed = 'move';
+                            }}
+                            onDragEnd={() => setDraggingCaseId(null)}
+                            role="button"
+                            tabIndex={0}
+                            title="Open details"
+                            onClick={() => openCaseDetails(caseItem)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                openCaseDetails(caseItem);
+                              }
+                            }}
+                            className={[
+                              'w-full rounded-xl border p-4 transition duration-150 focus:outline-none',
+                              'bg-white/[0.08] border-white/10',
+                              'cursor-grab active:cursor-grabbing',
+                              'hover:-translate-y-[2px] hover:shadow-lg hover:shadow-black/30',
+                              'focus:ring-2 focus:ring-cyan-400/40',
+                              draggingCaseId === caseItem.id ? 'opacity-70 border-cyan-300/50 ring-1 ring-cyan-300/35' : '',
+                            ].join(' ')}
+                          >
                             <div className="flex items-start justify-between gap-2">
-                              <p className="text-base font-semibold leading-6 text-slate-100 whitespace-normal break-words">{caseItem.name}</p>
-                              <span className={['rounded-md px-2 py-0.5 text-[11px] ring-1', PRIORITY_BADGE[caseItem.priority]].join(' ')}>
+                              <p
+                                className="text-base font-semibold leading-6 text-slate-100"
+                                style={{
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: 'hidden',
+                                }}
+                              >
+                                {caseItem.name}
+                              </p>
+                              <span className={['rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1', PRIORITY_BADGE[caseItem.priority]].join(' ')}>
                                 {caseItem.priority}
                               </span>
                             </div>
-                            <p className="mt-2 text-xs text-slate-400 whitespace-normal break-words">
-                              {caseItem.client ? getClientDisplayName(caseItem.client) : 'No client'}
-                              {caseItem.deal?.title ? ` · ${caseItem.deal.title}` : ''}
-                            </p>
-                          <p className="mt-1 text-xs text-slate-400 whitespace-normal break-words">
-                            Owner: {caseItem.owner?.name || caseItem.owner?.email || 'Unassigned'}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-400">Deadline: {getIsoDueDate(caseItem.dueDate) || 'No deadline'}</p>
-                          <div className="mt-3">
-                            <button
-                              type="button"
-                              className="rounded-md border border-cyan-300/30 px-2 py-1 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
-                              onClick={(event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                openCaseDetails(caseItem);
-                              }}
-                            >
-                              Details
-                            </button>
-                          </div>
-                        </article>
-                      ))}
+
+                            <p className="mt-2 text-xs text-slate-400">{caseItem.client ? getClientDisplayName(caseItem.client) : 'No client'}</p>
+
+                            {caseItem.deal?.title && caseItem.deal.title !== caseItem.name ? (
+                              <p className="mt-2 truncate text-xs text-slate-500">{caseItem.deal.title}</p>
+                            ) : null}
+
+                            <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/10 pt-2 text-[11px] text-slate-400">
+                              <div className="flex min-w-0 items-center gap-3">
+                                <span className="flex min-w-0 items-center gap-1.5">
+                                  <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-slate-500" aria-hidden="true">
+                                    <path d="M10 10a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 1.5c-3.2 0-5.8 1.9-5.8 4.2 0 .5.4.8.9.8h9.8c.5 0 .9-.3.9-.8 0-2.3-2.6-4.2-5.8-4.2Z" />
+                                  </svg>
+                                  <span className="truncate">{caseItem.owner?.name || caseItem.owner?.email || 'Unassigned'}</span>
+                                </span>
+                                <span className="flex items-center gap-1.5 whitespace-nowrap">
+                                  <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 text-slate-500" aria-hidden="true">
+                                    <path d="M6 2a1 1 0 1 1 2 0v1h4V2a1 1 0 1 1 2 0v1h1.2A1.8 1.8 0 0 1 17 4.8v10.4A1.8 1.8 0 0 1 15.2 17H4.8A1.8 1.8 0 0 1 3 15.2V4.8A1.8 1.8 0 0 1 4.8 3H6V2Zm9 5H5v8.2c0 .3.2.5.5.5h9c.3 0 .5-.2.5-.5V7Z" />
+                                  </svg>
+                                  <span>{getIsoDueDate(caseItem.dueDate) || 'No deadline'}</span>
+                                </span>
+                              </div>
+
+                              {caseItem.deal?.id ? (
+                                <span className="rounded-full border border-cyan-300/35 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-cyan-100">
+                                  IA
+                                </span>
+                              ) : null}
+                            </div>
+                          </article>
+                        ))}
                         {cases.length === 0 ? <p className="text-xs text-slate-500">No cases in this step.</p> : null}
                       </div>
                     </section>
