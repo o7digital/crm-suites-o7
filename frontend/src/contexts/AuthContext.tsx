@@ -220,6 +220,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearAuthStorage();
   }, [clearAuthStorage, safeSupabase]);
 
+  useEffect(() => {
+    const supabase = safeSupabase();
+    if (!supabase) return;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        syncSession(session);
+        if (event === 'SIGNED_IN') {
+          void bootstrapTenant(session.access_token, { ignoreErrors: true });
+        }
+      } else {
+        setToken(null);
+        setUser(null);
+        clearAuthStorage();
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [bootstrapTenant, clearAuthStorage, safeSupabase, syncSession]);
+
   const value = useMemo(
     () => ({
       user,
