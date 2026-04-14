@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useAuth } from '../contexts/AuthContext';
+import { useApi, useAuth } from '../contexts/AuthContext';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../contexts/I18nContext';
 import { useBranding } from '../contexts/BrandingContext';
@@ -23,10 +23,12 @@ const nav = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
+  const api = useApi(token);
   const { branding } = useBranding();
   const { t } = useI18n();
   const [accountOpen, setAccountOpen] = useState(false);
+  const [workspaceRole, setWorkspaceRole] = useState<'OWNER' | 'ADMIN' | 'MEMBER' | null>(null);
   const accountRef = useRef<HTMLDivElement | null>(null);
 
   const showAdminBackToTop = Boolean(pathname && pathname !== '/admin' && pathname.startsWith('/admin/'));
@@ -39,6 +41,20 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
     [pathname],
   );
+
+  useEffect(() => {
+    if (!token) {
+      setWorkspaceRole(null);
+      return;
+    }
+    api<{ role?: 'OWNER' | 'ADMIN' | 'MEMBER' }>('/admin/context')
+      .then((data) => {
+        setWorkspaceRole(data?.role || null);
+      })
+      .catch(() => {
+        setWorkspaceRole(null);
+      });
+  }, [api, token]);
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
@@ -66,6 +82,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     [],
   );
 
+  const canAccessPostSales = workspaceRole === 'OWNER' || workspaceRole === 'ADMIN';
+  const filteredNav = useMemo(
+    () => nav.filter((item) => (item.href === '/post-sales' ? canAccessPostSales : true)),
+    [canAccessPostSales],
+  );
+
   return (
     <div className="min-h-screen">
       <header className="app-header sticky top-0 z-20 border-b backdrop-blur">
@@ -90,7 +112,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
           <nav className="hidden items-center gap-3 text-sm font-medium text-slate-200 md:flex">
-            {nav.map((item) => {
+            {filteredNav.map((item) => {
               const active = isActiveRoute(item.href);
               return (
                 <Link
@@ -162,7 +184,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <div className="mx-auto block max-w-7xl px-4 pb-4 md:hidden">
           <nav className="flex flex-wrap gap-2 text-sm font-medium text-slate-200">
-            {nav.map((item) => {
+            {filteredNav.map((item) => {
               const active = isActiveRoute(item.href);
               return (
                 <Link

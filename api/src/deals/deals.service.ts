@@ -142,6 +142,7 @@ export class DealsService {
     if (!pipeline) throw new NotFoundException('Pipeline not found');
 
     let stageId = dto.stageId;
+    let targetStageStatus: 'OPEN' | 'WON' | 'LOST' | null = null;
     if (stageId) {
       const stage = await this.prisma.stage.findFirst({
         where: {
@@ -149,15 +150,19 @@ export class DealsService {
           tenantId: user.tenantId,
           pipelineId: dto.pipelineId,
         },
+        select: { id: true, status: true },
       });
       if (!stage) throw new BadRequestException('Stage not found for pipeline');
+      targetStageStatus = stage.status;
     } else {
       const stage = await this.prisma.stage.findFirst({
         where: { tenantId: user.tenantId, pipelineId: dto.pipelineId },
         orderBy: { position: 'asc' },
+        select: { id: true, status: true },
       });
       if (!stage) throw new BadRequestException('Pipeline has no stages');
       stageId = stage.id;
+      targetStageStatus = stage.status;
     }
 
     const uniqueProductIds = Array.from(
@@ -237,6 +242,10 @@ export class DealsService {
             unitPrice: productsById.get(productId)?.price ?? null,
           })),
         });
+      }
+
+      if (targetStageStatus === 'WON') {
+        await this.ensurePostSalesCaseForDeal(tx, deal.id, user.tenantId, user.userId);
       }
 
       const created = await tx.deal.findFirst({
@@ -391,6 +400,7 @@ export class DealsService {
     const targetPipelineId = requestedPipelineId ?? existing.pipelineId;
     let targetStageId = requestedStageId ?? existing.stageId;
     let resolvedTargetStageId: string | null = null;
+    let targetStageStatus: 'OPEN' | 'WON' | 'LOST' | null = null;
 
     if (requestedPipelineId && requestedPipelineId !== existing.pipelineId) {
       const pipeline = await this.prisma.pipeline.findFirst({
@@ -403,11 +413,12 @@ export class DealsService {
         const firstStage = await this.prisma.stage.findFirst({
           where: { tenantId: user.tenantId, pipelineId: requestedPipelineId },
           orderBy: { position: 'asc' },
-          select: { id: true },
+          select: { id: true, status: true },
         });
         if (!firstStage) throw new BadRequestException('Pipeline has no stages');
         targetStageId = firstStage.id;
         resolvedTargetStageId = firstStage.id;
+        targetStageStatus = firstStage.status;
       }
     }
 
@@ -419,12 +430,13 @@ export class DealsService {
             tenantId: user.tenantId,
             pipelineId: targetPipelineId,
           },
-          select: { id: true },
+          select: { id: true, status: true },
         });
         if (!targetStage) {
           throw new BadRequestException('Stage not found for pipeline');
         }
         resolvedTargetStageId = targetStage.id;
+        targetStageStatus = targetStage.status;
       }
       targetStageId = resolvedTargetStageId;
     }
@@ -464,11 +476,17 @@ export class DealsService {
         },
       });
 
-      return tx.deal.update({
+      const updated = await tx.deal.update({
         where: { id: existing.id },
         data,
         select: this.dealSelect(caps),
       });
+
+      if (targetStageStatus === 'WON') {
+        await this.ensurePostSalesCaseForDeal(tx, existing.id, user.tenantId, user.userId);
+      }
+
+      return updated;
     });
   }
 
@@ -571,11 +589,17 @@ export class DealsService {
         },
       });
 
-      return tx.deal.update({
+      const updated = await tx.deal.update({
         where: { id: deal.id },
         data: { stageId: dto.stageId },
         select: { id: true, stageId: true },
       });
+
+      if (stage.status === 'WON') {
+        await this.ensurePostSalesCaseForDeal(tx, deal.id, user.tenantId, user.userId);
+      }
+
+      return updated;
     });
   }
 
@@ -605,5 +629,47 @@ export class DealsService {
       select: { id: true },
     });
     if (!exists) throw new NotFoundException('Deal not found');
+  }
+
+  private async ensurePostSalesCaseForDeal(
+    tx: PrismaService | Prisma.TransactionClient,
+    dealId: string,
+    tenantId: string,
+    fallbackOwnerId: string,
+  ) {
+    const caps = await this.getSchemaCaps();
+    const deal = await tx.deal.findFirst({
+      where: { id: dealId, tenantId },
+      select: {
+        id: true,
+        title: true,
+        clientId: true,
+        ...(caps.hasOwnerId ? { ownerId: true } : {}),
+      },
+    });
+    if (!deal) return;
+
+    const ownerUserId =
+      (typeof deal === 'object' && deal && 'ownerId' in deal
+        ? ((deal as { ownerId?: string | null }).ownerId ?? null)
+        : null) ?? fallbackOwnerId;
+
+    await tx.postSalesCase.upsert({
+      where: { dealId: deal.id },
+      update: {
+        name: deal.title,
+        clientId: deal.clientId ?? null,
+        ownerUserId,
+      },
+      create: {
+        tenantId,
+        clientId: deal.clientId ?? null,
+        dealId: deal.id,
+        name: deal.title,
+        status: 'onboarding',
+        priority: 'medium',
+        ownerUserId,
+      },
+    });
   }
 }

@@ -39,6 +39,7 @@ model Tenant {
   dealStageHistory          DealStageHistory[]
   products                  Product[]
   dealItems                 DealItem[]
+  postSalesCases            PostSalesCase[]
   userInvites               UserInvite[]
   googleCalendarConnections GoogleCalendarConnection[]
   clientCollaborators       ClientCollaborator[]
@@ -74,6 +75,7 @@ model User {
 
   tenant                   Tenant                    @relation(fields: [tenantId], references: [id])
   deals                    Deal[]                    @relation("DealOwner")
+  postSalesCasesOwned      PostSalesCase[]           @relation("PostSalesCaseOwner")
   googleCalendarConnection GoogleCalendarConnection?
 }
 
@@ -140,6 +142,7 @@ model Client {
   tasks         Task[]
   invoices      Invoice[]
   deals         Deal[]
+  postSalesCases PostSalesCase[]
   collaborators ClientCollaborator[]
 }
 
@@ -174,11 +177,13 @@ model Task {
   currency       String     @default("USD")
   tenantId       String
   clientId       String
+  postSalesCaseId String?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-  client Client @relation(fields: [clientId], references: [id])
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  client        Client         @relation(fields: [clientId], references: [id])
+  postSalesCase PostSalesCase? @relation(fields: [postSalesCaseId], references: [id], onDelete: SetNull)
 }
 
 model GoogleCalendarConnection {
@@ -272,8 +277,34 @@ model Deal {
   stage    Stage              @relation(fields: [stageId], references: [id])
   history  DealStageHistory[]
   items    DealItem[]
+  postSalesCase PostSalesCase?
 
   @@index([ownerId])
+}
+
+model PostSalesCase {
+  id          String              @id @default(uuid())
+  tenantId    String
+  clientId    String?
+  dealId      String?             @unique
+  name        String
+  status      PostSalesCaseStatus @default(onboarding)
+  priority    PostSalesPriority   @default(medium)
+  ownerUserId String?
+  dueDate     DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  deal Deal? @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  owner User? @relation("PostSalesCaseOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  tasks Task[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([tenantId, ownerUserId])
+  @@index([clientId])
 }
 
 model Product {
@@ -343,4 +374,22 @@ enum StageStatus {
   OPEN
   WON
   LOST
+}
+
+enum PostSalesCaseStatus {
+  onboarding
+  collecting_info
+  in_progress
+  waiting_client
+  internal_review
+  delivery
+  support
+  done
+}
+
+enum PostSalesPriority {
+  low
+  medium
+  high
+  urgent
 }

@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsDateString, IsEnum, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -65,4 +65,8 @@ export class CreateTaskDto {
   @IsNotEmpty()
   @Transform(({ value }) => trimString(value))
   clientId: string;
+
+  @IsUUID('4')
+  @IsOptional()
+  postSalesCaseId?: string;
 }

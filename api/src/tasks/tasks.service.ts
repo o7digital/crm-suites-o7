@@ -14,6 +14,9 @@ export class TasksService {
 
   async create(dto: CreateTaskDto, user: RequestUser) {
     await this.ensureClient(dto.clientId, user);
+    if (dto.postSalesCaseId) {
+      await this.ensurePostSalesCase(dto.postSalesCaseId, user, dto.clientId);
+    }
     const task = await this.prisma.task.create({
       data: {
         title: dto.title,
@@ -23,6 +26,7 @@ export class TasksService {
         amount: dto.amount,
         currency: (dto.currency ?? 'USD').toUpperCase(),
         clientId: dto.clientId,
+        postSalesCaseId: dto.postSalesCaseId,
         tenantId: user.tenantId,
       },
       include: {
@@ -43,7 +47,7 @@ export class TasksService {
     return this.prisma.task.findMany({
       where: { tenantId: user.tenantId, ...(clientId ? { clientId } : {}) },
       orderBy: { createdAt: 'desc' },
-      include: { client: true },
+      include: { client: true, postSalesCase: true },
     });
   }
 
@@ -51,6 +55,9 @@ export class TasksService {
     await this.ensureTask(id, user);
     if (dto.clientId) {
       await this.ensureClient(dto.clientId, user);
+    }
+    if (dto.postSalesCaseId) {
+      await this.ensurePostSalesCase(dto.postSalesCaseId, user, dto.clientId);
     }
     const task = await this.prisma.task.update({
       where: { id },
@@ -67,6 +74,7 @@ export class TasksService {
             email: true,
           },
         },
+        postSalesCase: true,
       },
     });
     void this.googleCalendarService.syncTaskChange(task);
@@ -90,5 +98,16 @@ export class TasksService {
   private async ensureTask(id: string, user: RequestUser) {
     const task = await this.prisma.task.findFirst({ where: { id, tenantId: user.tenantId } });
     if (!task) throw new NotFoundException('Task not found');
+  }
+
+  private async ensurePostSalesCase(postSalesCaseId: string, user: RequestUser, expectedClientId?: string) {
+    const postSalesCase = await this.prisma.postSalesCase.findFirst({
+      where: { id: postSalesCaseId, tenantId: user.tenantId },
+      select: { id: true, clientId: true },
+    });
+    if (!postSalesCase) throw new NotFoundException('Post-Sales case not found');
+    if (expectedClientId && postSalesCase.clientId && postSalesCase.clientId !== expectedClientId) {
+      throw new NotFoundException('Post-Sales case client mismatch');
+    }
   }
 }
