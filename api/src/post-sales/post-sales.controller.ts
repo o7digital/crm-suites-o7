@@ -16,6 +16,11 @@ export class PostSalesController {
     return this.postSalesService.findAll(user);
   }
 
+  @Post('cases/backfill')
+  backfill(@CurrentUser() user: RequestUser) {
+    return this.postSalesService.backfillWonDeals(user);
+  }
+
   @Post('cases/:id/move')
   move(@Param('id') id: string, @Body() dto: MovePostSalesCaseDto, @CurrentUser() user: RequestUser) {
     return this.postSalesService.move(id, dto, user);
