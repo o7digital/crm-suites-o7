@@ -98,6 +98,17 @@ type WorkflowStageDropPlacement = 'before' | 'after';
 
 let workflowStageDraftCounter = 0;
 
+function isOperationsLikeStage(stageName?: string | null) {
+  const normalized = (stageName || '').trim().toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized.includes('operacion') ||
+    normalized.includes('operation') ||
+    normalized.includes('post sales') ||
+    normalized.includes('post-sales')
+  );
+}
+
 function createWorkflowStageDraftId() {
   workflowStageDraftCounter += 1;
   return `workflow-stage-draft-${workflowStageDraftCounter}`;
@@ -2051,7 +2062,8 @@ export default function CrmPage() {
                     <option value="">{modalSortedStages.length ? t('crm.selectStage') : t('crm.noStagesShort')}</option>
                     {modalSortedStages.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {stageName(s.name)} · {t(`stageStatus.${s.status}`)} · {Math.round((s.probability ?? 0) * 100)}%
+                        {stageName(s.name)} · {s.status === 'WON' && isOperationsLikeStage(s.name) ? 'Operaciones' : t(`stageStatus.${s.status}`)} ·{' '}
+                        {Math.round((s.probability ?? 0) * 100)}%
                       </option>
                     ))}
                   </select>
@@ -2260,6 +2272,10 @@ function StageColumn({
   highlighted: boolean;
 }) {
   const { t, stageName } = useI18n();
+  const stageStatusLabel =
+    stage.status === 'WON' && isOperationsLikeStage(stage.name)
+      ? 'Operaciones'
+      : t(`stageStatus.${stage.status}`);
   const getEffectiveDealProbability = (deal: Deal) => {
     const raw = Number(deal.probability ?? stage.probability ?? 0);
     if (!Number.isFinite(raw)) return 0;
@@ -2320,7 +2336,7 @@ function StageColumn({
     >
       <div className="flex items-center justify-between">
         <div className="text-left">
-          <p className="text-sm text-slate-400">{t(`stageStatus.${stage.status}`)}</p>
+          <p className="text-sm text-slate-400">{stageStatusLabel}</p>
           <div className="flex items-center gap-2">
             <h3 className="text-lg font-semibold">{stageName(stage.name)}</h3>
             <span className="text-xs text-slate-500">{Math.round((stage.probability ?? 0) * 100)}%</span>
