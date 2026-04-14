@@ -350,7 +350,10 @@ export default function PostSalesPage() {
   const openCaseDetails = useCallback(
     (caseItem: PostSalesCase) => {
       if (caseItem.deal?.id) {
-        router.push(`/crm/deal/${encodeURIComponent(caseItem.deal.id)}`);
+        const params = new URLSearchParams();
+        if (postSalesPipelineId) params.set('pipelineId', postSalesPipelineId);
+        params.set('dealId', caseItem.deal.id);
+        router.push(`/crm?${params.toString()}`);
         return;
       }
       if (caseItem.clientId) {
@@ -359,7 +362,7 @@ export default function PostSalesPage() {
       }
       setError('No linked deal/client found for this case.');
     },
-    [router],
+    [postSalesPipelineId, router],
   );
 
   const readHoursDraft = useCallback(

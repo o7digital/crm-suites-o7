@@ -261,6 +261,7 @@ export default function CrmPage() {
   const [fx, setFx] = useState<FxRatesSnapshot | null>(null);
   const [fxLoading, setFxLoading] = useState(false);
   const [requestedStageId, setRequestedStageId] = useState<string | null>(null);
+  const [requestedDealId, setRequestedDealId] = useState<string | null>(null);
   const [highlightStageId, setHighlightStageId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -476,16 +477,19 @@ export default function CrmPage() {
         setPipelines(filtered);
         let requested: string | null = null;
         let requestedStage: string | null = null;
+        let requestedDeal: string | null = null;
         if (typeof window !== 'undefined') {
           try {
             const params = new URLSearchParams(window.location.search);
             requested = params.get('pipelineId');
             requestedStage = params.get('stageId');
+            requestedDeal = params.get('dealId');
           } catch {
             // ignore malformed URL
           }
         }
         setRequestedStageId(requestedStage || null);
+        setRequestedDealId(requestedDeal || null);
         const match = requested ? filtered.find((p) => p.id === requested) : null;
         const defaultPipeline =
           match || filtered.find((p) => p.name === 'New Sales') || filtered.find((p) => p.isDefault) || filtered[0];
@@ -835,7 +839,7 @@ export default function CrmPage() {
     setShowModal(true);
   };
 
-  const openEditModal = (deal: Deal) => {
+  const openEditModal = useCallback((deal: Deal) => {
     setError(null);
     setEditingDeal(deal);
     setProposalFile(null);
@@ -855,13 +859,31 @@ export default function CrmPage() {
       stageId: deal.stageId,
     });
     setShowModal(true);
-  };
+  }, []);
 
-  const openDealFromCard = (deal: Deal) => {
+  const openDealFromCard = useCallback((deal: Deal) => {
     // Avoid opening the modal right after a drag & drop interaction.
     if (Date.now() - lastDragAtRef.current < 250) return;
     openEditModal(deal);
-  };
+  }, [openEditModal]);
+
+  useEffect(() => {
+    if (!requestedDealId) return;
+    const targetDeal = deals.find((deal) => deal.id === requestedDealId);
+    if (!targetDeal) return;
+
+    openEditModal(targetDeal);
+    setRequestedDealId(null);
+
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('dealId')) {
+        params.delete('dealId');
+        const nextQuery = params.toString();
+        router.replace(nextQuery ? `/crm?${nextQuery}` : '/crm');
+      }
+    }
+  }, [deals, openEditModal, requestedDealId, router]);
 
   const handleSaveDeal = async () => {
     const targetPipelineId = form.pipelineId || pipelineId;
