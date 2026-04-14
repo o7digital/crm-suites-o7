@@ -347,6 +347,21 @@ export default function PostSalesPage() {
     [api],
   );
 
+  const openCaseDetails = useCallback(
+    (caseItem: PostSalesCase) => {
+      if (caseItem.deal?.id) {
+        router.push(`/crm/deal/${encodeURIComponent(caseItem.deal.id)}`);
+        return;
+      }
+      if (caseItem.clientId) {
+        router.push(`/clients?clientId=${encodeURIComponent(caseItem.clientId)}`);
+        return;
+      }
+      setError('No linked deal/client found for this case.');
+    },
+    [router],
+  );
+
   const readHoursDraft = useCallback(
     (task: Task) => {
       const draft = hoursDraftByTask[task.id];
@@ -513,15 +528,25 @@ export default function PostSalesPage() {
 
                       <div className="space-y-3">
                         {cases.map((caseItem) => (
-                          <article
-                            key={caseItem.id}
-                            draggable={movingCaseId !== caseItem.id}
-                            onDragStart={(event) => {
-                              event.dataTransfer.setData('text/plain', caseItem.id);
-                              event.dataTransfer.effectAllowed = 'move';
-                            }}
-                            className="w-full rounded-xl bg-slate-900/60 p-4 ring-1 ring-white/10"
-                          >
+                        <article
+                          key={caseItem.id}
+                          draggable={movingCaseId !== caseItem.id}
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData('text/plain', caseItem.id);
+                            event.dataTransfer.effectAllowed = 'move';
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          title="Open details"
+                          onClick={() => openCaseDetails(caseItem)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              openCaseDetails(caseItem);
+                            }
+                          }}
+                          className="w-full cursor-pointer rounded-xl bg-slate-900/60 p-4 ring-1 ring-white/10 transition hover:bg-slate-900/80 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
+                        >
                             <div className="flex items-start justify-between gap-2">
                               <p className="text-base font-semibold leading-6 text-slate-100 whitespace-normal break-words">{caseItem.name}</p>
                               <span className={['rounded-md px-2 py-0.5 text-[11px] ring-1', PRIORITY_BADGE[caseItem.priority]].join(' ')}>
@@ -532,12 +557,25 @@ export default function PostSalesPage() {
                               {caseItem.client ? getClientDisplayName(caseItem.client) : 'No client'}
                               {caseItem.deal?.title ? ` · ${caseItem.deal.title}` : ''}
                             </p>
-                            <p className="mt-1 text-xs text-slate-400 whitespace-normal break-words">
-                              Owner: {caseItem.owner?.name || caseItem.owner?.email || 'Unassigned'}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-400">Deadline: {getIsoDueDate(caseItem.dueDate) || 'No deadline'}</p>
-                          </article>
-                        ))}
+                          <p className="mt-1 text-xs text-slate-400 whitespace-normal break-words">
+                            Owner: {caseItem.owner?.name || caseItem.owner?.email || 'Unassigned'}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-400">Deadline: {getIsoDueDate(caseItem.dueDate) || 'No deadline'}</p>
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              className="rounded-md border border-cyan-300/30 px-2 py-1 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/10"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                openCaseDetails(caseItem);
+                              }}
+                            >
+                              Details
+                            </button>
+                          </div>
+                        </article>
+                      ))}
                         {cases.length === 0 ? <p className="text-xs text-slate-500">No cases in this step.</p> : null}
                       </div>
                     </section>
