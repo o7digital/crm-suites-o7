@@ -490,56 +490,60 @@ export default function PostSalesPage() {
               </p>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-4 2xl:grid-cols-8">
-              {POST_SALES_STATUSES.map((column) => {
-                const cases = casesByStatus[column.key];
-                return (
-                  <section
-                    key={column.key}
-                    className="rounded-2xl border border-white/10 bg-white/5 p-3"
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      const caseId = event.dataTransfer.getData('text/plain');
-                      if (!caseId) return;
-                      void handleMoveCase(caseId, column.key);
-                    }}
-                  >
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <h3 className="text-sm font-semibold text-slate-100">{column.label}</h3>
-                      <span className="rounded-md bg-white/5 px-2 py-0.5 text-xs text-slate-300 ring-1 ring-white/10">{cases.length}</span>
-                    </div>
+            <div className="overflow-x-auto pb-2">
+              <div className="flex min-w-max gap-5">
+                {POST_SALES_STATUSES.map((column) => {
+                  const cases = casesByStatus[column.key];
+                  return (
+                    <section
+                      key={column.key}
+                      className="w-[340px] min-w-[340px] flex-[0_0_auto] rounded-2xl border border-white/10 bg-white/5 p-4"
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const caseId = event.dataTransfer.getData('text/plain');
+                        if (!caseId) return;
+                        void handleMoveCase(caseId, column.key);
+                      }}
+                    >
+                      <div className="mb-4 flex items-center justify-between gap-2">
+                        <h3 className="text-base font-semibold text-slate-100">{column.label}</h3>
+                        <span className="rounded-md bg-white/5 px-2 py-0.5 text-xs text-slate-300 ring-1 ring-white/10">{cases.length}</span>
+                      </div>
 
-                    <div className="space-y-2">
-                      {cases.map((caseItem) => (
-                        <article
-                          key={caseItem.id}
-                          draggable={movingCaseId !== caseItem.id}
-                          onDragStart={(event) => {
-                            event.dataTransfer.setData('text/plain', caseItem.id);
-                            event.dataTransfer.effectAllowed = 'move';
-                          }}
-                          className="rounded-xl bg-slate-900/60 p-3 ring-1 ring-white/10"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-semibold text-slate-100">{caseItem.name}</p>
-                            <span className={['rounded-md px-2 py-0.5 text-[11px] ring-1', PRIORITY_BADGE[caseItem.priority]].join(' ')}>
-                              {caseItem.priority}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-xs text-slate-400">
-                            {caseItem.client ? getClientDisplayName(caseItem.client) : 'No client'}
-                            {caseItem.deal?.title ? ` · ${caseItem.deal.title}` : ''}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-400">Owner: {caseItem.owner?.name || caseItem.owner?.email || 'Unassigned'}</p>
-                          <p className="mt-1 text-xs text-slate-400">Deadline: {getIsoDueDate(caseItem.dueDate) || 'No deadline'}</p>
-                        </article>
-                      ))}
-                      {cases.length === 0 ? <p className="text-xs text-slate-500">No cases in this step.</p> : null}
-                    </div>
-                  </section>
-                );
-              })}
+                      <div className="space-y-3">
+                        {cases.map((caseItem) => (
+                          <article
+                            key={caseItem.id}
+                            draggable={movingCaseId !== caseItem.id}
+                            onDragStart={(event) => {
+                              event.dataTransfer.setData('text/plain', caseItem.id);
+                              event.dataTransfer.effectAllowed = 'move';
+                            }}
+                            className="w-full rounded-xl bg-slate-900/60 p-4 ring-1 ring-white/10"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-base font-semibold leading-6 text-slate-100 whitespace-normal break-words">{caseItem.name}</p>
+                              <span className={['rounded-md px-2 py-0.5 text-[11px] ring-1', PRIORITY_BADGE[caseItem.priority]].join(' ')}>
+                                {caseItem.priority}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-xs text-slate-400 whitespace-normal break-words">
+                              {caseItem.client ? getClientDisplayName(caseItem.client) : 'No client'}
+                              {caseItem.deal?.title ? ` · ${caseItem.deal.title}` : ''}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-400 whitespace-normal break-words">
+                              Owner: {caseItem.owner?.name || caseItem.owner?.email || 'Unassigned'}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-400">Deadline: {getIsoDueDate(caseItem.dueDate) || 'No deadline'}</p>
+                          </article>
+                        ))}
+                        {cases.length === 0 ? <p className="text-xs text-slate-500">No cases in this step.</p> : null}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
             </div>
           </div>
         ) : null}
