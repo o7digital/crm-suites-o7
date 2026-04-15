@@ -38,6 +38,21 @@ const CORE_MESSAGES = {
     "register.checkEmail":
       "Check your email to confirm your account, then sign in.",
     "register.joiningWorkspace": "You are joining an existing workspace.",
+    "register.legal.title": "Legal notice",
+    "register.legal.beta":
+      "This workspace is provided as a test version and may evolve during the pilot period.",
+    "register.legal.compliance":
+      "Your data is processed under applicable privacy rules for your region ({law}).",
+    "register.legal.disclaimer":
+      "Informational notice only. Final legal terms remain in your contract.",
+    "register.legal.acceptLabel":
+      "I understand this is a test version and I accept the applicable data policy.",
+    "register.legal.acceptRequired":
+      "You must accept the legal notice before creating the account.",
+    "register.legal.law.eu": "GDPR (EU/EEA)",
+    "register.legal.law.ca": "PIPEDA and provincial privacy laws (Canada)",
+    "register.legal.law.mx": "LFPDPPP (Mexico)",
+    "register.legal.law.intl": "local data protection laws",
 
     "account.myAccount": "My Account",
     "account.myInformation": "My information",
@@ -484,6 +499,7 @@ const CORE_MESSAGES = {
       "Enter a valid invite email. You can also paste Name <email>.",
     "adminSubscriptions.invites.roleAdmin": "Admin",
     "adminSubscriptions.invites.roleMember": "Standard",
+    "adminSubscriptions.invites.addAdminButton": "Add admin",
     "adminSubscriptions.invites.inviteButton": "Invite",
     "adminSubscriptions.invites.inviting": "Inviting…",
     "adminSubscriptions.invites.loading": "Loading pending invites…",
@@ -501,6 +517,8 @@ const CORE_MESSAGES = {
     "adminSubscriptions.createInvites.created": "{count} invites created.",
     "adminSubscriptions.createInvites.partialError":
       "{failed} invites failed. Check emails/seat limit.",
+    "adminSubscriptions.legal.notice":
+      "Registration includes a legal notice (beta + applicable privacy framework by country).",
     "adminSubscriptions.table.customer": "Customer",
     "adminSubscriptions.table.status": "Status",
     "adminSubscriptions.table.plan": "Plan",
@@ -543,6 +561,22 @@ const CORE_MESSAGES = {
     "register.checkEmail":
       "Verifiez votre email pour confirmer votre compte, puis connectez-vous.",
     "register.joiningWorkspace": "Vous rejoignez un espace existant.",
+    "register.legal.title": "Notice legale",
+    "register.legal.beta":
+      "Cet espace est fourni en version de test et peut evoluer pendant la phase pilote.",
+    "register.legal.compliance":
+      "Vos donnees sont traitees selon les regles de confidentialite applicables a votre region ({law}).",
+    "register.legal.disclaimer":
+      "Notice informative uniquement. Les conditions juridiques finales restent celles du contrat.",
+    "register.legal.acceptLabel":
+      "Je comprends que c'est une version de test et j'accepte la politique de donnees applicable.",
+    "register.legal.acceptRequired":
+      "Vous devez accepter la notice legale avant de creer le compte.",
+    "register.legal.law.eu": "RGPD (UE/EEE)",
+    "register.legal.law.ca":
+      "LPRPDE et lois provinciales de confidentialite (Canada)",
+    "register.legal.law.mx": "LFPDPPP (Mexique)",
+    "register.legal.law.intl": "lois locales de protection des donnees",
 
     "account.myAccount": "Mon compte",
     "account.myInformation": "Mes informations",
@@ -998,6 +1032,7 @@ const CORE_MESSAGES = {
       "Saisissez un email d'invitation valide. Vous pouvez aussi coller Nom <email>.",
     "adminSubscriptions.invites.roleAdmin": "Admin",
     "adminSubscriptions.invites.roleMember": "Standard",
+    "adminSubscriptions.invites.addAdminButton": "Ajouter admin",
     "adminSubscriptions.invites.inviteButton": "Inviter",
     "adminSubscriptions.invites.inviting": "Invitation…",
     "adminSubscriptions.invites.loading": "Chargement des invitations…",
@@ -1017,6 +1052,8 @@ const CORE_MESSAGES = {
     "adminSubscriptions.createInvites.created": "{count} invitations creees.",
     "adminSubscriptions.createInvites.partialError":
       "{failed} invitations en echec. Verifiez emails/limite d'utilisateurs.",
+    "adminSubscriptions.legal.notice":
+      "L'inscription inclut une notice legale (beta + cadre de confidentialite selon le pays).",
     "adminSubscriptions.table.customer": "Client",
     "adminSubscriptions.table.status": "Statut",
     "adminSubscriptions.table.plan": "Abonnement",
@@ -1059,6 +1096,22 @@ const CORE_MESSAGES = {
     "register.checkEmail":
       "Revisa tu email para confirmar tu cuenta y luego inicia sesion.",
     "register.joiningWorkspace": "Estas uniendote a un espacio existente.",
+    "register.legal.title": "Aviso legal",
+    "register.legal.beta":
+      "Este espacio se ofrece en version de prueba y puede evolucionar durante la fase piloto.",
+    "register.legal.compliance":
+      "Tus datos se procesan bajo las reglas de privacidad aplicables a tu region ({law}).",
+    "register.legal.disclaimer":
+      "Aviso solo informativo. Los terminos legales finales siguen siendo los del contrato.",
+    "register.legal.acceptLabel":
+      "Entiendo que es una version de prueba y acepto la politica de datos aplicable.",
+    "register.legal.acceptRequired":
+      "Debes aceptar el aviso legal antes de crear la cuenta.",
+    "register.legal.law.eu": "RGPD (UE/EEE)",
+    "register.legal.law.ca":
+      "PIPEDA y leyes provinciales de privacidad (Canada)",
+    "register.legal.law.mx": "LFPDPPP (Mexico)",
+    "register.legal.law.intl": "leyes locales de proteccion de datos",
 
     "account.myAccount": "Mi cuenta",
     "account.myInformation": "Mi informacion",
@@ -1509,6 +1562,7 @@ const CORE_MESSAGES = {
       "Ingresa un email de invitacion valido. Tambien puedes pegar Nombre <email>.",
     "adminSubscriptions.invites.roleAdmin": "Admin",
     "adminSubscriptions.invites.roleMember": "Standard",
+    "adminSubscriptions.invites.addAdminButton": "Agregar admin",
     "adminSubscriptions.invites.inviteButton": "Invitar",
     "adminSubscriptions.invites.inviting": "Invitando…",
     "adminSubscriptions.invites.loading": "Cargando invitaciones pendientes…",
@@ -1528,6 +1582,8 @@ const CORE_MESSAGES = {
       "Se crearon {count} invitaciones.",
     "adminSubscriptions.createInvites.partialError":
       "Fallaron {failed} invitaciones. Revisa emails/limite de usuarios.",
+    "adminSubscriptions.legal.notice":
+      "El registro incluye un aviso legal (beta + marco de privacidad aplicable por pais).",
     "adminSubscriptions.table.customer": "Cliente",
     "adminSubscriptions.table.status": "Estado",
     "adminSubscriptions.table.plan": "Plan",

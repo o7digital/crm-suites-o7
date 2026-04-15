@@ -68,7 +68,7 @@ const DEFAULT_SEATS_BY_PLAN: Record<SubscriptionPlan, number> = {
 const DEFAULT_INVITE_DRAFT: InviteDraft = {
   name: '',
   email: '',
-  role: 'MEMBER',
+  role: 'ADMIN',
 };
 
 function makeInviteRowId() {
@@ -78,12 +78,12 @@ function makeInviteRowId() {
   return `invite-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function createInviteRow(): CreateInviteRow {
+function createInviteRow(role: InviteDraft['role'] = 'MEMBER'): CreateInviteRow {
   return {
     id: makeInviteRowId(),
     name: '',
     email: '',
-    role: 'MEMBER',
+    role,
   };
 }
 
@@ -142,7 +142,7 @@ export default function AdminSubscriptionsPage() {
   const [industryOther, setIndustryOther] = useState('');
   const [plan, setPlan] = useState<SubscriptionPlan>('TRIAL');
   const [seats, setSeats] = useState(DEFAULT_SEATS_BY_PLAN.TRIAL);
-  const [createInviteRows, setCreateInviteRows] = useState<CreateInviteRow[]>(() => [createInviteRow()]);
+  const [createInviteRows, setCreateInviteRows] = useState<CreateInviteRow[]>(() => [createInviteRow('ADMIN')]);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -280,7 +280,7 @@ export default function AdminSubscriptionsPage() {
 
   const removeCreateInviteRow = useCallback((rowId: string) => {
     setCreateInviteRows((prev) => {
-      if (prev.length <= 1) return [createInviteRow()];
+      if (prev.length <= 1) return [createInviteRow('ADMIN')];
       return prev.filter((row) => row.id !== rowId);
     });
   }, []);
@@ -523,7 +523,7 @@ export default function AdminSubscriptionsPage() {
       setCrmModeLocked(false);
       setPlan('TRIAL');
       setSeats(DEFAULT_SEATS_BY_PLAN.TRIAL);
-      setCreateInviteRows([createInviteRow()]);
+      setCreateInviteRows([createInviteRow('ADMIN')]);
 
       if (inviteSuccessCount === 0) {
         const contactName = [created.contactFirstName, created.contactLastName].filter(Boolean).join(' ').trim();
@@ -696,6 +696,7 @@ export default function AdminSubscriptionsPage() {
         <div className="card p-6">
           <p className="text-sm font-semibold text-slate-100">{t('adminSubscriptions.create.title')}</p>
           <p className="mt-1 text-sm text-slate-400">{t('adminSubscriptions.create.subtitle')}</p>
+          <p className="mt-2 text-xs text-slate-500">{t('adminSubscriptions.legal.notice')}</p>
 
           <form className="mt-4 space-y-4" onSubmit={create}>
             <div className="grid gap-3 md:grid-cols-4">
@@ -777,8 +778,8 @@ export default function AdminSubscriptionsPage() {
                       value={row.role}
                       onChange={(e) => updateCreateInviteRow(row.id, { role: (e.target.value as 'ADMIN' | 'MEMBER') || 'MEMBER' })}
                     >
-                      <option value="MEMBER">{t('adminSubscriptions.invites.roleMember')}</option>
                       <option value="ADMIN">{t('adminSubscriptions.invites.roleAdmin')}</option>
+                      <option value="MEMBER">{t('adminSubscriptions.invites.roleMember')}</option>
                     </select>
                     <button
                       type="button"
@@ -1022,6 +1023,24 @@ export default function AdminSubscriptionsPage() {
                               {t('adminSubscriptions.editLink')}
                             </button>
                           ) : null}
+                          {!sub.isEditing && isSubscriptionActive(sub) ? (
+                            <button
+                              type="button"
+                              className="rounded-lg bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-100 ring-1 ring-emerald-300/30 hover:bg-emerald-500/25"
+                              onClick={() => {
+                                startEditingLink(sub);
+                                setInviteDraftsById((prev) => ({
+                                  ...prev,
+                                  [sub.id]: {
+                                    ...(prev[sub.id] || DEFAULT_INVITE_DRAFT),
+                                    role: 'ADMIN',
+                                  },
+                                }));
+                              }}
+                            >
+                              {t('adminSubscriptions.invites.addAdminButton')}
+                            </button>
+                          ) : null}
                         </div>
                         <p className="mt-2 break-all font-mono text-xs text-slate-300">
                           {isSubscriptionActive(sub) ? sub.inviteUrl || '—' : '—'}
@@ -1127,8 +1146,8 @@ export default function AdminSubscriptionsPage() {
                                     updateInviteDraft(sub.id, { role: (e.target.value as 'ADMIN' | 'MEMBER') || 'MEMBER' })
                                   }
                                 >
-                                  <option value="MEMBER">{t('adminSubscriptions.invites.roleMember')}</option>
                                   <option value="ADMIN">{t('adminSubscriptions.invites.roleAdmin')}</option>
+                                  <option value="MEMBER">{t('adminSubscriptions.invites.roleMember')}</option>
                                 </select>
                                 <button
                                   type="button"

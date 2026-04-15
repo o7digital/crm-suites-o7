@@ -6,6 +6,29 @@ import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 
+type LegalRegion = 'EU' | 'CA' | 'MX' | 'INTL';
+
+const EU_COUNTRIES = new Set([
+  'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE',
+  'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT',
+  'RO', 'SK', 'SI', 'ES', 'SE', 'IS', 'LI', 'NO',
+]);
+
+function inferRegionFromCountry(country: string): LegalRegion {
+  const normalized = country.trim().toUpperCase();
+  if (!normalized) return 'INTL';
+  if (normalized === 'CA') return 'CA';
+  if (normalized === 'MX') return 'MX';
+  if (EU_COUNTRIES.has(normalized)) return 'EU';
+  return 'INTL';
+}
+
+function inferRegionFromLocale(locale: string): LegalRegion {
+  const parts = locale.split('-').map((part) => part.trim()).filter(Boolean);
+  const country = parts.length > 1 ? parts[parts.length - 1] : '';
+  return inferRegionFromCountry(country);
+}
+
 export default function RegisterPage() {
   const { t } = useI18n();
   return (
@@ -30,15 +53,30 @@ function RegisterPageContent() {
   const inviteName = (searchParams.get('name') || '').trim();
   const inviteEmail = (searchParams.get('email') || '').trim();
   const inviteToken = (searchParams.get('inviteToken') || '').trim();
+  const legalCountry = (searchParams.get('country') || '').trim();
   const isInvite = Boolean(inviteTenantId);
 
   const [tenantName, setTenantName] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const legalRegion = useMemo<LegalRegion>(() => {
+    if (legalCountry) return inferRegionFromCountry(legalCountry);
+    if (typeof window === 'undefined') return 'INTL';
+    return inferRegionFromLocale(window.navigator.language || '');
+  }, [legalCountry]);
+
+  const legalLawLabel = useMemo(() => {
+    if (legalRegion === 'EU') return t('register.legal.law.eu');
+    if (legalRegion === 'CA') return t('register.legal.law.ca');
+    if (legalRegion === 'MX') return t('register.legal.law.mx');
+    return t('register.legal.law.intl');
+  }, [legalRegion, t]);
 
   useEffect(() => {
     if (!isInvite) return;
@@ -58,6 +96,10 @@ function RegisterPageContent() {
     e.preventDefault();
     setError(null);
     setInfo(null);
+    if (!legalAccepted) {
+      setError(t('register.legal.acceptRequired'));
+      return;
+    }
     setLoading(true);
     try {
       const result = await register({
@@ -132,6 +174,21 @@ function RegisterPageContent() {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
+          </div>
+          <div className="rounded-lg bg-white/5 p-3 ring-1 ring-white/10">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-200">{t('register.legal.title')}</p>
+            <p className="mt-2 text-xs text-slate-300">{t('register.legal.beta')}</p>
+            <p className="mt-2 text-xs text-slate-300">{t('register.legal.compliance', { law: legalLawLabel })}</p>
+            <p className="mt-2 text-xs text-slate-500">{t('register.legal.disclaimer')}</p>
+            <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-slate-200">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/10"
+                checked={legalAccepted}
+                onChange={(e) => setLegalAccepted(e.target.checked)}
+              />
+              <span>{t('register.legal.acceptLabel')}</span>
+            </label>
           </div>
           {info && <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">{info}</div>}
           {error && <div className="rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-200">{error}</div>}
