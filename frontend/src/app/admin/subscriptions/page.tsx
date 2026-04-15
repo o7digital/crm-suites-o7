@@ -11,6 +11,8 @@ import { industryGroups, industryLabel, industryRecommendedMode } from '../../..
 type SubscriptionItem = {
   id: string;
   customerName: string;
+  customerCountry?: 'CA' | 'MX' | 'FR' | null;
+  customerAddress?: string | null;
   customerTenantId: string;
   contactFirstName?: string | null;
   contactLastName?: string | null;
@@ -29,6 +31,8 @@ type SubscriptionItem = {
 
 type LinkDraft = {
   customerName: string;
+  customerCountry: 'CA' | 'MX' | 'FR' | '';
+  customerAddress: string;
   contactFirstName: string;
   contactLastName: string;
   contactEmail: string;
@@ -55,6 +59,7 @@ type InviteDraft = {
 type CreateInviteRow = InviteDraft & { id: string };
 
 type SubscriptionPlan = 'TRIAL' | 'PULSE_BASIC' | 'PULSE_STANDARD' | 'PULSE_ADVANCED' | 'PULSE_ADVANCED_PLUS' | 'PULSE_TEAM';
+type CustomerCountry = 'CA' | 'MX' | 'FR';
 
 const DEFAULT_SEATS_BY_PLAN: Record<SubscriptionPlan, number> = {
   TRIAL: 1,
@@ -70,6 +75,12 @@ const DEFAULT_INVITE_DRAFT: InviteDraft = {
   email: '',
   role: 'ADMIN',
 };
+
+const CUSTOMER_COUNTRIES: Array<{ value: CustomerCountry; labelKey: string }> = [
+  { value: 'FR', labelKey: 'adminSubscriptions.country.france' },
+  { value: 'MX', labelKey: 'adminSubscriptions.country.mexico' },
+  { value: 'CA', labelKey: 'adminSubscriptions.country.canada' },
+];
 
 function makeInviteRowId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -133,6 +144,8 @@ export default function AdminSubscriptionsPage() {
   const [savingInviteSubscriptionId, setSavingInviteSubscriptionId] = useState<string | null>(null);
   const [loadingInviteSubscriptionId, setLoadingInviteSubscriptionId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState('');
+  const [customerCountry, setCustomerCountry] = useState<CustomerCountry | ''>('');
+  const [customerAddress, setCustomerAddress] = useState('');
   const [contactFirstName, setContactFirstName] = useState('');
   const [contactLastName, setContactLastName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -182,12 +195,20 @@ export default function AdminSubscriptionsPage() {
   }, [seats]);
 
   const buildInviteUrl = useCallback(
-    (opts: { tenantId: string; tenantName: string; contactName?: string; contactEmail?: string; inviteToken?: string }) => {
+    (opts: {
+      tenantId: string;
+      tenantName: string;
+      customerCountry?: string;
+      contactName?: string;
+      contactEmail?: string;
+      inviteToken?: string;
+    }) => {
       if (!origin) return '';
       const params = new URLSearchParams({
         tenantId: opts.tenantId,
         tenantName: opts.tenantName,
       });
+      if (opts.customerCountry) params.set('country', opts.customerCountry);
       if (opts.contactName) params.set('name', opts.contactName);
       if (opts.contactEmail) params.set('email', opts.contactEmail);
       if (opts.inviteToken) params.set('inviteToken', opts.inviteToken);
@@ -199,6 +220,8 @@ export default function AdminSubscriptionsPage() {
   const getDefaultDraft = useCallback((sub: SubscriptionItem): LinkDraft => {
     return {
       customerName: sub.customerName || '',
+      customerCountry: sub.customerCountry || '',
+      customerAddress: sub.customerAddress || '',
       contactFirstName: sub.contactFirstName || '',
       contactLastName: sub.contactLastName || '',
       contactEmail: sub.contactEmail || '',
@@ -219,6 +242,7 @@ export default function AdminSubscriptionsPage() {
       return buildInviteUrl({
         tenantId: sub.customerTenantId,
         tenantName: draft.customerName.trim() || sub.customerName,
+        customerCountry: draft.customerCountry || sub.customerCountry || undefined,
         contactName: contactName || undefined,
         contactEmail: draft.contactEmail.trim() || undefined,
       });
@@ -228,7 +252,15 @@ export default function AdminSubscriptionsPage() {
 
   const updateLinkDraft = useCallback((subscriptionId: string, patch: Partial<LinkDraft>) => {
     setLinkDraftsById((prev) => {
-      const current = prev[subscriptionId] || { customerName: '', contactFirstName: '', contactLastName: '', contactEmail: '', seats: 1 };
+      const current = prev[subscriptionId] || {
+        customerName: '',
+        customerCountry: '',
+        customerAddress: '',
+        contactFirstName: '',
+        contactLastName: '',
+        contactEmail: '',
+        seats: 1,
+      };
       return {
         ...prev,
         [subscriptionId]: {
@@ -367,6 +399,10 @@ export default function AdminSubscriptionsPage() {
         setError(t('adminSubscriptions.customerNameRequired'));
         return;
       }
+      if (!draft.customerCountry) {
+        setError(t('adminSubscriptions.countryRequired'));
+        return;
+      }
       if (draft.contactEmail.trim() && !isValidEmailValue(draft.contactEmail)) {
         setError(t('adminSubscriptions.contactEmailInvalid'));
         return;
@@ -381,6 +417,8 @@ export default function AdminSubscriptionsPage() {
           method: 'PATCH',
           body: JSON.stringify({
             customerName: nextCustomerName,
+            customerCountry: draft.customerCountry,
+            customerAddress: draft.customerAddress.trim() || null,
             contactFirstName: draft.contactFirstName.trim() || null,
             contactLastName: draft.contactLastName.trim() || null,
             contactEmail: normalizeEmailValue(draft.contactEmail) || null,
@@ -414,11 +452,12 @@ export default function AdminSubscriptionsPage() {
     setInfo(null);
     setError(null);
     const name = customerName.trim();
+    const address = customerAddress.trim();
     const first = contactFirstName.trim();
     const last = contactLastName.trim();
     const email = normalizeEmailValue(contactEmail);
     const industryValue = industryId === 'OTHER' ? industryOther.trim() : industryId;
-    if (!name || !first || !last || !email || !industryValue) return;
+    if (!name || !customerCountry || !address || !first || !last || !email || !industryValue) return;
     if (!isValidEmailValue(contactEmail)) {
       setError(t('adminSubscriptions.contactEmailInvalid'));
       return;
@@ -455,6 +494,8 @@ export default function AdminSubscriptionsPage() {
         method: 'POST',
         body: JSON.stringify({
           customerName: name,
+          customerCountry,
+          customerAddress: address,
           contactFirstName: first,
           contactLastName: last,
           contactEmail: email,
@@ -492,6 +533,7 @@ export default function AdminSubscriptionsPage() {
             buildInviteUrl({
               tenantId: created.customerTenantId,
               tenantName: created.customerName,
+              customerCountry: created.customerCountry || undefined,
               contactName: invite.name || undefined,
               contactEmail: invite.email,
               inviteToken: invite.token,
@@ -514,6 +556,8 @@ export default function AdminSubscriptionsPage() {
         ...prev,
       ]);
       setCustomerName('');
+      setCustomerCountry('');
+      setCustomerAddress('');
       setContactFirstName('');
       setContactLastName('');
       setContactEmail('');
@@ -530,6 +574,7 @@ export default function AdminSubscriptionsPage() {
         const url = buildInviteUrl({
           tenantId: created.customerTenantId,
           tenantName: created.customerName,
+          customerCountry: created.customerCountry || undefined,
           contactName: contactName || undefined,
           contactEmail: created.contactEmail || undefined,
         });
@@ -602,6 +647,7 @@ export default function AdminSubscriptionsPage() {
         const link = buildInviteUrl({
           tenantId: sub.customerTenantId,
           tenantName: getLinkDraft(sub).customerName.trim() || sub.customerName,
+          customerCountry: getLinkDraft(sub).customerCountry || sub.customerCountry || undefined,
           contactName: created.name || undefined,
           contactEmail: created.email,
           inviteToken: created.token,
@@ -741,6 +787,32 @@ export default function AdminSubscriptionsPage() {
                   required
                 />
               </div>
+              <div>
+                <label className="text-sm text-slate-300">{t('adminSubscriptions.customerCountry')}</label>
+                <select
+                  className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                  value={customerCountry}
+                  onChange={(e) => setCustomerCountry((e.target.value as CustomerCountry) || '')}
+                  required
+                >
+                  <option value="">{t('adminSubscriptions.countryPlaceholder')}</option>
+                  {CUSTOMER_COUNTRIES.map((country) => (
+                    <option key={country.value} value={country.value}>
+                      {t(country.labelKey)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="md:col-span-3">
+                <label className="text-sm text-slate-300">{t('adminSubscriptions.customerAddress')}</label>
+                <input
+                  className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                  value={customerAddress}
+                  onChange={(e) => setCustomerAddress(e.target.value)}
+                  placeholder={t('adminSubscriptions.customerAddressPlaceholder')}
+                  required
+                />
+              </div>
             </div>
 
             <div className="rounded-lg bg-white/5 p-3 ring-1 ring-white/10">
@@ -756,6 +828,7 @@ export default function AdminSubscriptionsPage() {
                 </button>
               </div>
               <p className="mt-1 text-xs text-slate-400">{t('adminSubscriptions.createInvites.subtitle')}</p>
+              <p className="mt-1 text-xs text-slate-500">{t('adminSubscriptions.createInvites.adminHint')}</p>
 
               <div className="mt-2 space-y-2">
                 {createInviteRows.map((row) => (
@@ -896,6 +969,8 @@ export default function AdminSubscriptionsPage() {
                 disabled={
                   creating ||
                   !customerName.trim() ||
+                  !customerCountry ||
+                  !customerAddress.trim() ||
                   !contactFirstName.trim() ||
                   !contactLastName.trim() ||
                   !contactEmail.trim() ||
@@ -932,6 +1007,13 @@ export default function AdminSubscriptionsPage() {
                     <tr key={sub.id} className="border-t border-white/5 align-top">
                       <td className="py-3">
                         <p className="font-medium text-slate-100">{sub.customerName}</p>
+                        {sub.customerCountry || sub.customerAddress ? (
+                          <p className="mt-1 text-xs text-slate-500">
+                            {sub.customerCountry ? t(`adminSubscriptions.countryCode.${sub.customerCountry}`) : ''}
+                            {sub.customerCountry && sub.customerAddress ? ' · ' : ''}
+                            {sub.customerAddress || ''}
+                          </p>
+                        ) : null}
                         {sub.contactFirstName || sub.contactLastName || sub.contactEmail ? (
                           <p className="mt-1 text-xs text-slate-400">
                             {[sub.contactFirstName, sub.contactLastName].filter(Boolean).join(' ') || '—'}
@@ -1056,12 +1138,32 @@ export default function AdminSubscriptionsPage() {
                                 onChange={(e) => updateLinkDraft(sub.id, { customerName: e.target.value })}
                                 placeholder={t('adminSubscriptions.customerNamePlaceholder')}
                               />
+                              <select
+                                className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                value={sub.draft.customerCountry}
+                                onChange={(e) =>
+                                  updateLinkDraft(sub.id, { customerCountry: (e.target.value as CustomerCountry) || '' })
+                                }
+                              >
+                                <option value="">{t('adminSubscriptions.countryPlaceholder')}</option>
+                                {CUSTOMER_COUNTRIES.map((country) => (
+                                  <option key={country.value} value={country.value}>
+                                    {t(country.labelKey)}
+                                  </option>
+                                ))}
+                              </select>
                               <input
                                 className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                                 value={sub.draft.contactEmail}
                                 onChange={(e) => updateLinkDraft(sub.id, { contactEmail: normalizeEmailInput(e.target.value) })}
                                 placeholder={t('adminSubscriptions.contactEmailPlaceholder')}
                                 type="email"
+                              />
+                              <input
+                                className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                value={sub.draft.customerAddress}
+                                onChange={(e) => updateLinkDraft(sub.id, { customerAddress: e.target.value })}
+                                placeholder={t('adminSubscriptions.customerAddressPlaceholder')}
                               />
                               <input
                                 className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
@@ -1171,6 +1273,7 @@ export default function AdminSubscriptionsPage() {
                                     const link = buildInviteUrl({
                                       tenantId: sub.customerTenantId,
                                       tenantName: sub.draft.customerName.trim() || sub.customerName,
+                                      customerCountry: sub.draft.customerCountry || sub.customerCountry || undefined,
                                       contactName: invite.name || undefined,
                                       contactEmail: invite.email,
                                       inviteToken: invite.token,

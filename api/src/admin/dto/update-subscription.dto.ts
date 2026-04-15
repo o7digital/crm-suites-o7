@@ -1,10 +1,21 @@
 import { IsEmail, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsIn } from 'class-validator';
 
 export class UpdateSubscriptionDto {
   @IsOptional()
   @IsString()
   @MaxLength(120)
   customerName?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['CA', 'MX', 'FR'])
+  customerCountry?: 'CA' | 'MX' | 'FR' | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  customerAddress?: string | null;
 
   @IsOptional()
   @IsString()

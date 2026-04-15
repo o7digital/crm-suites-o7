@@ -443,6 +443,8 @@ export class SchemaUpgraderService {
 
     // New optional subscription contact fields.
     const columns: Array<{ name: string; type: string }> = [
+      { name: 'customerCountry', type: 'TEXT' },
+      { name: 'customerAddress', type: 'TEXT' },
       { name: 'contactFirstName', type: 'TEXT' },
       { name: 'contactLastName', type: 'TEXT' },
       { name: 'contactEmail', type: 'TEXT' },

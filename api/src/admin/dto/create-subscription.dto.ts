@@ -8,6 +8,16 @@ export class CreateSubscriptionDto {
 
   @IsOptional()
   @IsString()
+  @IsIn(['CA', 'MX', 'FR'])
+  customerCountry?: 'CA' | 'MX' | 'FR';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  customerAddress?: string | null;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(80)
   contactFirstName?: string | null;
 

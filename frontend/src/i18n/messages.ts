@@ -416,6 +416,16 @@ const CORE_MESSAGES = {
     "adminSubscriptions.contactLastNamePlaceholder": "e.g. Dubois",
     "adminSubscriptions.contactEmail": "Customer email",
     "adminSubscriptions.contactEmailPlaceholder": "name@company.com",
+    "adminSubscriptions.customerCountry": "Country",
+    "adminSubscriptions.customerAddress": "Registered company address",
+    "adminSubscriptions.customerAddressPlaceholder": "Street, number, city, ZIP, country",
+    "adminSubscriptions.countryPlaceholder": "Select a country",
+    "adminSubscriptions.country.france": "France",
+    "adminSubscriptions.country.mexico": "Mexico",
+    "adminSubscriptions.country.canada": "Canada",
+    "adminSubscriptions.countryCode.FR": "France",
+    "adminSubscriptions.countryCode.MX": "Mexico",
+    "adminSubscriptions.countryCode.CA": "Canada",
     "adminSubscriptions.plan": "Subscription",
     "adminSubscriptions.planTrial": "Trial (30 days)",
     "adminSubscriptions.planBasic": "Pulse Basic - 1 user",
@@ -480,6 +490,7 @@ const CORE_MESSAGES = {
     "adminSubscriptions.updatedAndCopied":
       "Customer data updated and link copied.",
     "adminSubscriptions.customerNameRequired": "Customer name is required.",
+    "adminSubscriptions.countryRequired": "Country is required.",
     "adminSubscriptions.contactEmailInvalid":
       "Enter a valid customer email. You can also paste Name <email>.",
     "adminSubscriptions.activity.connectedUsers": "{count} connected users",
@@ -509,6 +520,8 @@ const CORE_MESSAGES = {
     "adminSubscriptions.createInvites.title": "Users to invite now",
     "adminSubscriptions.createInvites.subtitle":
       "Add several users with their role before creating the workspace.",
+    "adminSubscriptions.createInvites.adminHint":
+      "You can add one or more admins manually at account creation.",
     "adminSubscriptions.createInvites.addButton": "Add user",
     "adminSubscriptions.createInvites.removeButton": "Remove",
     "adminSubscriptions.createInvites.tooMany":
@@ -944,6 +957,16 @@ const CORE_MESSAGES = {
     "adminSubscriptions.contactLastNamePlaceholder": "ex. Dubois",
     "adminSubscriptions.contactEmail": "Email client",
     "adminSubscriptions.contactEmailPlaceholder": "nom@entreprise.com",
+    "adminSubscriptions.customerCountry": "Pays",
+    "adminSubscriptions.customerAddress": "Adresse de la raison sociale",
+    "adminSubscriptions.customerAddressPlaceholder": "Rue, numero, ville, code postal, pays",
+    "adminSubscriptions.countryPlaceholder": "Selectionnez un pays",
+    "adminSubscriptions.country.france": "France",
+    "adminSubscriptions.country.mexico": "Mexique",
+    "adminSubscriptions.country.canada": "Canada",
+    "adminSubscriptions.countryCode.FR": "France",
+    "adminSubscriptions.countryCode.MX": "Mexique",
+    "adminSubscriptions.countryCode.CA": "Canada",
     "adminSubscriptions.plan": "Abonnement",
     "adminSubscriptions.planTrial": "Essai (30 jours)",
     "adminSubscriptions.planBasic": "Pulse Basic - 1 utilisateur",
@@ -1012,6 +1035,7 @@ const CORE_MESSAGES = {
     "adminSubscriptions.updatedAndCopied":
       "Donnees client mises a jour et lien copie.",
     "adminSubscriptions.customerNameRequired": "Raison sociale obligatoire.",
+    "adminSubscriptions.countryRequired": "Pays obligatoire.",
     "adminSubscriptions.contactEmailInvalid":
       "Saisissez un email client valide. Vous pouvez aussi coller Nom <email>.",
     "adminSubscriptions.activity.connectedUsers":
@@ -1045,6 +1069,8 @@ const CORE_MESSAGES = {
       "Utilisateurs a inviter maintenant",
     "adminSubscriptions.createInvites.subtitle":
       "Ajoutez plusieurs utilisateurs et leur role avant creation de l'espace.",
+    "adminSubscriptions.createInvites.adminHint":
+      "Vous pouvez ajouter manuellement un ou plusieurs admins des la creation du compte.",
     "adminSubscriptions.createInvites.addButton": "Ajouter utilisateur",
     "adminSubscriptions.createInvites.removeButton": "Supprimer",
     "adminSubscriptions.createInvites.tooMany":
@@ -1476,6 +1502,16 @@ const CORE_MESSAGES = {
     "adminSubscriptions.contactLastNamePlaceholder": "ej. Dubois",
     "adminSubscriptions.contactEmail": "Email del cliente",
     "adminSubscriptions.contactEmailPlaceholder": "nombre@empresa.com",
+    "adminSubscriptions.customerCountry": "Pais",
+    "adminSubscriptions.customerAddress": "Direccion de la razon social",
+    "adminSubscriptions.customerAddressPlaceholder": "Calle, numero, ciudad, codigo postal, pais",
+    "adminSubscriptions.countryPlaceholder": "Selecciona un pais",
+    "adminSubscriptions.country.france": "Francia",
+    "adminSubscriptions.country.mexico": "Mexico",
+    "adminSubscriptions.country.canada": "Canada",
+    "adminSubscriptions.countryCode.FR": "Francia",
+    "adminSubscriptions.countryCode.MX": "Mexico",
+    "adminSubscriptions.countryCode.CA": "Canada",
     "adminSubscriptions.plan": "Suscripcion",
     "adminSubscriptions.planTrial": "Prueba (30 dias)",
     "adminSubscriptions.planBasic": "Pulse Basic - 1 usuario",
@@ -1544,6 +1580,7 @@ const CORE_MESSAGES = {
       "Datos del cliente actualizados y enlace copiado.",
     "adminSubscriptions.customerNameRequired":
       "La razon social es obligatoria.",
+    "adminSubscriptions.countryRequired": "El pais es obligatorio.",
     "adminSubscriptions.contactEmailInvalid":
       "Ingresa un email de cliente valido. Tambien puedes pegar Nombre <email>.",
     "adminSubscriptions.activity.connectedUsers":
@@ -1576,6 +1613,8 @@ const CORE_MESSAGES = {
     "adminSubscriptions.createInvites.title": "Usuarios a invitar ahora",
     "adminSubscriptions.createInvites.subtitle":
       "Agrega varios usuarios con su rol antes de crear el espacio.",
+    "adminSubscriptions.createInvites.adminHint":
+      "Puedes agregar manualmente uno o varios admins durante la creacion de la cuenta.",
     "adminSubscriptions.createInvites.addButton": "Agregar usuario",
     "adminSubscriptions.createInvites.removeButton": "Quitar",
     "adminSubscriptions.createInvites.tooMany":

@@ -450,6 +450,8 @@ export class AdminService {
         select: {
           id: true,
           customerName: true,
+          customerCountry: true,
+          customerAddress: true,
           customerTenantId: true,
           contactFirstName: true,
           contactLastName: true,
@@ -575,6 +577,8 @@ export class AdminService {
             tenantId: user.tenantId,
             customerTenantId,
             customerName: trimmed,
+            customerCountry: normalize(dto.customerCountry),
+            customerAddress: normalize(dto.customerAddress),
             contactFirstName: normalize(dto.contactFirstName),
             contactLastName: normalize(dto.contactLastName),
             contactEmail: normalize(dto.contactEmail),
@@ -585,6 +589,8 @@ export class AdminService {
           select: {
             id: true,
             customerName: true,
+            customerCountry: true,
+            customerAddress: true,
             customerTenantId: true,
             contactFirstName: true,
             contactLastName: true,
@@ -612,6 +618,8 @@ export class AdminService {
 
     const hasChanges =
       dto.customerName !== undefined ||
+      dto.customerCountry !== undefined ||
+      dto.customerAddress !== undefined ||
       dto.contactFirstName !== undefined ||
       dto.contactLastName !== undefined ||
       dto.contactEmail !== undefined ||
@@ -649,6 +657,8 @@ export class AdminService {
           where: { id: existing.id },
           data: {
             customerName: trimmedCustomerName || undefined,
+            customerCountry: normalize(dto.customerCountry),
+            customerAddress: normalize(dto.customerAddress),
             contactFirstName: normalize(dto.contactFirstName),
             contactLastName: normalize(dto.contactLastName),
             contactEmail: normalize(dto.contactEmail),
@@ -657,6 +667,8 @@ export class AdminService {
           select: {
             id: true,
             customerName: true,
+            customerCountry: true,
+            customerAddress: true,
             customerTenantId: true,
             contactFirstName: true,
             contactLastName: true,
@@ -698,6 +710,8 @@ export class AdminService {
           select: {
             id: true,
             customerName: true,
+            customerCountry: true,
+            customerAddress: true,
             customerTenantId: true,
             contactFirstName: true,
             contactLastName: true,
@@ -739,6 +753,8 @@ export class AdminService {
         select: {
           id: true,
           customerName: true,
+          customerCountry: true,
+          customerAddress: true,
           customerTenantId: true,
           contactFirstName: true,
           contactLastName: true,

@@ -84,6 +84,8 @@ model Subscription {
   tenantId         String
   customerTenantId String             @unique
   customerName     String
+  customerCountry  String?
+  customerAddress  String?
   contactFirstName String?
   contactLastName  String?
   contactEmail     String?
