@@ -920,19 +920,19 @@ export default function PostSalesPage() {
 
         {selectedCase ? (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4"
+            className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/70 px-4 py-8 md:items-center"
             role="dialog"
             aria-modal="true"
             onClick={() => setSelectedCaseId(null)}
           >
             <div
-              className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#1a2747] p-5 shadow-2xl shadow-black/40"
+              className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1a2747] p-6 shadow-2xl shadow-black/40 md:p-8"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Post-Sales client sheet</p>
-                  <h2 className="mt-1 text-xl font-semibold text-slate-100">{selectedCase.name}</h2>
+                  <h2 className="mt-1 text-2xl font-semibold text-slate-100">{selectedCase.name}</h2>
                 </div>
                 <button
                   type="button"
@@ -955,25 +955,25 @@ export default function PostSalesPage() {
                 </span>
               </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-4">
                   <p className="text-[11px] uppercase tracking-wide text-slate-400">Client</p>
                   <p className="mt-1 text-sm font-semibold text-slate-100">
                     {selectedCaseClient ? getClientDisplayName(selectedCaseClient) : 'No client linked'}
                   </p>
                   <p className="mt-1 text-xs text-slate-400">{selectedCaseClient?.company || 'No company'}</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-4">
                   <p className="text-[11px] uppercase tracking-wide text-slate-400">Owner</p>
                   <p className="mt-1 text-sm font-semibold text-slate-100">{selectedCase.owner?.name || selectedCase.owner?.email || 'Unassigned'}</p>
                   <p className="mt-1 text-xs text-slate-400">Due date: {getIsoDueDate(selectedCase.dueDate) || 'No deadline'}</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-4">
                   <p className="text-[11px] uppercase tracking-wide text-slate-400">Contact</p>
                   <p className="mt-1 text-xs text-slate-300">{selectedCaseClient?.email || 'No email'}</p>
                   <p className="mt-1 text-xs text-slate-300">{selectedCaseClient?.phone || 'No phone'}</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-4">
                   <p className="text-[11px] uppercase tracking-wide text-slate-400">Linked deal</p>
                   <p className="mt-1 text-sm font-semibold text-slate-100">{selectedCase.deal?.title || 'No linked deal'}</p>
                   <p className="mt-1 text-xs text-slate-400">You stay in Post-Sales.</p>
