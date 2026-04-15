@@ -33,7 +33,9 @@ type Client = {
   id: string;
   firstName?: string | null;
   name: string;
+  clientStatus?: string | null;
   email?: string | null;
+  phone?: string | null;
   company?: string | null;
 };
 
@@ -123,6 +125,7 @@ export default function PostSalesPage() {
   const [savingHoursTaskId, setSavingHoursTaskId] = useState<string | null>(null);
   const [movingCaseId, setMovingCaseId] = useState<string | null>(null);
   const [draggingCaseId, setDraggingCaseId] = useState<string | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -227,6 +230,30 @@ export default function PostSalesPage() {
     }
     return map;
   }, [postSalesCases]);
+
+  const statusLabelByKey = useMemo(
+    () => Object.fromEntries(POST_SALES_STATUSES.map((s) => [s.key, s.label])) as Record<PostSalesStatus, string>,
+    [],
+  );
+
+  const clientsById = useMemo(() => {
+    const map = new Map<string, Client>();
+    for (const client of clients) map.set(client.id, client);
+    return map;
+  }, [clients]);
+
+  const selectedCase = useMemo(
+    () => (selectedCaseId ? postSalesCases.find((item) => item.id === selectedCaseId) || null : null),
+    [postSalesCases, selectedCaseId],
+  );
+
+  const selectedCaseClient = useMemo(() => {
+    if (!selectedCase) return null;
+    if (selectedCase.clientId && clientsById.has(selectedCase.clientId)) {
+      return clientsById.get(selectedCase.clientId) || null;
+    }
+    return selectedCase.client || null;
+  }, [clientsById, selectedCase]);
 
   const calendarItemsInRange = useMemo(() => {
     if (!rangeValid) return [] as CalendarItem[];
@@ -350,20 +377,9 @@ export default function PostSalesPage() {
 
   const openCaseDetails = useCallback(
     (caseItem: PostSalesCase) => {
-      if (caseItem.deal?.id) {
-        const params = new URLSearchParams();
-        if (postSalesPipelineId) params.set('pipelineId', postSalesPipelineId);
-        params.set('dealId', caseItem.deal.id);
-        router.push(`/crm?${params.toString()}`);
-        return;
-      }
-      if (caseItem.clientId) {
-        router.push(`/clients?clientId=${encodeURIComponent(caseItem.clientId)}`);
-        return;
-      }
-      setError('No linked deal/client found for this case.');
+      setSelectedCaseId(caseItem.id);
     },
-    [postSalesPipelineId, router],
+    [],
   );
 
   const readHoursDraft = useCallback(
@@ -900,6 +916,71 @@ export default function PostSalesPage() {
               </div>
             ) : null}
           </>
+        ) : null}
+
+        {selectedCase ? (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setSelectedCaseId(null)}
+          >
+            <div
+              className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#1a2747] p-5 shadow-2xl shadow-black/40"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Post-Sales client sheet</p>
+                  <h2 className="mt-1 text-xl font-semibold text-slate-100">{selectedCase.name}</h2>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300 hover:bg-white/10"
+                  onClick={() => setSelectedCaseId(null)}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-cyan-300/35 bg-cyan-500/15 px-2.5 py-1 text-[11px] font-semibold text-cyan-100">
+                  Post-Operation: {statusLabelByKey[selectedCase.status]}
+                </span>
+                <span className={['rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1', PRIORITY_BADGE[selectedCase.priority]].join(' ')}>
+                  Priority: {selectedCase.priority}
+                </span>
+                <span className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-slate-200">
+                  Client status: {selectedCaseClient?.clientStatus || 'CLIENT'}
+                </span>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-400">Client</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-100">
+                    {selectedCaseClient ? getClientDisplayName(selectedCaseClient) : 'No client linked'}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">{selectedCaseClient?.company || 'No company'}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-400">Owner</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-100">{selectedCase.owner?.name || selectedCase.owner?.email || 'Unassigned'}</p>
+                  <p className="mt-1 text-xs text-slate-400">Due date: {getIsoDueDate(selectedCase.dueDate) || 'No deadline'}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-400">Contact</p>
+                  <p className="mt-1 text-xs text-slate-300">{selectedCaseClient?.email || 'No email'}</p>
+                  <p className="mt-1 text-xs text-slate-300">{selectedCaseClient?.phone || 'No phone'}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-400">Linked deal</p>
+                  <p className="mt-1 text-sm font-semibold text-slate-100">{selectedCase.deal?.title || 'No linked deal'}</p>
+                  <p className="mt-1 text-xs text-slate-400">You stay in Post-Sales.</p>
+                </div>
+              </div>
+            </div>
+          </div>
         ) : null}
       </AppShell>
     </Guard>
