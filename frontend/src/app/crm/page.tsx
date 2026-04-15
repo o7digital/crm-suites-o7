@@ -1303,6 +1303,13 @@ export default function CrmPage() {
 
       const existingStages = stagesByPipelineId[workflowTargetPipelineId] ?? sortedStages;
       const existingById = new Map(existingStages.map((stage) => [stage.id, stage]));
+      const retainedStageIds = new Set(normalizedDrafts.map((draft) => draft.id));
+      const stagesToDelete = existingStages.filter((stage) => !retainedStageIds.has(stage.id));
+
+      for (const stage of stagesToDelete) {
+        await api(`/stages/${stage.id}`, { method: 'DELETE' });
+      }
+
       for (const draft of normalizedDrafts) {
         const current = existingById.get(draft.id);
         if (!current) continue;
@@ -1398,6 +1405,65 @@ export default function CrmPage() {
       setWorkflowError(message);
     } finally {
       setWorkflowAddingStage(false);
+    }
+  };
+
+  const handleRemoveWorkflowStage = (stageId: string) => {
+    setWorkflowError(null);
+    setWorkflowInfo(null);
+    setWorkflowAddStageAttempted(false);
+    clearWorkflowStageDnD();
+    setWorkflowStageDrafts((prev) => {
+      const next = prev.filter((draft) => draft.id !== stageId);
+      setNewStageDraft((current) => {
+        if (current.afterStageId !== stageId) return current;
+        return { ...current, afterStageId: next[next.length - 1]?.id || '' };
+      });
+      return next;
+    });
+  };
+
+  const handleDeleteWorkflow = async () => {
+    if (workflowIsCreateMode || !workflowTargetPipelineId) return;
+    const confirmed =
+      typeof window === 'undefined'
+        ? true
+        : window.confirm(`Delete workflow "${workflowPipelineName || selectedPipeline?.name || ''}"?`);
+    if (!confirmed) return;
+
+    setWorkflowSaving(true);
+    setWorkflowError(null);
+    setWorkflowInfo(null);
+
+    try {
+      await api(`/pipelines/${workflowTargetPipelineId}`, { method: 'DELETE' });
+
+      const remainingPipelines = pipelines.filter((pipeline) => pipeline.id !== workflowTargetPipelineId);
+      const nextPipeline =
+        remainingPipelines.find((pipeline) => pipeline.isDefault) || remainingPipelines[0] || null;
+
+      setPipelines(remainingPipelines);
+      setStagesByPipelineId((prev) => {
+        const next = { ...prev };
+        delete next[workflowTargetPipelineId];
+        return next;
+      });
+
+      if (workflowTargetPipelineId === pipelineId) {
+        setPipelineId(nextPipeline?.id || '');
+        setStages([]);
+        setDeals([]);
+        setRequestedStageId(null);
+        setHighlightStageId(null);
+      }
+
+      closeWorkflowModal();
+      router.replace(nextPipeline ? `/crm?pipelineId=${nextPipeline.id}` : '/crm');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to delete workflow';
+      setWorkflowError(message);
+    } finally {
+      setWorkflowSaving(false);
     }
   };
 
@@ -1675,7 +1741,7 @@ export default function CrmPage() {
                     {workflowStageDrafts.map((draft) => (
                       <div
                         key={draft.id}
-                        className={`relative grid gap-2 rounded-lg border bg-white/5 p-3 transition md:grid-cols-[44px_1fr_150px_130px] ${
+                        className={`relative grid gap-2 rounded-lg border bg-white/5 p-3 transition md:grid-cols-[44px_1fr_150px_130px_44px] ${
                           workflowDraggedStageId === draft.id
                             ? 'border-cyan-300/40 bg-cyan-400/10 opacity-70'
                             : 'border-white/10'
@@ -1754,6 +1820,15 @@ export default function CrmPage() {
                             %
                           </span>
                         </div>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-500/20"
+                          aria-label={`Delete stage ${draft.name}`}
+                          title={t('crm.deleteStage')}
+                          onClick={() => handleRemoveWorkflowStage(draft.id)}
+                        >
+                          ×
+                        </button>
                       </div>
                     ))}
                     {workflowStageDrafts.length === 0 ? (
@@ -1860,7 +1935,20 @@ export default function CrmPage() {
                 {workflowError ? <p className="text-sm text-red-200">{workflowError}</p> : null}
               </div>
 
-              <div className="mt-6 flex items-center justify-end gap-2">
+              <div className="mt-6 flex items-center justify-between gap-2">
+                <div>
+                  {!workflowIsCreateMode ? (
+                    <button
+                      className="rounded-lg border border-red-400/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      type="button"
+                      onClick={handleDeleteWorkflow}
+                      disabled={workflowSaving || workflowAddingStage}
+                    >
+                      {t('crm.deleteWorkflow')}
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2">
                 <button
                   className="btn-secondary"
                   type="button"
@@ -1876,6 +1964,7 @@ export default function CrmPage() {
                 >
                   {workflowSaving ? t('common.saving') : t('common.save')}
                 </button>
+                </div>
               </div>
             </div>
           </div>

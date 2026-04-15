@@ -351,6 +351,8 @@ const CORE_MESSAGES = {
     "crm.stageCreateHint":
       "Use + Stage to add it immediately, or Save to include it with the workflow changes.",
     "crm.stageAdded": "Stage added",
+    "crm.deleteStage": "Delete stage",
+    "crm.deleteWorkflow": "Delete workflow",
     "crm.closingDate": "Closing date",
     "crm.closing": "Closing",
     "crm.products": "Products",
@@ -878,6 +880,8 @@ const CORE_MESSAGES = {
     "crm.stageCreateHint":
       "Utilisez + Etape pour l'ajouter tout de suite, ou Enregistrer pour l'inclure avec les autres changements.",
     "crm.stageAdded": "Etape ajoutee",
+    "crm.deleteStage": "Supprimer etape",
+    "crm.deleteWorkflow": "Supprimer workflow",
     "crm.closingDate": "Date de closing",
     "crm.closing": "Closing",
     "crm.products": "Produits",
@@ -1408,6 +1412,8 @@ const CORE_MESSAGES = {
     "crm.stageCreateHint":
       "Usa + Etapa para agregarla al instante, o Guardar para incluirla con los cambios del workflow.",
     "crm.stageAdded": "Etapa agregada",
+    "crm.deleteStage": "Eliminar etapa",
+    "crm.deleteWorkflow": "Eliminar workflow",
     "crm.closingDate": "Fecha de cierre",
     "crm.closing": "Cierre",
     "crm.products": "Productos",
