@@ -497,6 +497,101 @@ export class AdminService {
     }
   }
 
+  async revokeSubscriptionUserInvite(id: string, inviteId: string, user: RequestUser) {
+    await this.ensureSubscriptionManager(user);
+    const subscription = await this.getOwnedSubscription(id, user.tenantId);
+    try {
+      const existing = await this.prisma.userInvite.findFirst({
+        where: { id: inviteId, tenantId: subscription.customerTenantId, status: 'PENDING' },
+        select: { id: true },
+      });
+      if (!existing) throw new NotFoundException('Invite not found');
+
+      return this.prisma.userInvite.update({
+        where: { id: existing.id },
+        data: { status: 'REVOKED' },
+        select: { id: true, status: true, updatedAt: true },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  async listSubscriptionUsers(id: string, user: RequestUser) {
+    await this.ensureSubscriptionManager(user);
+    const subscription = await this.getOwnedSubscription(id, user.tenantId);
+    try {
+      return this.prisma.user.findMany({
+        where: { tenantId: subscription.customerTenantId },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  async updateSubscriptionUserRole(
+    id: string,
+    userId: string,
+    role: 'OWNER' | 'ADMIN' | 'MEMBER',
+    user: RequestUser,
+  ) {
+    await this.ensureSubscriptionManager(user);
+    const subscription = await this.getOwnedSubscription(id, user.tenantId);
+
+    const target = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId: subscription.customerTenantId },
+      select: { id: true, role: true },
+    });
+    if (!target) throw new NotFoundException('User not found');
+
+    if (target.role === 'OWNER') {
+      throw new ForbiddenException('Cannot change the OWNER role from subscription management');
+    }
+
+    const nextRole = role === 'ADMIN' ? 'ADMIN' : 'MEMBER';
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { role: nextRole },
+      select: { id: true, email: true, name: true, role: true, createdAt: true, updatedAt: true },
+    });
+  }
+
+  async removeSubscriptionUser(id: string, userId: string, user: RequestUser) {
+    await this.ensureSubscriptionManager(user);
+    const subscription = await this.getOwnedSubscription(id, user.tenantId);
+
+    const target = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId: subscription.customerTenantId },
+      select: { id: true, role: true },
+    });
+    if (!target) throw new NotFoundException('User not found');
+    if (target.role === 'OWNER') {
+      throw new ForbiddenException('Cannot remove the OWNER from subscription management');
+    }
+
+    try {
+      await this.prisma.user.delete({ where: { id: target.id } });
+      return { id: target.id, removed: true };
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
   async createSubscriptionUserInvite(id: string, dto: CreateUserInviteDto, user: RequestUser) {
     await this.ensureSubscriptionManager(user);
     const subscription = await this.getOwnedSubscription(id, user.tenantId);

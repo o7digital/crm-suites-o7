@@ -78,6 +78,15 @@ export class AdminController {
     return this.adminService.listSubscriptionUserInvites(id, user);
   }
 
+  @Delete('subscriptions/:id/user-invites/:inviteId')
+  revokeSubscriptionUserInvite(
+    @Param('id') id: string,
+    @Param('inviteId') inviteId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.adminService.revokeSubscriptionUserInvite(id, inviteId, user);
+  }
+
   @Post('subscriptions/:id/user-invites')
   createSubscriptionUserInvite(
     @Param('id') id: string,
@@ -85,5 +94,29 @@ export class AdminController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.adminService.createSubscriptionUserInvite(id, dto, user);
+  }
+
+  @Get('subscriptions/:id/users')
+  listSubscriptionUsers(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.adminService.listSubscriptionUsers(id, user);
+  }
+
+  @Patch('subscriptions/:id/users/:userId')
+  updateSubscriptionUserRole(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Body() dto: UpdateUserRoleDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.adminService.updateSubscriptionUserRole(id, userId, dto.role, user);
+  }
+
+  @Delete('subscriptions/:id/users/:userId')
+  removeSubscriptionUser(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.adminService.removeSubscriptionUser(id, userId, user);
   }
 }

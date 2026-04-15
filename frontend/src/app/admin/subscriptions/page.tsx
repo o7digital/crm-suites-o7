@@ -50,6 +50,15 @@ type PendingInvite = {
   updatedAt: string;
 };
 
+type CustomerWorkspaceUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  createdAt: string;
+  updatedAt: string;
+};
+
 type InviteDraft = {
   name: string;
   email: string;
@@ -81,6 +90,12 @@ const CUSTOMER_COUNTRIES: Array<{ value: CustomerCountry; labelKey: string }> = 
   { value: 'MX', labelKey: 'adminSubscriptions.country.mexico' },
   { value: 'CA', labelKey: 'adminSubscriptions.country.canada' },
 ];
+
+function defaultCustomerCountryForLanguage(language: string): CustomerCountry {
+  if (language === 'fr') return 'FR';
+  if (language === 'es') return 'MX';
+  return 'CA';
+}
 
 function makeInviteRowId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -141,10 +156,20 @@ export default function AdminSubscriptionsPage() {
   const [linkDraftsById, setLinkDraftsById] = useState<Record<string, LinkDraft>>({});
   const [inviteDraftsById, setInviteDraftsById] = useState<Record<string, InviteDraft>>({});
   const [pendingInvitesById, setPendingInvitesById] = useState<Record<string, PendingInvite[]>>({});
+  const [customerUsersBySubscriptionId, setCustomerUsersBySubscriptionId] = useState<
+    Record<string, CustomerWorkspaceUser[]>
+  >({});
   const [savingInviteSubscriptionId, setSavingInviteSubscriptionId] = useState<string | null>(null);
   const [loadingInviteSubscriptionId, setLoadingInviteSubscriptionId] = useState<string | null>(null);
+  const [loadingUsersSubscriptionId, setLoadingUsersSubscriptionId] = useState<string | null>(null);
+  const [savingCustomerUserId, setSavingCustomerUserId] = useState<string | null>(null);
+  const [removingCustomerUserId, setRemovingCustomerUserId] = useState<string | null>(null);
+  const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
+  const [customerUserRoleDrafts, setCustomerUserRoleDrafts] = useState<Record<string, 'ADMIN' | 'MEMBER'>>({});
   const [customerName, setCustomerName] = useState('');
-  const [customerCountry, setCustomerCountry] = useState<CustomerCountry | ''>('');
+  const [customerCountry, setCustomerCountry] = useState<CustomerCountry>(
+    defaultCustomerCountryForLanguage(language),
+  );
   const [customerAddress, setCustomerAddress] = useState('');
   const [contactFirstName, setContactFirstName] = useState('');
   const [contactLastName, setContactLastName] = useState('');
@@ -217,17 +242,20 @@ export default function AdminSubscriptionsPage() {
     [origin],
   );
 
-  const getDefaultDraft = useCallback((sub: SubscriptionItem): LinkDraft => {
-    return {
-      customerName: sub.customerName || '',
-      customerCountry: sub.customerCountry || '',
-      customerAddress: sub.customerAddress || '',
-      contactFirstName: sub.contactFirstName || '',
-      contactLastName: sub.contactLastName || '',
-      contactEmail: sub.contactEmail || '',
-      seats: Math.min(30, Math.max(1, sub.seats || 1)),
-    };
-  }, []);
+  const getDefaultDraft = useCallback(
+    (sub: SubscriptionItem): LinkDraft => {
+      return {
+        customerName: sub.customerName || '',
+        customerCountry: sub.customerCountry || defaultCustomerCountryForLanguage(language),
+        customerAddress: sub.customerAddress || '',
+        contactFirstName: sub.contactFirstName || '',
+        contactLastName: sub.contactLastName || '',
+        contactEmail: sub.contactEmail || '',
+        seats: Math.min(30, Math.max(1, sub.seats || 1)),
+      };
+    },
+    [language],
+  );
 
   const getLinkDraft = useCallback(
     (sub: SubscriptionItem): LinkDraft => {
@@ -254,7 +282,7 @@ export default function AdminSubscriptionsPage() {
     setLinkDraftsById((prev) => {
       const current = prev[subscriptionId] || {
         customerName: '',
-        customerCountry: '',
+        customerCountry: defaultCustomerCountryForLanguage(language),
         customerAddress: '',
         contactFirstName: '',
         contactLastName: '',
@@ -269,7 +297,7 @@ export default function AdminSubscriptionsPage() {
         },
       };
     });
-  }, []);
+  }, [language]);
 
   const getInviteDraft = useCallback(
     (subscriptionId: string): InviteDraft => {
@@ -337,6 +365,31 @@ export default function AdminSubscriptionsPage() {
     [api],
   );
 
+  const loadSubscriptionUsers = useCallback(
+    async (subscriptionId: string) => {
+      setLoadingUsersSubscriptionId(subscriptionId);
+      try {
+        const users = await api<CustomerWorkspaceUser[]>(`/admin/subscriptions/${subscriptionId}/users`);
+        setCustomerUsersBySubscriptionId((prev) => ({ ...prev, [subscriptionId]: users }));
+        setCustomerUserRoleDrafts((prev) => {
+          const next = { ...prev };
+          for (const item of users) {
+            if (item.role === 'ADMIN' || item.role === 'MEMBER') {
+              next[item.id] = item.role;
+            }
+          }
+          return next;
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to load customer users';
+        setError(message);
+      } finally {
+        setLoadingUsersSubscriptionId((prev) => (prev === subscriptionId ? null : prev));
+      }
+    },
+    [api],
+  );
+
   const startEditingLink = useCallback(
     (sub: SubscriptionItem) => {
       if (sub.status === 'CANCELED') return;
@@ -358,8 +411,9 @@ export default function AdminSubscriptionsPage() {
         };
       });
       void loadSubscriptionInvites(sub.id);
+      void loadSubscriptionUsers(sub.id);
     },
-    [getDefaultDraft, loadSubscriptionInvites],
+    [getDefaultDraft, loadSubscriptionInvites, loadSubscriptionUsers],
   );
 
   const cancelEditingLink = useCallback((sub: SubscriptionItem) => {
@@ -370,6 +424,11 @@ export default function AdminSubscriptionsPage() {
       return next;
     });
     setInviteDraftsById((prev) => {
+      const next = { ...prev };
+      delete next[sub.id];
+      return next;
+    });
+    setCustomerUsersBySubscriptionId((prev) => {
       const next = { ...prev };
       delete next[sub.id];
       return next;
@@ -556,7 +615,7 @@ export default function AdminSubscriptionsPage() {
         ...prev,
       ]);
       setCustomerName('');
-      setCustomerCountry('');
+      setCustomerCountry(defaultCustomerCountryForLanguage(language));
       setCustomerAddress('');
       setContactFirstName('');
       setContactLastName('');
@@ -663,6 +722,94 @@ export default function AdminSubscriptionsPage() {
     [api, buildInviteUrl, copyUrl, getInviteDraft, getLinkDraft, pendingInvitesById, t],
   );
 
+  const revokeSubscriptionInvite = useCallback(
+    async (subscriptionId: string, inviteId: string) => {
+      setRevokingInviteId(inviteId);
+      setError(null);
+      setInfo(null);
+      try {
+        await api(`/admin/subscriptions/${subscriptionId}/user-invites/${inviteId}`, { method: 'DELETE' });
+        setPendingInvitesById((prev) => ({
+          ...prev,
+          [subscriptionId]: (prev[subscriptionId] || []).filter((invite) => invite.id !== inviteId),
+        }));
+        setItems((prev) =>
+          prev.map((row) =>
+            row.id === subscriptionId
+              ? { ...row, pendingInvitesCount: Math.max(0, row.pendingInvitesCount - 1) }
+              : row,
+          ),
+        );
+        setInfo(t('adminSubscriptions.invites.revoked'));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to revoke invite';
+        setError(message);
+      } finally {
+        setRevokingInviteId(null);
+      }
+    },
+    [api, t],
+  );
+
+  const saveSubscriptionUserRole = useCallback(
+    async (subscriptionId: string, workspaceUser: CustomerWorkspaceUser) => {
+      const nextRole = customerUserRoleDrafts[workspaceUser.id];
+      if (!nextRole || nextRole === workspaceUser.role || workspaceUser.role === 'OWNER') return;
+      setSavingCustomerUserId(workspaceUser.id);
+      setError(null);
+      setInfo(null);
+      try {
+        const updated = await api<CustomerWorkspaceUser>(
+          `/admin/subscriptions/${subscriptionId}/users/${workspaceUser.id}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({ role: nextRole }),
+          },
+        );
+        setCustomerUsersBySubscriptionId((prev) => ({
+          ...prev,
+          [subscriptionId]: (prev[subscriptionId] || []).map((item) => (item.id === updated.id ? updated : item)),
+        }));
+        setCustomerUserRoleDrafts((prev) => ({ ...prev, [updated.id]: updated.role === 'ADMIN' ? 'ADMIN' : 'MEMBER' }));
+        setInfo(t('adminSubscriptions.users.roleSaved'));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to update user role';
+        setError(message);
+      } finally {
+        setSavingCustomerUserId(null);
+      }
+    },
+    [api, customerUserRoleDrafts, t],
+  );
+
+  const removeSubscriptionUser = useCallback(
+    async (subscriptionId: string, workspaceUser: CustomerWorkspaceUser) => {
+      if (workspaceUser.role === 'OWNER') return;
+      if (typeof window !== 'undefined' && !window.confirm(t('adminSubscriptions.users.removeConfirm', { name: workspaceUser.name || workspaceUser.email }))) {
+        return;
+      }
+      setRemovingCustomerUserId(workspaceUser.id);
+      setError(null);
+      setInfo(null);
+      try {
+        await api(`/admin/subscriptions/${subscriptionId}/users/${workspaceUser.id}`, {
+          method: 'DELETE',
+        });
+        setCustomerUsersBySubscriptionId((prev) => ({
+          ...prev,
+          [subscriptionId]: (prev[subscriptionId] || []).filter((item) => item.id !== workspaceUser.id),
+        }));
+        setInfo(t('adminSubscriptions.users.removed'));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to remove user';
+        setError(message);
+      } finally {
+        setRemovingCustomerUserId(null);
+      }
+    },
+    [api, t],
+  );
+
   const suspendSubscription = useCallback(
     async (sub: SubscriptionItem) => {
       if (!sub.canSuspend || !isSubscriptionActive(sub)) return;
@@ -725,9 +872,18 @@ export default function AdminSubscriptionsPage() {
         draft: getLinkDraft(sub),
         inviteDraft: getInviteDraft(sub.id),
         pendingInvites: pendingInvitesById[sub.id] || [],
+        customerUsers: customerUsersBySubscriptionId[sub.id] || [],
         inviteUrl: buildInviteUrlFromDraft(sub, getLinkDraft(sub)),
       })),
-    [buildInviteUrlFromDraft, editingSubscriptionId, getInviteDraft, getLinkDraft, items, pendingInvitesById],
+    [
+      buildInviteUrlFromDraft,
+      customerUsersBySubscriptionId,
+      editingSubscriptionId,
+      getInviteDraft,
+      getLinkDraft,
+      items,
+      pendingInvitesById,
+    ],
   );
 
   return (
@@ -1225,6 +1381,83 @@ export default function AdminSubscriptionsPage() {
                               </div>
                             </div>
                             <div className="mt-3 rounded-lg bg-black/20 p-3 ring-1 ring-white/10">
+                              <p className="text-xs font-semibold text-slate-100">{t('adminSubscriptions.users.title')}</p>
+                              <p className="mt-1 text-xs text-slate-400">{t('adminSubscriptions.users.subtitle')}</p>
+                              {loadingUsersSubscriptionId === sub.id ? (
+                                <p className="mt-2 text-xs text-slate-400">{t('adminSubscriptions.users.loading')}</p>
+                              ) : null}
+                              {sub.customerUsers.length > 0 ? (
+                                <div className="mt-3 space-y-2">
+                                  {sub.customerUsers.map((workspaceUser) => {
+                                    const roleDraft =
+                                      customerUserRoleDrafts[workspaceUser.id] ||
+                                      (workspaceUser.role === 'ADMIN' ? 'ADMIN' : 'MEMBER');
+                                    const isOwner = workspaceUser.role === 'OWNER';
+                                    const roleChanged = !isOwner && roleDraft !== workspaceUser.role;
+                                    return (
+                                      <div
+                                        key={workspaceUser.id}
+                                        className="rounded-lg bg-white/5 p-2 text-xs ring-1 ring-white/10"
+                                      >
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <div>
+                                            <p className="text-slate-100">{workspaceUser.name || 'User'}</p>
+                                            <p className="mt-1 text-slate-400">{workspaceUser.email}</p>
+                                          </div>
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            {isOwner ? (
+                                              <span className="rounded-lg bg-white/10 px-2 py-1 font-semibold text-slate-200 ring-1 ring-white/10">
+                                                OWNER
+                                              </span>
+                                            ) : (
+                                              <>
+                                                <select
+                                                  className="rounded-lg bg-black/20 px-2 py-1.5 text-xs text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                                  value={roleDraft}
+                                                  onChange={(e) =>
+                                                    setCustomerUserRoleDrafts((prev) => ({
+                                                      ...prev,
+                                                      [workspaceUser.id]:
+                                                        e.target.value === 'ADMIN' ? 'ADMIN' : 'MEMBER',
+                                                    }))
+                                                  }
+                                                >
+                                                  <option value="ADMIN">{t('adminSubscriptions.invites.roleAdmin')}</option>
+                                                  <option value="MEMBER">{t('adminSubscriptions.invites.roleMember')}</option>
+                                                </select>
+                                                <button
+                                                  type="button"
+                                                  className="rounded-lg bg-cyan-500/20 px-2 py-1.5 font-semibold text-cyan-100 ring-1 ring-cyan-300/40 hover:bg-cyan-500/30 disabled:opacity-50"
+                                                  onClick={() => void saveSubscriptionUserRole(sub.id, workspaceUser)}
+                                                  disabled={!roleChanged || savingCustomerUserId === workspaceUser.id}
+                                                >
+                                                  {savingCustomerUserId === workspaceUser.id
+                                                    ? t('common.saving')
+                                                    : t('common.save')}
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  className="rounded-lg bg-red-500/15 px-2 py-1.5 font-semibold text-red-100 ring-1 ring-red-300/30 hover:bg-red-500/25 disabled:opacity-50"
+                                                  onClick={() => void removeSubscriptionUser(sub.id, workspaceUser)}
+                                                  disabled={removingCustomerUserId === workspaceUser.id}
+                                                >
+                                                  {removingCustomerUserId === workspaceUser.id
+                                                    ? t('adminSubscriptions.users.removing')
+                                                    : t('adminSubscriptions.users.remove')}
+                                                </button>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : loadingUsersSubscriptionId === sub.id ? null : (
+                                <p className="mt-2 text-xs text-slate-500">{t('adminSubscriptions.users.empty')}</p>
+                              )}
+                            </div>
+                            <div className="mt-3 rounded-lg bg-black/20 p-3 ring-1 ring-white/10">
                               <p className="text-xs font-semibold text-slate-100">{t('adminSubscriptions.invites.title')}</p>
                               <p className="mt-1 text-xs text-slate-400">{t('adminSubscriptions.invites.subtitle')}</p>
                               <div className="mt-2 grid gap-2 md:grid-cols-[1fr_1fr_140px_auto]">
@@ -1295,6 +1528,16 @@ export default function AdminSubscriptionsPage() {
                                             disabled={!link || !isSubscriptionActive(sub)}
                                           >
                                             {t('adminSubscriptions.copyLink')}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="rounded-lg bg-red-500/15 px-2 py-1 font-semibold text-red-100 ring-1 ring-red-300/30 hover:bg-red-500/25 disabled:opacity-50"
+                                            onClick={() => void revokeSubscriptionInvite(sub.id, invite.id)}
+                                            disabled={revokingInviteId === invite.id}
+                                          >
+                                            {revokingInviteId === invite.id
+                                              ? t('adminSubscriptions.invites.revoking')
+                                              : t('adminSubscriptions.invites.revoke')}
                                           </button>
                                         </div>
                                       </div>
