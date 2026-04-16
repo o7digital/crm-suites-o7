@@ -18,6 +18,7 @@ export class SchemaUpgraderService {
     await this.ensureClientProfileFields();
     await this.ensureClientCollaboratorsSchema();
     await this.ensureSubscriptionsSchema();
+    await this.ensureSubscriptionTrialAlertFields();
     await this.ensureTenantBrandingFields();
     await this.ensureTenantCrmSettingsFields();
     await this.ensureGoogleCalendarConnectionSchema();
@@ -291,6 +292,25 @@ export class SchemaUpgraderService {
         await this.prisma.$executeRawUnsafe(fk.sql);
       } catch {
         // Ignore constraint races / existing under another name.
+      }
+    }
+  }
+
+  private async ensureSubscriptionTrialAlertFields() {
+    const hasSubscription = await this.tableExists('Subscription');
+    if (!hasSubscription) return;
+
+    const hasTrialAlertSentAt = await this.columnExists(
+      'Subscription',
+      'trialAlertSentAt',
+    );
+    if (!hasTrialAlertSentAt) {
+      try {
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "Subscription" ADD COLUMN "trialAlertSentAt" TIMESTAMP(3);`,
+        );
+      } catch {
+        // Ignore permissions / already-added races.
       }
     }
   }

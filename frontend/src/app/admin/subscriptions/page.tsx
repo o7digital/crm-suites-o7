@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
@@ -97,6 +97,114 @@ function defaultCustomerCountryForLanguage(language: string): CustomerCountry {
   return 'CA';
 }
 
+function countryLegalLabel(country: CustomerCountry | '') {
+  if (country === 'FR') return 'France (RGPD)';
+  if (country === 'MX') return 'Mexique (LFPDPPP)';
+  if (country === 'CA') return 'Canada (PIPEDA/LPRPDE)';
+  return 'pays du compte client';
+}
+
+function legalTermsByCountry(country: CustomerCountry | '') {
+  if (country === 'MX') {
+    return `Al crear una cuenta en o7 Pulse CRM, usted acepta los siguientes términos:
+
+1. Suscripción y periodo de prueba
+El servicio puede ofrecer un periodo de prueba gratuito. Durante este periodo, el servicio se proporciona "tal cual" sin garantías. Al finalizar el periodo de prueba, la suscripción podrá convertirse automáticamente en un plan de pago, salvo cancelación previa.
+
+2. Uso del servicio
+El usuario se compromete a utilizar la plataforma únicamente con fines legales y comerciales legítimos, y a no intentar copiar, modificar o explotar el sistema.
+
+3. Datos y responsabilidad
+El usuario es responsable de los datos ingresados en la plataforma. o7 Pulse CRM no garantiza la conservación de datos durante el periodo de prueba.
+
+4. Facturación y renovación
+Las suscripciones son de pago recurrente y se renovarán automáticamente salvo cancelación previa. No se realizarán reembolsos por periodos ya iniciados.
+
+5. Limitación de responsabilidad
+El servicio se proporciona "tal cual" y o7 Pulse CRM no será responsable por pérdidas indirectas, pérdida de datos o daños comerciales derivados del uso del sistema.
+
+6. Aceptación
+Al crear una cuenta, usted acepta estos términos y reconoce que constituyen un acuerdo legal vinculante.`;
+  }
+  if (country === 'CA') {
+    return `By creating an account on o7 Pulse CRM, you agree to the following terms:
+
+1. Subscription and Free Trial
+A free trial may be offered. During this period, the service is provided "as is" without warranties. At the end of the trial, the subscription may automatically convert into a paid plan unless cancelled.
+
+2. Use of Service
+You agree to use the platform only for lawful business purposes and not to copy, modify, reverse engineer, or exploit the service.
+
+3. Data Responsibility
+You are responsible for all data entered into the system. Data entered during the trial period may be deleted unless you subscribe to a paid plan.
+
+4. Billing and Renewal
+Subscriptions are billed on a recurring basis and automatically renew unless cancelled prior to the renewal date. No refunds are provided for partially used periods.
+
+5. Limitation of Liability
+The service is provided "as is" and o7 Pulse CRM shall not be liable for indirect damages, data loss, or business interruption.
+
+6. Acceptance
+By creating an account, you acknowledge and agree that these terms form a legally binding agreement.`;
+  }
+  return `En créant un compte sur o7 Pulse CRM, vous acceptez les conditions suivantes :
+
+1. Abonnement et période d’essai
+Une période d’essai gratuite peut être proposée. Pendant cette période, le service est fourni "en l’état", sans garantie. À l’issue de l’essai, l’abonnement pourra être automatiquement activé sauf résiliation préalable.
+
+2. Utilisation du service
+L’utilisateur s’engage à utiliser la plateforme uniquement à des fins professionnelles légales et à ne pas copier, modifier ou exploiter le service de manière abusive.
+
+3. Données
+L’utilisateur est responsable des données saisies dans la plateforme. Les données créées pendant la période d’essai peuvent être supprimées si aucun abonnement n’est souscrit.
+
+4. Facturation et renouvellement
+Les abonnements sont facturés de manière récurrente et se renouvellent automatiquement sauf résiliation avant échéance. Aucun remboursement n’est effectué pour une période entamée.
+
+5. Responsabilité
+Le service est fourni "en l’état" sans garantie. o7 Pulse CRM ne pourra être tenu responsable des pertes indirectes, pertes de données ou pertes d’exploitation.
+
+6. Acceptation
+La création d’un compte implique l’acceptation pleine et entière des présentes conditions.`;
+}
+
+function legalUiByCountry(country: CustomerCountry | '') {
+  if (country === 'MX') {
+    return {
+      badge: 'Aviso legal',
+      title: 'Consentimiento antes de invitar',
+      actionIntro: 'Usted va a ejecutar:',
+      linkShow: 'Ver términos y condiciones completos',
+      linkHide: 'Ocultar términos y condiciones',
+      checkbox: 'He leído y acepto los términos legales aplicables.',
+      cancel: 'Cancelar',
+      confirm: 'Confirmar y continuar',
+    };
+  }
+  if (country === 'CA') {
+    return {
+      badge: 'Legal notice',
+      title: 'Consent before invitation',
+      actionIntro: 'You are about to run:',
+      linkShow: 'View full terms and conditions',
+      linkHide: 'Hide terms and conditions',
+      checkbox: 'I have read and accept the applicable legal terms.',
+      cancel: 'Cancel',
+      confirm: 'Confirm and continue',
+    };
+  }
+  return {
+    badge: 'Notice legale',
+    title: 'Consentement avant invitation',
+    actionIntro: 'Vous allez lancer:',
+    linkShow: 'Voir les conditions complètes',
+    linkHide: 'Masquer les conditions',
+    checkbox: 'J’ai lu et j’accepte les conditions légales applicables.',
+    cancel: 'Annuler',
+    confirm: 'Confirmer et continuer',
+  };
+}
+
 function makeInviteRowId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -183,6 +291,12 @@ export default function AdminSubscriptionsPage() {
   const [createInviteRows, setCreateInviteRows] = useState<CreateInviteRow[]>(() => [createInviteRow('ADMIN')]);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
+  const [legalConsentChecked, setLegalConsentChecked] = useState(false);
+  const [legalCountry, setLegalCountry] = useState<CustomerCountry | ''>('');
+  const [legalContextLabel, setLegalContextLabel] = useState('');
+  const [showLegalDetails, setShowLegalDetails] = useState(false);
+  const legalActionRef = useRef<null | (() => Promise<void>)>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -450,6 +564,35 @@ export default function AdminSubscriptionsPage() {
     [t],
   );
 
+  const requestLegalConsent = useCallback(
+    (country: CustomerCountry | '', contextLabel: string, action: () => Promise<void>) => {
+      setLegalCountry(country);
+      setLegalContextLabel(contextLabel);
+      setLegalConsentChecked(false);
+      legalActionRef.current = action;
+      setShowLegalDetails(false);
+      setLegalModalOpen(true);
+    },
+    [],
+  );
+
+  const closeLegalModal = useCallback(() => {
+    setLegalModalOpen(false);
+    setLegalConsentChecked(false);
+    setLegalCountry('');
+    setLegalContextLabel('');
+    setShowLegalDetails(false);
+    legalActionRef.current = null;
+  }, []);
+
+  const confirmLegalModal = useCallback(async () => {
+    if (!legalConsentChecked) return;
+    const action = legalActionRef.current;
+    closeLegalModal();
+    if (action) await action();
+  }, [closeLegalModal, legalConsentChecked]);
+  const legalUi = useMemo(() => legalUiByCountry(legalCountry), [legalCountry]);
+
   const saveSubscriptionLinkData = useCallback(
     async (sub: SubscriptionItem) => {
       const draft = getLinkDraft(sub);
@@ -506,8 +649,7 @@ export default function AdminSubscriptionsPage() {
     [api, buildInviteUrlFromDraft, copyUrl, getDefaultDraft, getLinkDraft, t],
   );
 
-  const create = async (e: FormEvent) => {
-    e.preventDefault();
+  const executeCreate = useCallback(async () => {
     setInfo(null);
     setError(null);
     const name = customerName.trim();
@@ -654,7 +796,32 @@ export default function AdminSubscriptionsPage() {
     } finally {
       setCreating(false);
     }
-  };
+  }, [
+    api,
+    buildInviteUrl,
+    contactEmail,
+    contactFirstName,
+    contactLastName,
+    createInviteRows,
+    customerAddress,
+    customerCountry,
+    customerName,
+    industryId,
+    industryOther,
+    language,
+    crmMode,
+    plan,
+    seats,
+    t,
+  ]);
+
+  const create = useCallback(
+    async (e: FormEvent) => {
+      e.preventDefault();
+      requestLegalConsent(customerCountry, 'creation du lien et invitations', executeCreate);
+    },
+    [customerCountry, executeCreate, requestLegalConsent],
+  );
 
   const copyInvite = async (sub: SubscriptionItem) => {
     if (!isSubscriptionActive(sub)) return;
@@ -662,7 +829,7 @@ export default function AdminSubscriptionsPage() {
     await copyUrl(buildInviteUrlFromDraft(sub, draft));
   };
 
-  const createSubscriptionInvite = useCallback(
+  const executeSubscriptionInvite = useCallback(
     async (sub: SubscriptionItem) => {
       if (!isSubscriptionActive(sub)) {
         setError(t('adminSubscriptions.inactiveBlocked'));
@@ -720,6 +887,17 @@ export default function AdminSubscriptionsPage() {
       }
     },
     [api, buildInviteUrl, copyUrl, getInviteDraft, getLinkDraft, pendingInvitesById, t],
+  );
+
+  const createSubscriptionInvite = useCallback(
+    async (sub: SubscriptionItem) => {
+      requestLegalConsent(
+        (getLinkDraft(sub).customerCountry || sub.customerCountry || '') as CustomerCountry | '',
+        `invitation de ${sub.customerName}`,
+        async () => executeSubscriptionInvite(sub),
+      );
+    },
+    [executeSubscriptionInvite, getLinkDraft, requestLegalConsent],
   );
 
   const revokeSubscriptionInvite = useCallback(
@@ -1578,6 +1756,60 @@ export default function AdminSubscriptionsPage() {
               </table>
             </div>
             {items.length === 0 ? <p className="mt-4 text-sm text-slate-400">{t('adminSubscriptions.empty')}</p> : null}
+          </div>
+        ) : null}
+        {legalModalOpen ? (
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/70 px-4 py-10 md:items-center"
+            role="dialog"
+            aria-modal="true"
+            onClick={closeLegalModal}
+          >
+            <div
+              className="w-full max-w-xl rounded-2xl border border-white/10 bg-[#1a2747] p-6 shadow-2xl shadow-black/40"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{legalUi.badge}</p>
+              <h2 className="mt-1 text-xl font-semibold text-slate-100">{legalUi.title}</h2>
+              <p className="mt-3 text-sm text-slate-200">
+                {legalUi.actionIntro} <span className="font-semibold">{legalContextLabel || 'invitation utilisateur'}</span>.
+              </p>
+              <p className="mt-2 text-sm text-slate-300">
+                Je partage mes informations en accord avec la reglementation applicable de{' '}
+                <span className="font-semibold text-slate-100">{countryLegalLabel(legalCountry)}</span>.
+              </p>
+              <button
+                type="button"
+                className="mt-3 text-xs font-semibold text-cyan-200 underline underline-offset-2 hover:text-cyan-100"
+                onClick={() => setShowLegalDetails((prev) => !prev)}
+              >
+                {showLegalDetails ? legalUi.linkHide : legalUi.linkShow}
+              </button>
+              {showLegalDetails ? (
+                <pre className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg bg-black/20 p-3 text-xs text-slate-200 ring-1 ring-white/10">
+                  {legalTermsByCountry(legalCountry)}
+                </pre>
+              ) : null}
+
+              <label className="mt-4 flex items-start gap-2 rounded-lg bg-white/5 p-3 text-sm ring-1 ring-white/10">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-cyan-400"
+                  checked={legalConsentChecked}
+                  onChange={(e) => setLegalConsentChecked(e.target.checked)}
+                />
+                <span className="text-slate-200">{legalUi.checkbox}</span>
+              </label>
+
+              <div className="mt-5 flex justify-end gap-2">
+                <button type="button" className="btn-secondary" onClick={closeLegalModal}>
+                  {legalUi.cancel}
+                </button>
+                <button type="button" className="btn-primary" onClick={() => void confirmLegalModal()} disabled={!legalConsentChecked}>
+                  {legalUi.confirm}
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
       </AppShell>

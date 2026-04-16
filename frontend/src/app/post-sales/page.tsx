@@ -1,7 +1,6 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
@@ -13,19 +12,18 @@ type Pipeline = {
   id: string;
   name: string;
 };
+type Stage = {
+  id: string;
+  name: string;
+  position: number;
+  status: 'OPEN' | 'WON' | 'LOST';
+  probability: number;
+};
 
 type WorkspaceRole = 'OWNER' | 'ADMIN' | 'MEMBER';
 type ActiveView = 'PIPELINE' | 'CALENDAR';
 type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE';
-type PostSalesStatus =
-  | 'onboarding'
-  | 'collecting_info'
-  | 'in_progress'
-  | 'waiting_client'
-  | 'internal_review'
-  | 'delivery'
-  | 'support'
-  | 'done';
+type PostSalesStatus = (typeof POST_SALES_STATUS_KEYS)[number];
 type PostSalesPriority = 'low' | 'medium' | 'high' | 'urgent';
 type PeriodViewMode = 'WEEK' | 'MONTH' | 'YEAR' | 'CUSTOM';
 
@@ -50,6 +48,19 @@ type PostSalesCase = {
   client?: Client | null;
   owner?: { id: string; name: string; email: string } | null;
   deal?: { id: string; title: string } | null;
+};
+type DealDetails = {
+  id: string;
+  title: string;
+  proposalFilePath?: string | null;
+};
+type Invoice = {
+  id: string;
+  clientId?: string | null;
+  filePath: string;
+  amount: number | string;
+  currency: string;
+  createdAt: string;
 };
 
 type Task = {
@@ -85,16 +96,26 @@ type CalendarItem =
       caseItem: PostSalesCase;
     };
 
-const POST_SALES_STATUSES: Array<{ key: PostSalesStatus; label: string }> = [
-  { key: 'onboarding', label: 'Onboarding' },
-  { key: 'collecting_info', label: 'Collecting info' },
-  { key: 'in_progress', label: 'In progress' },
-  { key: 'waiting_client', label: 'Waiting client' },
-  { key: 'internal_review', label: 'Internal review' },
-  { key: 'delivery', label: 'Delivery' },
-  { key: 'support', label: 'Support' },
-  { key: 'done', label: 'Done' },
-];
+const POST_SALES_STATUS_KEYS = [
+  'onboarding',
+  'collecting_info',
+  'in_progress',
+  'waiting_client',
+  'internal_review',
+  'delivery',
+  'support',
+  'done',
+] as const;
+const POST_SALES_STATUS_LABELS: Record<PostSalesStatus, string> = {
+  onboarding: 'Onboarding',
+  collecting_info: 'Collecting info',
+  in_progress: 'In progress',
+  waiting_client: 'Waiting client',
+  internal_review: 'Internal review',
+  delivery: 'Delivery',
+  support: 'Support',
+  done: 'Done',
+};
 
 const PRIORITY_BADGE: Record<PostSalesPriority, string> = {
   low: 'bg-slate-500/20 text-slate-200 ring-slate-400/30',
@@ -108,7 +129,6 @@ const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as cons
 export default function PostSalesPage() {
   const { token, user } = useAuth();
   const api = useApi(token);
-  const router = useRouter();
 
   const [activeView, setActiveView] = useState<ActiveView>('PIPELINE');
   const [workspaceRole, setWorkspaceRole] = useState<WorkspaceRole | null>(null);
@@ -116,7 +136,9 @@ export default function PostSalesPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [postSalesCases, setPostSalesCases] = useState<PostSalesCase[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [postSalesPipelineId, setPostSalesPipelineId] = useState('');
+  const [operationalStages, setOperationalStages] = useState<Stage[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +148,12 @@ export default function PostSalesPage() {
   const [movingCaseId, setMovingCaseId] = useState<string | null>(null);
   const [draggingCaseId, setDraggingCaseId] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [selectedDealDetails, setSelectedDealDetails] = useState<DealDetails | null>(null);
+  const [downloadingDocKey, setDownloadingDocKey] = useState<string | null>(null);
+  const [showWorkflowEditor, setShowWorkflowEditor] = useState(false);
+  const [workflowNameDrafts, setWorkflowNameDrafts] = useState<Record<string, string>>({});
+  const [newStageName, setNewStageName] = useState('');
+  const [workflowSaving, setWorkflowSaving] = useState(false);
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -162,18 +190,27 @@ export default function PostSalesPage() {
     const casesData = await api<PostSalesCase[]>('/post-sales/cases');
     setPostSalesCases(casesData);
   }, [api]);
+  const loadInvoices = useCallback(async () => {
+    const invoicesData = await api<Invoice[]>('/invoices');
+    setInvoices(invoicesData);
+  }, [api]);
+  const loadOperationalStages = useCallback(async () => {
+    if (!postSalesPipelineId) return;
+    const data = await api<Stage[]>(`/stages?pipelineId=${encodeURIComponent(postSalesPipelineId)}`);
+    setOperationalStages(data.sort((a, b) => a.position - b.position));
+  }, [api, postSalesPipelineId]);
 
   const loadData = useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
-      await Promise.all([loadWorkspaceContext(), loadClients(), loadTasks(), loadCases()]);
+      await Promise.all([loadWorkspaceContext(), loadClients(), loadTasks(), loadCases(), loadInvoices()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load post-sales data');
     } finally {
       setLoading(false);
     }
-  }, [loadCases, loadClients, loadTasks, loadWorkspaceContext]);
+  }, [loadCases, loadClients, loadInvoices, loadTasks, loadWorkspaceContext]);
 
   useEffect(() => {
     if (!token) return;
@@ -184,12 +221,27 @@ export default function PostSalesPage() {
     if (!token) return;
     api<Pipeline[]>('/pipelines')
       .then((data) => {
-        setPostSalesPipelineId(data.find((pipeline) => pipeline.name === 'Post Sales')?.id || '');
+        const pipeline = data.find((item) => item.name.toLowerCase().includes('post sales'));
+        setPostSalesPipelineId(pipeline?.id || '');
       })
       .catch(() => {
         setPostSalesPipelineId('');
       });
   }, [api, token]);
+  useEffect(() => {
+    if (!token || !postSalesPipelineId) return;
+    void loadOperationalStages();
+  }, [loadOperationalStages, postSalesPipelineId, token]);
+
+  useEffect(() => {
+    if (!selectedCase?.deal?.id) {
+      setSelectedDealDetails(null);
+      return;
+    }
+    api<DealDetails>(`/deals/${selectedCase.deal.id}`)
+      .then((deal) => setSelectedDealDetails(deal))
+      .catch(() => setSelectedDealDetails(null));
+  }, [api, selectedCase?.deal?.id]);
 
   const canAccessPostSales = workspaceRole ? workspaceRole === 'OWNER' || workspaceRole === 'ADMIN' : false;
 
@@ -207,21 +259,31 @@ export default function PostSalesPage() {
     });
   }, [rangeValid, startDate, endDate]);
 
+  const boardColumns = useMemo(() => {
+    const stages = operationalStages.length
+      ? operationalStages
+      : POST_SALES_STATUS_KEYS.map((key, idx) => ({ id: `virtual-${key}`, name: POST_SALES_STATUS_LABELS[key], position: idx + 1, status: 'OPEN', probability: 0 }));
+    return stages.slice(0, POST_SALES_STATUS_KEYS.length).map((stage, idx) => ({
+      stageId: stage.id,
+      statusKey: POST_SALES_STATUS_KEYS[idx],
+      label: stage.name || POST_SALES_STATUS_LABELS[POST_SALES_STATUS_KEYS[idx]],
+      position: stage.position,
+    }));
+  }, [operationalStages]);
+
+  const statusByStageId = useMemo(() => {
+    const map = new Map<string, PostSalesStatus>();
+    boardColumns.forEach((col) => map.set(col.stageId, col.statusKey));
+    return map;
+  }, [boardColumns]);
+
   const casesByStatus = useMemo(() => {
-    const map: Record<PostSalesStatus, PostSalesCase[]> = {
-      onboarding: [],
-      collecting_info: [],
-      in_progress: [],
-      waiting_client: [],
-      internal_review: [],
-      delivery: [],
-      support: [],
-      done: [],
-    };
+    const map = Object.fromEntries(POST_SALES_STATUS_KEYS.map((key) => [key, [] as PostSalesCase[]])) as Record<PostSalesStatus, PostSalesCase[]>;
     for (const c of postSalesCases) {
-      map[c.status].push(c);
+      const status = POST_SALES_STATUS_KEYS.includes(c.status) ? c.status : 'onboarding';
+      map[status].push(c);
     }
-    for (const key of Object.keys(map) as PostSalesStatus[]) {
+    for (const key of POST_SALES_STATUS_KEYS) {
       map[key].sort((a, b) => {
         const aDue = getIsoDueDate(a.dueDate) || '9999-12-31';
         const bDue = getIsoDueDate(b.dueDate) || '9999-12-31';
@@ -231,10 +293,7 @@ export default function PostSalesPage() {
     return map;
   }, [postSalesCases]);
 
-  const statusLabelByKey = useMemo(
-    () => Object.fromEntries(POST_SALES_STATUSES.map((s) => [s.key, s.label])) as Record<PostSalesStatus, string>,
-    [],
-  );
+  const statusLabelByKey = POST_SALES_STATUS_LABELS;
 
   const clientsById = useMemo(() => {
     const map = new Map<string, Client>();
@@ -323,11 +382,11 @@ export default function PostSalesPage() {
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      await Promise.all([loadTasks(), loadClients(), loadCases()]);
+      await Promise.all([loadTasks(), loadClients(), loadCases(), loadInvoices(), loadOperationalStages()]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to refresh');
     }
-  }, [loadCases, loadClients, loadTasks]);
+  }, [loadCases, loadClients, loadInvoices, loadOperationalStages, loadTasks]);
 
   const handleCreateTask = useCallback(
     async (payload: TaskCreateInput) => {
@@ -380,6 +439,104 @@ export default function PostSalesPage() {
       setSelectedCaseId(caseItem.id);
     },
     [],
+  );
+  const linkedTasks = useMemo(() => {
+    if (!selectedCase) return [] as Task[];
+    return tasks.filter((task) => task.postSalesCaseId === selectedCase.id);
+  }, [selectedCase, tasks]);
+  const clientInvoices = useMemo(() => {
+    if (!selectedCase?.clientId) return [] as Invoice[];
+    return invoices.filter((invoice) => invoice.clientId === selectedCase.clientId).slice(0, 8);
+  }, [invoices, selectedCase?.clientId]);
+  const projectSummary = useMemo(() => {
+    if (!selectedCase) return null;
+    const total = linkedTasks.length;
+    const done = linkedTasks.filter((t) => t.status === 'DONE').length;
+    const inProgress = linkedTasks.filter((t) => t.status === 'IN_PROGRESS').length;
+    const hours = linkedTasks.reduce((sum, t) => sum + (toTaskHours(t.timeSpentHours) || 0), 0);
+    const nextDue = linkedTasks
+      .map((t) => getTaskIsoDueDate(t))
+      .filter((d): d is string => Boolean(d))
+      .sort()[0] || getIsoDueDate(selectedCase.dueDate) || null;
+    return { total, done, inProgress, hours, nextDue };
+  }, [linkedTasks, selectedCase]);
+
+  const saveWorkflowLabels = useCallback(async () => {
+    if (!postSalesPipelineId || boardColumns.length === 0) return;
+    setWorkflowSaving(true);
+    setError(null);
+    try {
+      await Promise.all(
+        boardColumns
+          .filter((col) => !col.stageId.startsWith('virtual-'))
+          .map((col) => {
+            const nextName = (workflowNameDrafts[col.stageId] || col.label).trim();
+            if (!nextName || nextName === col.label) return Promise.resolve();
+            return api(`/stages/${col.stageId}`, { method: 'PATCH', body: JSON.stringify({ name: nextName }) });
+          }),
+      );
+      await loadOperationalStages();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update workflow');
+    } finally {
+      setWorkflowSaving(false);
+    }
+  }, [api, boardColumns, loadOperationalStages, postSalesPipelineId, workflowNameDrafts]);
+
+  const addOperationalStage = useCallback(async () => {
+    if (!postSalesPipelineId) return;
+    const trimmed = newStageName.trim();
+    if (!trimmed) return;
+    if (boardColumns.length >= POST_SALES_STATUS_KEYS.length) {
+      setError(`Max ${POST_SALES_STATUS_KEYS.length} operational steps for now.`);
+      return;
+    }
+    setWorkflowSaving(true);
+    setError(null);
+    try {
+      await api('/stages', {
+        method: 'POST',
+        body: JSON.stringify({
+          pipelineId: postSalesPipelineId,
+          name: trimmed,
+          position: boardColumns.length + 1,
+          status: 'OPEN',
+          probability: 0,
+        }),
+      });
+      setNewStageName('');
+      await loadOperationalStages();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to add stage');
+    } finally {
+      setWorkflowSaving(false);
+    }
+  }, [api, boardColumns.length, loadOperationalStages, newStageName, postSalesPipelineId]);
+
+  const downloadSecuredFile = useCallback(
+    async (endpoint: string, filenameHint: string, key: string) => {
+      setDownloadingDocKey(key);
+      setError(null);
+      try {
+        const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:4000/api';
+        const response = await fetch(`${API_BASE}${endpoint}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) throw new Error('Download failed');
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filenameHint;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to download file');
+      } finally {
+        setDownloadingDocKey(null);
+      }
+    },
+    [token],
   );
 
   const readHoursDraft = useCallback(
@@ -487,15 +644,9 @@ export default function PostSalesPage() {
                 Calendar
               </button>
             </div>
-            {postSalesPipelineId ? (
-              <button
-                className="btn-secondary"
-                onClick={() => router.push(`/crm?pipelineId=${encodeURIComponent(postSalesPipelineId)}`)}
-                type="button"
-              >
-                Open CRM pipeline
-              </button>
-            ) : null}
+            <button className="btn-secondary" onClick={() => setShowWorkflowEditor(true)} type="button">
+              Workflow operationnel
+            </button>
             <button className="btn-secondary" onClick={refresh} type="button">
               Refresh
             </button>
@@ -527,8 +678,8 @@ export default function PostSalesPage() {
 
             <div className="overflow-x-auto pb-2">
               <div className="flex min-w-max gap-5">
-                {POST_SALES_STATUSES.map((column) => {
-                  const cases = casesByStatus[column.key];
+                {boardColumns.map((column) => {
+                  const cases = casesByStatus[column.statusKey];
                   return (
                     <section
                       key={column.key}
@@ -538,7 +689,7 @@ export default function PostSalesPage() {
                         event.preventDefault();
                         const caseId = event.dataTransfer.getData('text/plain');
                         if (!caseId) return;
-                        void handleMoveCase(caseId, column.key);
+                        void handleMoveCase(caseId, statusByStageId.get(column.stageId) || 'onboarding');
                       }}
                     >
                       <div className="mb-4 flex items-center justify-between gap-2">
@@ -977,6 +1128,110 @@ export default function PostSalesPage() {
                   <p className="text-[11px] uppercase tracking-wide text-slate-400">Linked deal</p>
                   <p className="mt-1 text-sm font-semibold text-slate-100">{selectedCase.deal?.title || 'No linked deal'}</p>
                   <p className="mt-1 text-xs text-slate-400">You stay in Post-Sales.</p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-4">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-400">Project summary</p>
+                  <p className="mt-2 text-sm text-slate-200">Tasks: {projectSummary?.done || 0}/{projectSummary?.total || 0} done · {projectSummary?.inProgress || 0} in progress</p>
+                  <p className="mt-1 text-sm text-slate-200">Hours spent: {(projectSummary?.hours || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}h</p>
+                  <p className="mt-1 text-sm text-slate-300">Next milestone: {projectSummary?.nextDue || 'No deadline'}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-4">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-400">Dossier documents</p>
+                  <div className="mt-2 space-y-2">
+                    {selectedCase.deal?.id && selectedDealDetails?.proposalFilePath ? (
+                      <button
+                        type="button"
+                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-left text-xs text-slate-100 hover:bg-white/10"
+                        onClick={() =>
+                          void downloadSecuredFile(
+                            `/deals/${selectedCase.deal!.id}/proposal`,
+                            `${selectedCase.name}-proposal.pdf`,
+                            `proposal-${selectedCase.deal!.id}`,
+                          )
+                        }
+                        disabled={downloadingDocKey === `proposal-${selectedCase.deal.id}`}
+                      >
+                        {downloadingDocKey === `proposal-${selectedCase.deal.id}` ? 'Downloading proposal…' : 'Proposal PDF'}
+                      </button>
+                    ) : null}
+                    {clientInvoices.map((invoice) => (
+                      <button
+                        key={invoice.id}
+                        type="button"
+                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-left text-xs text-slate-100 hover:bg-white/10"
+                        onClick={() =>
+                          void downloadSecuredFile(
+                            `/invoices/${invoice.id}/download`,
+                            invoice.filePath.split('/').pop() || `invoice-${invoice.id}.pdf`,
+                            `invoice-${invoice.id}`,
+                          )
+                        }
+                        disabled={downloadingDocKey === `invoice-${invoice.id}`}
+                      >
+                        {downloadingDocKey === `invoice-${invoice.id}`
+                          ? 'Downloading invoice…'
+                          : `Invoice · ${invoice.currency} ${Number(invoice.amount).toLocaleString()}`}
+                      </button>
+                    ))}
+                    <a
+                      href="/admin/contracts"
+                      className="block rounded-lg border border-white/15 px-3 py-2 text-xs text-slate-100 hover:bg-white/10"
+                    >
+                      Contrat client / templates
+                    </a>
+                    {!selectedDealDetails?.proposalFilePath && clientInvoices.length === 0 ? (
+                      <p className="text-xs text-slate-400">No project document yet.</p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {showWorkflowEditor ? (
+          <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/70 px-4 py-8 md:items-center" onClick={() => setShowWorkflowEditor(false)}>
+            <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#1a2747] p-6 shadow-2xl shadow-black/40" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Workflow Operationnel</p>
+                  <h2 className="mt-1 text-xl font-semibold text-slate-100">Etapes Post-Sales</h2>
+                </div>
+                <button type="button" className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300 hover:bg-white/10" onClick={() => setShowWorkflowEditor(false)}>
+                  Close
+                </button>
+              </div>
+              <div className="mt-4 space-y-3">
+                {boardColumns.map((col, idx) => (
+                  <div key={col.stageId} className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                    <p className="text-[11px] text-slate-400">Step {idx + 1}</p>
+                    <input
+                      value={workflowNameDrafts[col.stageId] ?? col.label}
+                      onChange={(e) => setWorkflowNameDrafts((prev) => ({ ...prev, [col.stageId]: e.target.value }))}
+                      className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                    />
+                  </div>
+                ))}
+                <div className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                  <p className="text-[11px] text-slate-400">Add step</p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      value={newStageName}
+                      onChange={(e) => setNewStageName(e.target.value)}
+                      className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                      placeholder="New operational step"
+                    />
+                    <button type="button" className="btn-secondary" onClick={() => void addOperationalStage()} disabled={workflowSaving}>
+                      Add
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button type="button" className="btn-primary" onClick={() => void saveWorkflowLabels()} disabled={workflowSaving}>
+                    {workflowSaving ? 'Saving…' : 'Save workflow'}
+                  </button>
                 </div>
               </div>
             </div>
