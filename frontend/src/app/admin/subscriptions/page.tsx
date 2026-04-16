@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
@@ -50,6 +50,15 @@ type PendingInvite = {
   updatedAt: string;
 };
 
+type CustomerWorkspaceUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  createdAt: string;
+  updatedAt: string;
+};
+
 type InviteDraft = {
   name: string;
   email: string;
@@ -81,6 +90,120 @@ const CUSTOMER_COUNTRIES: Array<{ value: CustomerCountry; labelKey: string }> = 
   { value: 'MX', labelKey: 'adminSubscriptions.country.mexico' },
   { value: 'CA', labelKey: 'adminSubscriptions.country.canada' },
 ];
+
+function defaultCustomerCountryForLanguage(language: string): CustomerCountry {
+  if (language === 'fr') return 'FR';
+  if (language === 'es') return 'MX';
+  return 'CA';
+}
+
+function countryLegalLabel(country: CustomerCountry | '') {
+  if (country === 'FR') return 'France (RGPD)';
+  if (country === 'MX') return 'Mexique (LFPDPPP)';
+  if (country === 'CA') return 'Canada (PIPEDA/LPRPDE)';
+  return 'pays du compte client';
+}
+
+function legalTermsByCountry(country: CustomerCountry | '') {
+  if (country === 'MX') {
+    return `Al crear una cuenta en o7 Pulse CRM, usted acepta los siguientes términos:
+
+1. Suscripción y periodo de prueba
+El servicio puede ofrecer un periodo de prueba gratuito. Durante este periodo, el servicio se proporciona "tal cual" sin garantías. Al finalizar el periodo de prueba, la suscripción podrá convertirse automáticamente en un plan de pago, salvo cancelación previa.
+
+2. Uso del servicio
+El usuario se compromete a utilizar la plataforma únicamente con fines legales y comerciales legítimos, y a no intentar copiar, modificar o explotar el sistema.
+
+3. Datos y responsabilidad
+El usuario es responsable de los datos ingresados en la plataforma. o7 Pulse CRM no garantiza la conservación de datos durante el periodo de prueba.
+
+4. Facturación y renovación
+Las suscripciones son de pago recurrente y se renovarán automáticamente salvo cancelación previa. No se realizarán reembolsos por periodos ya iniciados.
+
+5. Limitación de responsabilidad
+El servicio se proporciona "tal cual" y o7 Pulse CRM no será responsable por pérdidas indirectas, pérdida de datos o daños comerciales derivados del uso del sistema.
+
+6. Aceptación
+Al crear una cuenta, usted acepta estos términos y reconoce que constituyen un acuerdo legal vinculante.`;
+  }
+  if (country === 'CA') {
+    return `By creating an account on o7 Pulse CRM, you agree to the following terms:
+
+1. Subscription and Free Trial
+A free trial may be offered. During this period, the service is provided "as is" without warranties. At the end of the trial, the subscription may automatically convert into a paid plan unless cancelled.
+
+2. Use of Service
+You agree to use the platform only for lawful business purposes and not to copy, modify, reverse engineer, or exploit the service.
+
+3. Data Responsibility
+You are responsible for all data entered into the system. Data entered during the trial period may be deleted unless you subscribe to a paid plan.
+
+4. Billing and Renewal
+Subscriptions are billed on a recurring basis and automatically renew unless cancelled prior to the renewal date. No refunds are provided for partially used periods.
+
+5. Limitation of Liability
+The service is provided "as is" and o7 Pulse CRM shall not be liable for indirect damages, data loss, or business interruption.
+
+6. Acceptance
+By creating an account, you acknowledge and agree that these terms form a legally binding agreement.`;
+  }
+  return `En créant un compte sur o7 Pulse CRM, vous acceptez les conditions suivantes :
+
+1. Abonnement et période d’essai
+Une période d’essai gratuite peut être proposée. Pendant cette période, le service est fourni "en l’état", sans garantie. À l’issue de l’essai, l’abonnement pourra être automatiquement activé sauf résiliation préalable.
+
+2. Utilisation du service
+L’utilisateur s’engage à utiliser la plateforme uniquement à des fins professionnelles légales et à ne pas copier, modifier ou exploiter le service de manière abusive.
+
+3. Données
+L’utilisateur est responsable des données saisies dans la plateforme. Les données créées pendant la période d’essai peuvent être supprimées si aucun abonnement n’est souscrit.
+
+4. Facturation et renouvellement
+Les abonnements sont facturés de manière récurrente et se renouvellent automatiquement sauf résiliation avant échéance. Aucun remboursement n’est effectué pour une période entamée.
+
+5. Responsabilité
+Le service est fourni "en l’état" sans garantie. o7 Pulse CRM ne pourra être tenu responsable des pertes indirectes, pertes de données ou pertes d’exploitation.
+
+6. Acceptation
+La création d’un compte implique l’acceptation pleine et entière des présentes conditions.`;
+}
+
+function legalUiByCountry(country: CustomerCountry | '') {
+  if (country === 'MX') {
+    return {
+      badge: 'Aviso legal',
+      title: 'Consentimiento antes de invitar',
+      actionIntro: 'Usted va a ejecutar:',
+      linkShow: 'Ver términos y condiciones completos',
+      linkHide: 'Ocultar términos y condiciones',
+      checkbox: 'He leído y acepto los términos legales aplicables.',
+      cancel: 'Cancelar',
+      confirm: 'Confirmar y continuar',
+    };
+  }
+  if (country === 'CA') {
+    return {
+      badge: 'Legal notice',
+      title: 'Consent before invitation',
+      actionIntro: 'You are about to run:',
+      linkShow: 'View full terms and conditions',
+      linkHide: 'Hide terms and conditions',
+      checkbox: 'I have read and accept the applicable legal terms.',
+      cancel: 'Cancel',
+      confirm: 'Confirm and continue',
+    };
+  }
+  return {
+    badge: 'Notice legale',
+    title: 'Consentement avant invitation',
+    actionIntro: 'Vous allez lancer:',
+    linkShow: 'Voir les conditions complètes',
+    linkHide: 'Masquer les conditions',
+    checkbox: 'J’ai lu et j’accepte les conditions légales applicables.',
+    cancel: 'Annuler',
+    confirm: 'Confirmer et continuer',
+  };
+}
 
 function makeInviteRowId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -141,10 +264,20 @@ export default function AdminSubscriptionsPage() {
   const [linkDraftsById, setLinkDraftsById] = useState<Record<string, LinkDraft>>({});
   const [inviteDraftsById, setInviteDraftsById] = useState<Record<string, InviteDraft>>({});
   const [pendingInvitesById, setPendingInvitesById] = useState<Record<string, PendingInvite[]>>({});
+  const [customerUsersBySubscriptionId, setCustomerUsersBySubscriptionId] = useState<
+    Record<string, CustomerWorkspaceUser[]>
+  >({});
   const [savingInviteSubscriptionId, setSavingInviteSubscriptionId] = useState<string | null>(null);
   const [loadingInviteSubscriptionId, setLoadingInviteSubscriptionId] = useState<string | null>(null);
+  const [loadingUsersSubscriptionId, setLoadingUsersSubscriptionId] = useState<string | null>(null);
+  const [savingCustomerUserId, setSavingCustomerUserId] = useState<string | null>(null);
+  const [removingCustomerUserId, setRemovingCustomerUserId] = useState<string | null>(null);
+  const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
+  const [customerUserRoleDrafts, setCustomerUserRoleDrafts] = useState<Record<string, 'ADMIN' | 'MEMBER'>>({});
   const [customerName, setCustomerName] = useState('');
-  const [customerCountry, setCustomerCountry] = useState<CustomerCountry | ''>('');
+  const [customerCountry, setCustomerCountry] = useState<CustomerCountry>(
+    defaultCustomerCountryForLanguage(language),
+  );
   const [customerAddress, setCustomerAddress] = useState('');
   const [contactFirstName, setContactFirstName] = useState('');
   const [contactLastName, setContactLastName] = useState('');
@@ -158,6 +291,12 @@ export default function AdminSubscriptionsPage() {
   const [createInviteRows, setCreateInviteRows] = useState<CreateInviteRow[]>(() => [createInviteRow('ADMIN')]);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [legalModalOpen, setLegalModalOpen] = useState(false);
+  const [legalConsentChecked, setLegalConsentChecked] = useState(false);
+  const [legalCountry, setLegalCountry] = useState<CustomerCountry | ''>('');
+  const [legalContextLabel, setLegalContextLabel] = useState('');
+  const [showLegalDetails, setShowLegalDetails] = useState(false);
+  const legalActionRef = useRef<null | (() => Promise<void>)>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -217,17 +356,20 @@ export default function AdminSubscriptionsPage() {
     [origin],
   );
 
-  const getDefaultDraft = useCallback((sub: SubscriptionItem): LinkDraft => {
-    return {
-      customerName: sub.customerName || '',
-      customerCountry: sub.customerCountry || '',
-      customerAddress: sub.customerAddress || '',
-      contactFirstName: sub.contactFirstName || '',
-      contactLastName: sub.contactLastName || '',
-      contactEmail: sub.contactEmail || '',
-      seats: Math.min(30, Math.max(1, sub.seats || 1)),
-    };
-  }, []);
+  const getDefaultDraft = useCallback(
+    (sub: SubscriptionItem): LinkDraft => {
+      return {
+        customerName: sub.customerName || '',
+        customerCountry: sub.customerCountry || defaultCustomerCountryForLanguage(language),
+        customerAddress: sub.customerAddress || '',
+        contactFirstName: sub.contactFirstName || '',
+        contactLastName: sub.contactLastName || '',
+        contactEmail: sub.contactEmail || '',
+        seats: Math.min(30, Math.max(1, sub.seats || 1)),
+      };
+    },
+    [language],
+  );
 
   const getLinkDraft = useCallback(
     (sub: SubscriptionItem): LinkDraft => {
@@ -254,7 +396,7 @@ export default function AdminSubscriptionsPage() {
     setLinkDraftsById((prev) => {
       const current = prev[subscriptionId] || {
         customerName: '',
-        customerCountry: '',
+        customerCountry: defaultCustomerCountryForLanguage(language),
         customerAddress: '',
         contactFirstName: '',
         contactLastName: '',
@@ -269,7 +411,7 @@ export default function AdminSubscriptionsPage() {
         },
       };
     });
-  }, []);
+  }, [language]);
 
   const getInviteDraft = useCallback(
     (subscriptionId: string): InviteDraft => {
@@ -337,6 +479,31 @@ export default function AdminSubscriptionsPage() {
     [api],
   );
 
+  const loadSubscriptionUsers = useCallback(
+    async (subscriptionId: string) => {
+      setLoadingUsersSubscriptionId(subscriptionId);
+      try {
+        const users = await api<CustomerWorkspaceUser[]>(`/admin/subscriptions/${subscriptionId}/users`);
+        setCustomerUsersBySubscriptionId((prev) => ({ ...prev, [subscriptionId]: users }));
+        setCustomerUserRoleDrafts((prev) => {
+          const next = { ...prev };
+          for (const item of users) {
+            if (item.role === 'ADMIN' || item.role === 'MEMBER') {
+              next[item.id] = item.role;
+            }
+          }
+          return next;
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to load customer users';
+        setError(message);
+      } finally {
+        setLoadingUsersSubscriptionId((prev) => (prev === subscriptionId ? null : prev));
+      }
+    },
+    [api],
+  );
+
   const startEditingLink = useCallback(
     (sub: SubscriptionItem) => {
       if (sub.status === 'CANCELED') return;
@@ -358,8 +525,9 @@ export default function AdminSubscriptionsPage() {
         };
       });
       void loadSubscriptionInvites(sub.id);
+      void loadSubscriptionUsers(sub.id);
     },
-    [getDefaultDraft, loadSubscriptionInvites],
+    [getDefaultDraft, loadSubscriptionInvites, loadSubscriptionUsers],
   );
 
   const cancelEditingLink = useCallback((sub: SubscriptionItem) => {
@@ -370,6 +538,11 @@ export default function AdminSubscriptionsPage() {
       return next;
     });
     setInviteDraftsById((prev) => {
+      const next = { ...prev };
+      delete next[sub.id];
+      return next;
+    });
+    setCustomerUsersBySubscriptionId((prev) => {
       const next = { ...prev };
       delete next[sub.id];
       return next;
@@ -390,6 +563,35 @@ export default function AdminSubscriptionsPage() {
     },
     [t],
   );
+
+  const requestLegalConsent = useCallback(
+    (country: CustomerCountry | '', contextLabel: string, action: () => Promise<void>) => {
+      setLegalCountry(country);
+      setLegalContextLabel(contextLabel);
+      setLegalConsentChecked(false);
+      legalActionRef.current = action;
+      setShowLegalDetails(false);
+      setLegalModalOpen(true);
+    },
+    [],
+  );
+
+  const closeLegalModal = useCallback(() => {
+    setLegalModalOpen(false);
+    setLegalConsentChecked(false);
+    setLegalCountry('');
+    setLegalContextLabel('');
+    setShowLegalDetails(false);
+    legalActionRef.current = null;
+  }, []);
+
+  const confirmLegalModal = useCallback(async () => {
+    if (!legalConsentChecked) return;
+    const action = legalActionRef.current;
+    closeLegalModal();
+    if (action) await action();
+  }, [closeLegalModal, legalConsentChecked]);
+  const legalUi = useMemo(() => legalUiByCountry(legalCountry), [legalCountry]);
 
   const saveSubscriptionLinkData = useCallback(
     async (sub: SubscriptionItem) => {
@@ -447,8 +649,7 @@ export default function AdminSubscriptionsPage() {
     [api, buildInviteUrlFromDraft, copyUrl, getDefaultDraft, getLinkDraft, t],
   );
 
-  const create = async (e: FormEvent) => {
-    e.preventDefault();
+  const executeCreate = useCallback(async () => {
     setInfo(null);
     setError(null);
     const name = customerName.trim();
@@ -556,7 +757,7 @@ export default function AdminSubscriptionsPage() {
         ...prev,
       ]);
       setCustomerName('');
-      setCustomerCountry('');
+      setCustomerCountry(defaultCustomerCountryForLanguage(language));
       setCustomerAddress('');
       setContactFirstName('');
       setContactLastName('');
@@ -595,7 +796,32 @@ export default function AdminSubscriptionsPage() {
     } finally {
       setCreating(false);
     }
-  };
+  }, [
+    api,
+    buildInviteUrl,
+    contactEmail,
+    contactFirstName,
+    contactLastName,
+    createInviteRows,
+    customerAddress,
+    customerCountry,
+    customerName,
+    industryId,
+    industryOther,
+    language,
+    crmMode,
+    plan,
+    seats,
+    t,
+  ]);
+
+  const create = useCallback(
+    async (e: FormEvent) => {
+      e.preventDefault();
+      requestLegalConsent(customerCountry, 'creation du lien et invitations', executeCreate);
+    },
+    [customerCountry, executeCreate, requestLegalConsent],
+  );
 
   const copyInvite = async (sub: SubscriptionItem) => {
     if (!isSubscriptionActive(sub)) return;
@@ -603,7 +829,7 @@ export default function AdminSubscriptionsPage() {
     await copyUrl(buildInviteUrlFromDraft(sub, draft));
   };
 
-  const createSubscriptionInvite = useCallback(
+  const executeSubscriptionInvite = useCallback(
     async (sub: SubscriptionItem) => {
       if (!isSubscriptionActive(sub)) {
         setError(t('adminSubscriptions.inactiveBlocked'));
@@ -661,6 +887,105 @@ export default function AdminSubscriptionsPage() {
       }
     },
     [api, buildInviteUrl, copyUrl, getInviteDraft, getLinkDraft, pendingInvitesById, t],
+  );
+
+  const createSubscriptionInvite = useCallback(
+    async (sub: SubscriptionItem) => {
+      requestLegalConsent(
+        (getLinkDraft(sub).customerCountry || sub.customerCountry || '') as CustomerCountry | '',
+        `invitation de ${sub.customerName}`,
+        async () => executeSubscriptionInvite(sub),
+      );
+    },
+    [executeSubscriptionInvite, getLinkDraft, requestLegalConsent],
+  );
+
+  const revokeSubscriptionInvite = useCallback(
+    async (subscriptionId: string, inviteId: string) => {
+      setRevokingInviteId(inviteId);
+      setError(null);
+      setInfo(null);
+      try {
+        await api(`/admin/subscriptions/${subscriptionId}/user-invites/${inviteId}`, { method: 'DELETE' });
+        setPendingInvitesById((prev) => ({
+          ...prev,
+          [subscriptionId]: (prev[subscriptionId] || []).filter((invite) => invite.id !== inviteId),
+        }));
+        setItems((prev) =>
+          prev.map((row) =>
+            row.id === subscriptionId
+              ? { ...row, pendingInvitesCount: Math.max(0, row.pendingInvitesCount - 1) }
+              : row,
+          ),
+        );
+        setInfo(t('adminSubscriptions.invites.revoked'));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to revoke invite';
+        setError(message);
+      } finally {
+        setRevokingInviteId(null);
+      }
+    },
+    [api, t],
+  );
+
+  const saveSubscriptionUserRole = useCallback(
+    async (subscriptionId: string, workspaceUser: CustomerWorkspaceUser) => {
+      const nextRole = customerUserRoleDrafts[workspaceUser.id];
+      if (!nextRole || nextRole === workspaceUser.role || workspaceUser.role === 'OWNER') return;
+      setSavingCustomerUserId(workspaceUser.id);
+      setError(null);
+      setInfo(null);
+      try {
+        const updated = await api<CustomerWorkspaceUser>(
+          `/admin/subscriptions/${subscriptionId}/users/${workspaceUser.id}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({ role: nextRole }),
+          },
+        );
+        setCustomerUsersBySubscriptionId((prev) => ({
+          ...prev,
+          [subscriptionId]: (prev[subscriptionId] || []).map((item) => (item.id === updated.id ? updated : item)),
+        }));
+        setCustomerUserRoleDrafts((prev) => ({ ...prev, [updated.id]: updated.role === 'ADMIN' ? 'ADMIN' : 'MEMBER' }));
+        setInfo(t('adminSubscriptions.users.roleSaved'));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to update user role';
+        setError(message);
+      } finally {
+        setSavingCustomerUserId(null);
+      }
+    },
+    [api, customerUserRoleDrafts, t],
+  );
+
+  const removeSubscriptionUser = useCallback(
+    async (subscriptionId: string, workspaceUser: CustomerWorkspaceUser) => {
+      if (workspaceUser.role === 'OWNER') return;
+      if (typeof window !== 'undefined' && !window.confirm(t('adminSubscriptions.users.removeConfirm', { name: workspaceUser.name || workspaceUser.email }))) {
+        return;
+      }
+      setRemovingCustomerUserId(workspaceUser.id);
+      setError(null);
+      setInfo(null);
+      try {
+        await api(`/admin/subscriptions/${subscriptionId}/users/${workspaceUser.id}`, {
+          method: 'DELETE',
+        });
+        setCustomerUsersBySubscriptionId((prev) => ({
+          ...prev,
+          [subscriptionId]: (prev[subscriptionId] || []).filter((item) => item.id !== workspaceUser.id),
+        }));
+        setInfo(t('adminSubscriptions.users.removed'));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to remove user';
+        setError(message);
+      } finally {
+        setRemovingCustomerUserId(null);
+      }
+    },
+    [api, t],
   );
 
   const suspendSubscription = useCallback(
@@ -725,9 +1050,18 @@ export default function AdminSubscriptionsPage() {
         draft: getLinkDraft(sub),
         inviteDraft: getInviteDraft(sub.id),
         pendingInvites: pendingInvitesById[sub.id] || [],
+        customerUsers: customerUsersBySubscriptionId[sub.id] || [],
         inviteUrl: buildInviteUrlFromDraft(sub, getLinkDraft(sub)),
       })),
-    [buildInviteUrlFromDraft, editingSubscriptionId, getInviteDraft, getLinkDraft, items, pendingInvitesById],
+    [
+      buildInviteUrlFromDraft,
+      customerUsersBySubscriptionId,
+      editingSubscriptionId,
+      getInviteDraft,
+      getLinkDraft,
+      items,
+      pendingInvitesById,
+    ],
   );
 
   return (
@@ -1225,6 +1559,83 @@ export default function AdminSubscriptionsPage() {
                               </div>
                             </div>
                             <div className="mt-3 rounded-lg bg-black/20 p-3 ring-1 ring-white/10">
+                              <p className="text-xs font-semibold text-slate-100">{t('adminSubscriptions.users.title')}</p>
+                              <p className="mt-1 text-xs text-slate-400">{t('adminSubscriptions.users.subtitle')}</p>
+                              {loadingUsersSubscriptionId === sub.id ? (
+                                <p className="mt-2 text-xs text-slate-400">{t('adminSubscriptions.users.loading')}</p>
+                              ) : null}
+                              {sub.customerUsers.length > 0 ? (
+                                <div className="mt-3 space-y-2">
+                                  {sub.customerUsers.map((workspaceUser) => {
+                                    const roleDraft =
+                                      customerUserRoleDrafts[workspaceUser.id] ||
+                                      (workspaceUser.role === 'ADMIN' ? 'ADMIN' : 'MEMBER');
+                                    const isOwner = workspaceUser.role === 'OWNER';
+                                    const roleChanged = !isOwner && roleDraft !== workspaceUser.role;
+                                    return (
+                                      <div
+                                        key={workspaceUser.id}
+                                        className="rounded-lg bg-white/5 p-2 text-xs ring-1 ring-white/10"
+                                      >
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                          <div>
+                                            <p className="text-slate-100">{workspaceUser.name || 'User'}</p>
+                                            <p className="mt-1 text-slate-400">{workspaceUser.email}</p>
+                                          </div>
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            {isOwner ? (
+                                              <span className="rounded-lg bg-white/10 px-2 py-1 font-semibold text-slate-200 ring-1 ring-white/10">
+                                                OWNER
+                                              </span>
+                                            ) : (
+                                              <>
+                                                <select
+                                                  className="rounded-lg bg-black/20 px-2 py-1.5 text-xs text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                                  value={roleDraft}
+                                                  onChange={(e) =>
+                                                    setCustomerUserRoleDrafts((prev) => ({
+                                                      ...prev,
+                                                      [workspaceUser.id]:
+                                                        e.target.value === 'ADMIN' ? 'ADMIN' : 'MEMBER',
+                                                    }))
+                                                  }
+                                                >
+                                                  <option value="ADMIN">{t('adminSubscriptions.invites.roleAdmin')}</option>
+                                                  <option value="MEMBER">{t('adminSubscriptions.invites.roleMember')}</option>
+                                                </select>
+                                                <button
+                                                  type="button"
+                                                  className="rounded-lg bg-cyan-500/20 px-2 py-1.5 font-semibold text-cyan-100 ring-1 ring-cyan-300/40 hover:bg-cyan-500/30 disabled:opacity-50"
+                                                  onClick={() => void saveSubscriptionUserRole(sub.id, workspaceUser)}
+                                                  disabled={!roleChanged || savingCustomerUserId === workspaceUser.id}
+                                                >
+                                                  {savingCustomerUserId === workspaceUser.id
+                                                    ? t('common.saving')
+                                                    : t('common.save')}
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  className="rounded-lg bg-red-500/15 px-2 py-1.5 font-semibold text-red-100 ring-1 ring-red-300/30 hover:bg-red-500/25 disabled:opacity-50"
+                                                  onClick={() => void removeSubscriptionUser(sub.id, workspaceUser)}
+                                                  disabled={removingCustomerUserId === workspaceUser.id}
+                                                >
+                                                  {removingCustomerUserId === workspaceUser.id
+                                                    ? t('adminSubscriptions.users.removing')
+                                                    : t('adminSubscriptions.users.remove')}
+                                                </button>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : loadingUsersSubscriptionId === sub.id ? null : (
+                                <p className="mt-2 text-xs text-slate-500">{t('adminSubscriptions.users.empty')}</p>
+                              )}
+                            </div>
+                            <div className="mt-3 rounded-lg bg-black/20 p-3 ring-1 ring-white/10">
                               <p className="text-xs font-semibold text-slate-100">{t('adminSubscriptions.invites.title')}</p>
                               <p className="mt-1 text-xs text-slate-400">{t('adminSubscriptions.invites.subtitle')}</p>
                               <div className="mt-2 grid gap-2 md:grid-cols-[1fr_1fr_140px_auto]">
@@ -1296,6 +1707,16 @@ export default function AdminSubscriptionsPage() {
                                           >
                                             {t('adminSubscriptions.copyLink')}
                                           </button>
+                                          <button
+                                            type="button"
+                                            className="rounded-lg bg-red-500/15 px-2 py-1 font-semibold text-red-100 ring-1 ring-red-300/30 hover:bg-red-500/25 disabled:opacity-50"
+                                            onClick={() => void revokeSubscriptionInvite(sub.id, invite.id)}
+                                            disabled={revokingInviteId === invite.id}
+                                          >
+                                            {revokingInviteId === invite.id
+                                              ? t('adminSubscriptions.invites.revoking')
+                                              : t('adminSubscriptions.invites.revoke')}
+                                          </button>
                                         </div>
                                       </div>
                                     );
@@ -1335,6 +1756,60 @@ export default function AdminSubscriptionsPage() {
               </table>
             </div>
             {items.length === 0 ? <p className="mt-4 text-sm text-slate-400">{t('adminSubscriptions.empty')}</p> : null}
+          </div>
+        ) : null}
+        {legalModalOpen ? (
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/70 px-4 py-10 md:items-center"
+            role="dialog"
+            aria-modal="true"
+            onClick={closeLegalModal}
+          >
+            <div
+              className="w-full max-w-xl rounded-2xl border border-white/10 bg-[#1a2747] p-6 shadow-2xl shadow-black/40"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-xs uppercase tracking-[0.14em] text-slate-400">{legalUi.badge}</p>
+              <h2 className="mt-1 text-xl font-semibold text-slate-100">{legalUi.title}</h2>
+              <p className="mt-3 text-sm text-slate-200">
+                {legalUi.actionIntro} <span className="font-semibold">{legalContextLabel || 'invitation utilisateur'}</span>.
+              </p>
+              <p className="mt-2 text-sm text-slate-300">
+                Je partage mes informations en accord avec la reglementation applicable de{' '}
+                <span className="font-semibold text-slate-100">{countryLegalLabel(legalCountry)}</span>.
+              </p>
+              <button
+                type="button"
+                className="mt-3 text-xs font-semibold text-cyan-200 underline underline-offset-2 hover:text-cyan-100"
+                onClick={() => setShowLegalDetails((prev) => !prev)}
+              >
+                {showLegalDetails ? legalUi.linkHide : legalUi.linkShow}
+              </button>
+              {showLegalDetails ? (
+                <pre className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg bg-black/20 p-3 text-xs text-slate-200 ring-1 ring-white/10">
+                  {legalTermsByCountry(legalCountry)}
+                </pre>
+              ) : null}
+
+              <label className="mt-4 flex items-start gap-2 rounded-lg bg-white/5 p-3 text-sm ring-1 ring-white/10">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-cyan-400"
+                  checked={legalConsentChecked}
+                  onChange={(e) => setLegalConsentChecked(e.target.checked)}
+                />
+                <span className="text-slate-200">{legalUi.checkbox}</span>
+              </label>
+
+              <div className="mt-5 flex justify-end gap-2">
+                <button type="button" className="btn-secondary" onClick={closeLegalModal}>
+                  {legalUi.cancel}
+                </button>
+                <button type="button" className="btn-primary" onClick={() => void confirmLegalModal()} disabled={!legalConsentChecked}>
+                  {legalUi.confirm}
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
       </AppShell>

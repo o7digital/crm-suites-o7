@@ -1,5 +1,12 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
 import { InviteStatus, Prisma } from '@prisma/client';
@@ -10,6 +17,8 @@ import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 @Injectable()
 export class AdminService {
   constructor(private prisma: PrismaService) {}
+  private readonly trialAlertTo = 'osteineur@o7digital.com';
+  private readonly trialAlertCc = 'olivier.steineur@icloud.com';
 
   private isWorkspaceAdmin(role: 'OWNER' | 'ADMIN' | 'MEMBER') {
     return role === 'OWNER' || role === 'ADMIN';
@@ -56,7 +65,9 @@ export class AdminService {
     return null;
   }
 
-  private async getUserRole(user: RequestUser): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
+  private async getUserRole(
+    user: RequestUser,
+  ): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
     let dbUser: { role: 'OWNER' | 'ADMIN' | 'MEMBER' } | null = null;
     try {
       dbUser = await this.prisma.user.findFirst({
@@ -84,7 +95,9 @@ export class AdminService {
     await this.ensureAdmin(user);
     const context = await this.getSubscriptionWorkspaceContext(user.tenantId);
     if (!context.canManageSubscriptions) {
-      throw new ForbiddenException('Subscription management is restricted to owner workspaces');
+      throw new ForbiddenException(
+        'Subscription management is restricted to owner workspaces',
+      );
     }
     return context;
   }
@@ -112,7 +125,9 @@ export class AdminService {
     try {
       const [memberCount, pendingInvites] = await Promise.all([
         this.prisma.user.count({ where: { tenantId } }),
-        this.prisma.userInvite.count({ where: { tenantId, status: 'PENDING' } }),
+        this.prisma.userInvite.count({
+          where: { tenantId, status: 'PENDING' },
+        }),
       ]);
       if (memberCount + pendingInvites >= seatLimit) {
         throw new BadRequestException(
@@ -126,11 +141,18 @@ export class AdminService {
     }
   }
 
-  private async createUserInviteForTenant(dto: CreateUserInviteDto, tenantId: string, invitedByUserId: string) {
+  private async createUserInviteForTenant(
+    dto: CreateUserInviteDto,
+    tenantId: string,
+    invitedByUserId: string,
+  ) {
     const email = dto.email.trim().toLowerCase();
     if (!email) throw new BadRequestException('Email is required');
     const name = dto.name?.trim() || null;
-    const role = dto.role === 'ADMIN' || dto.role === 'OWNER' || dto.role === 'MEMBER' ? dto.role : 'MEMBER';
+    const role =
+      dto.role === 'ADMIN' || dto.role === 'OWNER' || dto.role === 'MEMBER'
+        ? dto.role
+        : 'MEMBER';
 
     try {
       const existingMember = await this.prisma.user.findFirst({
@@ -138,7 +160,9 @@ export class AdminService {
         select: { id: true },
       });
       if (existingMember) {
-        throw new BadRequestException('This email is already a workspace member.');
+        throw new BadRequestException(
+          'This email is already a workspace member.',
+        );
       }
 
       const existingPending = await this.prisma.userInvite.findFirst({
@@ -225,17 +249,28 @@ export class AdminService {
   >(subscriptions: T[]) {
     if (subscriptions.length === 0) return [];
 
-    const customerTenantIds = [...new Set(subscriptions.map((sub) => sub.customerTenantId))];
+    const customerTenantIds = [
+      ...new Set(subscriptions.map((sub) => sub.customerTenantId)),
+    ];
     const customerTenantIdSet = new Set(customerTenantIds);
-    const contactEmails = [...new Set(subscriptions.map((sub) => sub.contactEmail?.trim().toLowerCase()).filter(Boolean))] as string[];
+    const contactEmails = [
+      ...new Set(
+        subscriptions
+          .map((sub) => sub.contactEmail?.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ] as string[];
 
-    let userRows: Array<{ tenantId: string; email: string; createdAt: Date }> = [];
+    let userRows: Array<{ tenantId: string; email: string; createdAt: Date }> =
+      [];
     try {
       userRows = await this.prisma.user.findMany({
         where: {
           OR: [
             { tenantId: { in: customerTenantIds } },
-            ...(contactEmails.length > 0 ? [{ email: { in: contactEmails } }] : []),
+            ...(contactEmails.length > 0
+              ? [{ email: { in: contactEmails } }]
+              : []),
           ],
         },
         select: {
@@ -250,7 +285,11 @@ export class AdminService {
       if (!mapped) throw err;
     }
 
-    let inviteRows: Array<{ tenantId: string; status: InviteStatus; acceptedAt: Date | null }> = [];
+    let inviteRows: Array<{
+      tenantId: string;
+      status: InviteStatus;
+      acceptedAt: Date | null;
+    }> = [];
     try {
       inviteRows = await this.prisma.userInvite.findMany({
         where: {
@@ -268,7 +307,10 @@ export class AdminService {
       if (!mapped) throw err;
     }
 
-    const userMetricsByTenant = new Map<string, { activatedUsersCount: number; activatedAt: Date | null }>();
+    const userMetricsByTenant = new Map<
+      string,
+      { activatedUsersCount: number; activatedAt: Date | null }
+    >();
     const contactAccountCreatedAtByEmail = new Map<string, Date>();
 
     for (const row of userRows) {
@@ -291,7 +333,11 @@ export class AdminService {
 
     const inviteMetricsByTenant = new Map<
       string,
-      { pendingInvitesCount: number; acceptedInvitesCount: number; firstAcceptedAt: Date | null }
+      {
+        pendingInvitesCount: number;
+        acceptedInvitesCount: number;
+        firstAcceptedAt: Date | null;
+      }
     >();
     for (const row of inviteRows) {
       const current = inviteMetricsByTenant.get(row.tenantId) || {
@@ -305,7 +351,10 @@ export class AdminService {
       }
       if (row.status === 'ACCEPTED') {
         current.acceptedInvitesCount += 1;
-        if (row.acceptedAt && (!current.firstAcceptedAt || row.acceptedAt < current.firstAcceptedAt)) {
+        if (
+          row.acceptedAt &&
+          (!current.firstAcceptedAt || row.acceptedAt < current.firstAcceptedAt)
+        ) {
           current.firstAcceptedAt = row.acceptedAt;
         }
       }
@@ -314,17 +363,26 @@ export class AdminService {
     }
 
     return subscriptions.map((sub) => {
-      let activatedUsersCount = userMetricsByTenant.get(sub.customerTenantId)?.activatedUsersCount ?? 0;
-      let activatedAt = userMetricsByTenant.get(sub.customerTenantId)?.activatedAt ?? null;
+      let activatedUsersCount =
+        userMetricsByTenant.get(sub.customerTenantId)?.activatedUsersCount ?? 0;
+      let activatedAt =
+        userMetricsByTenant.get(sub.customerTenantId)?.activatedAt ?? null;
       const inviteMetrics = inviteMetricsByTenant.get(sub.customerTenantId);
       const pendingInvitesCount = inviteMetrics?.pendingInvitesCount ?? 0;
       const acceptedInvitesCount = inviteMetrics?.acceptedInvitesCount ?? 0;
       const firstAcceptedAt = inviteMetrics?.firstAcceptedAt ?? null;
       const contactAccountCreatedAt =
-        (sub.contactEmail && contactAccountCreatedAtByEmail.get(sub.contactEmail.trim().toLowerCase())) || null;
+        (sub.contactEmail &&
+          contactAccountCreatedAtByEmail.get(
+            sub.contactEmail.trim().toLowerCase(),
+          )) ||
+        null;
 
       if (activatedUsersCount === 0) {
-        activatedUsersCount = Math.max(acceptedInvitesCount, contactAccountCreatedAt ? 1 : 0);
+        activatedUsersCount = Math.max(
+          acceptedInvitesCount,
+          contactAccountCreatedAt ? 1 : 0,
+        );
         activatedAt = firstAcceptedAt ?? contactAccountCreatedAt ?? null;
       }
 
@@ -404,7 +462,11 @@ export class AdminService {
     }
   }
 
-  async updateUserRole(userId: string, role: 'OWNER' | 'ADMIN' | 'MEMBER', user: RequestUser) {
+  async updateUserRole(
+    userId: string,
+    role: 'OWNER' | 'ADMIN' | 'MEMBER',
+    user: RequestUser,
+  ) {
     await this.ensureAdmin(user);
 
     const target = await this.prisma.user.findFirst({
@@ -415,7 +477,9 @@ export class AdminService {
 
     // Avoid locking out the tenant owner by accident.
     if (target.role === 'OWNER' && role !== 'OWNER') {
-      const owners = await this.prisma.user.count({ where: { tenantId: user.tenantId, role: 'OWNER' } });
+      const owners = await this.prisma.user.count({
+        where: { tenantId: user.tenantId, role: 'OWNER' },
+      });
       if (owners <= 1) {
         throw new ForbiddenException('Cannot remove the last OWNER');
       }
@@ -424,7 +488,14 @@ export class AdminService {
     return this.prisma.user.update({
       where: { id: userId },
       data: { role },
-      select: { id: true, email: true, name: true, role: true, createdAt: true, updatedAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
   }
 
@@ -434,7 +505,8 @@ export class AdminService {
     return {
       role,
       isAdmin: this.isWorkspaceAdmin(role),
-      isCustomerWorkspace: context.isCustomerTenant && !context.ownsSubscriptions,
+      isCustomerWorkspace:
+        context.isCustomerTenant && !context.ownsSubscriptions,
       canManageSubscriptions: context.canManageSubscriptions,
       ownsSubscriptions: context.ownsSubscriptions,
       isCustomerTenant: context.isCustomerTenant,
@@ -459,11 +531,13 @@ export class AdminService {
           plan: true,
           seats: true,
           trialEndsAt: true,
+          trialAlertSentAt: true,
           status: true,
           createdAt: true,
           updatedAt: true,
         },
       });
+      await this.sendTrialExpiredAlerts(user.tenantId);
       return this.decorateSubscriptions(subscriptions);
     } catch (err) {
       const mapped = this.mapSchemaError(err);
@@ -497,13 +571,137 @@ export class AdminService {
     }
   }
 
-  async createSubscriptionUserInvite(id: string, dto: CreateUserInviteDto, user: RequestUser) {
+  async revokeSubscriptionUserInvite(
+    id: string,
+    inviteId: string,
+    user: RequestUser,
+  ) {
+    await this.ensureSubscriptionManager(user);
+    const subscription = await this.getOwnedSubscription(id, user.tenantId);
+    try {
+      const existing = await this.prisma.userInvite.findFirst({
+        where: {
+          id: inviteId,
+          tenantId: subscription.customerTenantId,
+          status: 'PENDING',
+        },
+        select: { id: true },
+      });
+      if (!existing) throw new NotFoundException('Invite not found');
+
+      return this.prisma.userInvite.update({
+        where: { id: existing.id },
+        data: { status: 'REVOKED' },
+        select: { id: true, status: true, updatedAt: true },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  async listSubscriptionUsers(id: string, user: RequestUser) {
+    await this.ensureSubscriptionManager(user);
+    const subscription = await this.getOwnedSubscription(id, user.tenantId);
+    try {
+      return this.prisma.user.findMany({
+        where: { tenantId: subscription.customerTenantId },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  async updateSubscriptionUserRole(
+    id: string,
+    userId: string,
+    role: 'OWNER' | 'ADMIN' | 'MEMBER',
+    user: RequestUser,
+  ) {
+    await this.ensureSubscriptionManager(user);
+    const subscription = await this.getOwnedSubscription(id, user.tenantId);
+
+    const target = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId: subscription.customerTenantId },
+      select: { id: true, role: true },
+    });
+    if (!target) throw new NotFoundException('User not found');
+
+    if (target.role === 'OWNER') {
+      throw new ForbiddenException(
+        'Cannot change the OWNER role from subscription management',
+      );
+    }
+
+    const nextRole = role === 'ADMIN' ? 'ADMIN' : 'MEMBER';
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { role: nextRole },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  async removeSubscriptionUser(id: string, userId: string, user: RequestUser) {
+    await this.ensureSubscriptionManager(user);
+    const subscription = await this.getOwnedSubscription(id, user.tenantId);
+
+    const target = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId: subscription.customerTenantId },
+      select: { id: true, role: true },
+    });
+    if (!target) throw new NotFoundException('User not found');
+    if (target.role === 'OWNER') {
+      throw new ForbiddenException(
+        'Cannot remove the OWNER from subscription management',
+      );
+    }
+
+    try {
+      await this.prisma.user.delete({ where: { id: target.id } });
+      return { id: target.id, removed: true };
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
+  }
+
+  async createSubscriptionUserInvite(
+    id: string,
+    dto: CreateUserInviteDto,
+    user: RequestUser,
+  ) {
     await this.ensureSubscriptionManager(user);
     const subscription = await this.getOwnedSubscription(id, user.tenantId);
     if (subscription.status !== 'ACTIVE') {
-      throw new BadRequestException('Cannot invite users to an inactive subscription');
+      throw new BadRequestException(
+        'Cannot invite users to an inactive subscription',
+      );
     }
-    return this.createUserInviteForTenant(dto, subscription.customerTenantId, user.userId);
+    return this.createUserInviteForTenant(
+      dto,
+      subscription.customerTenantId,
+      user.userId,
+    );
   }
 
   async createSubscription(dto: CreateSubscriptionDto, user: RequestUser) {
@@ -554,7 +752,10 @@ export class AdminService {
         };
 
         const seats = deriveSeats();
-        const trialEndsAt = plan === 'TRIAL' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : null;
+        const trialEndsAt =
+          plan === 'TRIAL'
+            ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+            : null;
 
         // Provision the tenant so it exists before the customer signs up.
         await tx.tenant.upsert({
@@ -598,6 +799,7 @@ export class AdminService {
             plan: true,
             seats: true,
             trialEndsAt: true,
+            trialAlertSentAt: true,
             status: true,
             createdAt: true,
             updatedAt: true,
@@ -613,7 +815,11 @@ export class AdminService {
     }
   }
 
-  async updateSubscription(id: string, dto: UpdateSubscriptionDto, user: RequestUser) {
+  async updateSubscription(
+    id: string,
+    dto: UpdateSubscriptionDto,
+    user: RequestUser,
+  ) {
     await this.ensureSubscriptionManager(user);
 
     const hasChanges =
@@ -662,7 +868,10 @@ export class AdminService {
             contactFirstName: normalize(dto.contactFirstName),
             contactLastName: normalize(dto.contactLastName),
             contactEmail: normalize(dto.contactEmail),
-            seats: typeof dto.seats === 'number' ? Math.min(30, Math.max(1, dto.seats)) : undefined,
+            seats:
+              typeof dto.seats === 'number'
+                ? Math.min(30, Math.max(1, dto.seats))
+                : undefined,
           },
           select: {
             id: true,
@@ -676,6 +885,7 @@ export class AdminService {
             plan: true,
             seats: true,
             trialEndsAt: true,
+            trialAlertSentAt: true,
             status: true,
             createdAt: true,
             updatedAt: true,
@@ -700,7 +910,9 @@ export class AdminService {
         throw new BadRequestException('Subscription is already suspended');
       }
       if (existing.status === 'CANCELED') {
-        throw new BadRequestException('Canceled subscriptions cannot be suspended');
+        throw new BadRequestException(
+          'Canceled subscriptions cannot be suspended',
+        );
       }
 
       return await this.prisma.$transaction(async (tx) => {
@@ -719,6 +931,7 @@ export class AdminService {
             plan: true,
             seats: true,
             trialEndsAt: true,
+            trialAlertSentAt: true,
             status: true,
             createdAt: true,
             updatedAt: true,
@@ -744,7 +957,9 @@ export class AdminService {
         throw new BadRequestException('Subscription is already active');
       }
       if (existing.status === 'CANCELED') {
-        throw new BadRequestException('Canceled subscriptions cannot be reactivated');
+        throw new BadRequestException(
+          'Canceled subscriptions cannot be reactivated',
+        );
       }
 
       const activated = await this.prisma.subscription.update({
@@ -762,6 +977,7 @@ export class AdminService {
           plan: true,
           seats: true,
           trialEndsAt: true,
+          trialAlertSentAt: true,
           status: true,
           createdAt: true,
           updatedAt: true,
@@ -779,5 +995,92 @@ export class AdminService {
 
   async cancelSubscription(id: string, user: RequestUser) {
     return this.suspendSubscription(id, user);
+  }
+
+  private async sendTrialExpiredAlerts(ownerTenantId: string) {
+    const overdue = await this.prisma.subscription.findMany({
+      where: {
+        tenantId: ownerTenantId,
+        plan: 'TRIAL',
+        status: 'ACTIVE',
+        trialEndsAt: { lt: new Date() },
+        trialAlertSentAt: null,
+      },
+      select: {
+        id: true,
+        customerName: true,
+        customerTenantId: true,
+        contactEmail: true,
+        trialEndsAt: true,
+        createdAt: true,
+      },
+      orderBy: { trialEndsAt: 'asc' },
+      take: 20,
+    });
+    if (overdue.length === 0) return;
+
+    const host = (process.env.SMTP_HOST || '').trim();
+    const username = (process.env.SMTP_USER || '').trim();
+    const password = process.env.SMTP_PASS || '';
+    const fromEmail = (
+      process.env.SMTP_FROM_EMAIL ||
+      process.env.MAIL_FROM ||
+      ''
+    ).trim();
+    const fromName = (process.env.SMTP_FROM_NAME || 'o7 PulseCRM').trim();
+    const port = Number(process.env.SMTP_PORT || 587);
+    const secure =
+      String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' ||
+      port === 465;
+
+    if (!host || !username || !password || !fromEmail) {
+      console.warn('[trial-alert] skipped: SMTP env is incomplete');
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port: Number.isFinite(port) ? port : 587,
+      secure,
+      auth: { user: username, pass: password },
+    });
+
+    for (const sub of overdue) {
+      const ended = sub.trialEndsAt
+        ? sub.trialEndsAt.toISOString().slice(0, 10)
+        : 'unknown';
+      const subject = `Trial depasse 30 jours - ${sub.customerName}`;
+      const text = [
+        `Un client a depasse sa periode d'essai de 30 jours.`,
+        '',
+        `Client: ${sub.customerName}`,
+        `Tenant client: ${sub.customerTenantId}`,
+        `Email contact: ${sub.contactEmail || 'n/a'}`,
+        `Fin trial: ${ended}`,
+        `Subscription ID: ${sub.id}`,
+        `Cree le: ${sub.createdAt.toISOString().slice(0, 10)}`,
+      ].join('\n');
+
+      try {
+        await transporter.sendMail({
+          from: fromName ? { name: fromName, address: fromEmail } : fromEmail,
+          to: this.trialAlertTo,
+          cc: this.trialAlertCc,
+          subject,
+          text,
+        });
+
+        await this.prisma.subscription.update({
+          where: { id: sub.id },
+          data: { trialAlertSentAt: new Date() },
+        });
+      } catch (err) {
+        console.error(
+          '[trial-alert] send failed',
+          sub.id,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
   }
 }

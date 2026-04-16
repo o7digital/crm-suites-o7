@@ -517,6 +517,20 @@ const CORE_MESSAGES = {
     "adminSubscriptions.invites.inviting": "Inviting…",
     "adminSubscriptions.invites.loading": "Loading pending invites…",
     "adminSubscriptions.invites.empty": "No pending invites.",
+    "adminSubscriptions.invites.revoke": "Revoke",
+    "adminSubscriptions.invites.revoking": "Revoking…",
+    "adminSubscriptions.invites.revoked": "Invite revoked.",
+    "adminSubscriptions.users.title": "Workspace users",
+    "adminSubscriptions.users.subtitle":
+      "Manage existing admins and standard users for this customer workspace.",
+    "adminSubscriptions.users.loading": "Loading users…",
+    "adminSubscriptions.users.empty": "No active users yet.",
+    "adminSubscriptions.users.remove": "Remove",
+    "adminSubscriptions.users.removing": "Removing…",
+    "adminSubscriptions.users.removed": "User removed.",
+    "adminSubscriptions.users.roleSaved": "User role updated.",
+    "adminSubscriptions.users.removeConfirm":
+      "Remove {name} from this customer workspace?",
     "adminSubscriptions.createInvites.title": "Users to invite now",
     "adminSubscriptions.createInvites.subtitle":
       "Add several users with their role before creating the workspace.",
@@ -1065,6 +1079,20 @@ const CORE_MESSAGES = {
     "adminSubscriptions.invites.inviting": "Invitation…",
     "adminSubscriptions.invites.loading": "Chargement des invitations…",
     "adminSubscriptions.invites.empty": "Aucune invitation en attente.",
+    "adminSubscriptions.invites.revoke": "Revoquer",
+    "adminSubscriptions.invites.revoking": "Revocation…",
+    "adminSubscriptions.invites.revoked": "Invitation revoquee.",
+    "adminSubscriptions.users.title": "Utilisateurs du workspace",
+    "adminSubscriptions.users.subtitle":
+      "Gerez les admins et utilisateurs standards existants de cet espace client.",
+    "adminSubscriptions.users.loading": "Chargement des utilisateurs…",
+    "adminSubscriptions.users.empty": "Aucun utilisateur actif pour le moment.",
+    "adminSubscriptions.users.remove": "Supprimer",
+    "adminSubscriptions.users.removing": "Suppression…",
+    "adminSubscriptions.users.removed": "Utilisateur supprime.",
+    "adminSubscriptions.users.roleSaved": "Role utilisateur mis a jour.",
+    "adminSubscriptions.users.removeConfirm":
+      "Supprimer {name} de cet espace client ?",
     "adminSubscriptions.createInvites.title":
       "Utilisateurs a inviter maintenant",
     "adminSubscriptions.createInvites.subtitle":
@@ -1610,6 +1638,20 @@ const CORE_MESSAGES = {
     "adminSubscriptions.invites.inviting": "Invitando…",
     "adminSubscriptions.invites.loading": "Cargando invitaciones pendientes…",
     "adminSubscriptions.invites.empty": "No hay invitaciones pendientes.",
+    "adminSubscriptions.invites.revoke": "Revocar",
+    "adminSubscriptions.invites.revoking": "Revocando…",
+    "adminSubscriptions.invites.revoked": "Invitacion revocada.",
+    "adminSubscriptions.users.title": "Usuarios del workspace",
+    "adminSubscriptions.users.subtitle":
+      "Gestiona los admins y usuarios estandar existentes de este espacio cliente.",
+    "adminSubscriptions.users.loading": "Cargando usuarios…",
+    "adminSubscriptions.users.empty": "Todavia no hay usuarios activos.",
+    "adminSubscriptions.users.remove": "Eliminar",
+    "adminSubscriptions.users.removing": "Eliminando…",
+    "adminSubscriptions.users.removed": "Usuario eliminado.",
+    "adminSubscriptions.users.roleSaved": "Rol de usuario actualizado.",
+    "adminSubscriptions.users.removeConfirm":
+      "Eliminar a {name} de este espacio cliente?",
     "adminSubscriptions.createInvites.title": "Usuarios a invitar ahora",
     "adminSubscriptions.createInvites.subtitle":
       "Agrega varios usuarios con su rol antes de crear el espacio.",
