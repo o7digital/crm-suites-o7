@@ -233,15 +233,20 @@ export default function PostSalesPage() {
     void loadOperationalStages();
   }, [loadOperationalStages, postSalesPipelineId, token]);
 
+  const selectedDealId = useMemo(() => {
+    if (!selectedCaseId) return null;
+    return postSalesCases.find((item) => item.id === selectedCaseId)?.deal?.id || null;
+  }, [postSalesCases, selectedCaseId]);
+
   useEffect(() => {
-    if (!selectedCase?.deal?.id) {
+    if (!selectedDealId) {
       setSelectedDealDetails(null);
       return;
     }
-    api<DealDetails>(`/deals/${selectedCase.deal.id}`)
+    api<DealDetails>(`/deals/${selectedDealId}`)
       .then((deal) => setSelectedDealDetails(deal))
       .catch(() => setSelectedDealDetails(null));
-  }, [api, selectedCase?.deal?.id]);
+  }, [api, selectedDealId]);
 
   const canAccessPostSales = workspaceRole ? workspaceRole === 'OWNER' || workspaceRole === 'ADMIN' : false;
 
@@ -682,7 +687,7 @@ export default function PostSalesPage() {
                   const cases = casesByStatus[column.statusKey];
                   return (
                     <section
-                      key={column.key}
+                      key={column.stageId}
                       className="w-[340px] min-w-[340px] flex-[0_0_auto] rounded-2xl border border-white/10 bg-white/5 p-4"
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={(event) => {
