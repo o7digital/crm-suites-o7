@@ -77,11 +77,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (themeMode === 'day') {
       root.style.colorScheme = 'light';
       root.dataset.themeMode = 'day';
-      setVar('--background', '#eef3ff');
-      setVar('--surface', '#ffffff');
-      setVar('--card', '#f7faff');
-      setVar('--foreground', '#0f172a');
-      setVar('--muted', '#475569');
+      setVar('--background', '#dbeafe');
+      setVar('--surface', '#f8fbff');
+      setVar('--card', '#ffffff');
+      setVar('--foreground', '#0b1220');
+      setVar('--muted', '#334155');
       setVar('--accent', branding.accentColor || '#2563eb');
       setVar('--accent-2', branding.accentColor2 || '#0ea5e9');
       return;
