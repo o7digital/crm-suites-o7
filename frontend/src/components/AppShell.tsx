@@ -179,7 +179,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
           <div className="flex items-center gap-3">
             <button type="button" className="btn-secondary text-sm" onClick={toggleThemeMode}>
-              <span aria-hidden="true">{themeMode === 'night' ? '☀️' : '🌙'}</span>
+              <span
+                aria-hidden="true"
+                className="inline-flex h-6 w-6 items-center justify-center"
+                style={{ color: themeMode === 'night' ? '#f8fafc' : '#0b1220' }}
+              >
+                {themeMode === 'night' ? (
+                  <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M19.07 4.93l-2.12 2.12M7.05 16.95l-2.12 2.12" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" className="h-6 w-6" fill="currentColor">
+                    <path d="M21 14.5A8.5 8.5 0 1 1 9.5 3a7 7 0 1 0 11.5 11.5z" />
+                  </svg>
+                )}
+              </span>
               <span className="sr-only">{themeMode === 'night' ? 'Switch to day mode' : 'Switch to night mode'}</span>
             </button>
             {user ? (
