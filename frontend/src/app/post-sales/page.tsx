@@ -116,6 +116,24 @@ const POST_SALES_STATUS_LABELS: Record<PostSalesStatus, string> = {
   support: 'Support',
   done: 'Done',
 };
+const COMMERCIAL_STAGE_KEYWORDS = [
+  'opportunit',
+  'opportunity',
+  'lead',
+  'prospect',
+  'propuesta',
+  'proposal',
+  'quote',
+  'devis',
+  'negoci',
+  'cita',
+  'meeting',
+  'demo',
+  'discovery',
+  'won',
+  'closed won',
+  'lost',
+];
 
 const PRIORITY_BADGE: Record<PostSalesPriority, string> = {
   low: 'bg-slate-500/20 text-slate-200 ring-slate-400/30',
@@ -221,7 +239,17 @@ export default function PostSalesPage() {
     if (!token) return;
     api<Pipeline[]>('/pipelines')
       .then((data) => {
-        const pipeline = data.find((item) => item.name.toLowerCase().includes('post sales'));
+        const pipeline = data.find((item) => {
+          const name = item.name.toLowerCase();
+          return (
+            name.includes('post sales') ||
+            name.includes('post-sales') ||
+            name.includes('post venta') ||
+            name.includes('post-venta') ||
+            name.includes('postventa') ||
+            name.includes('delivery')
+          );
+        });
         setPostSalesPipelineId(pipeline?.id || '');
       })
       .catch(() => {
@@ -232,6 +260,32 @@ export default function PostSalesPage() {
     if (!token || !postSalesPipelineId) return;
     void loadOperationalStages();
   }, [loadOperationalStages, postSalesPipelineId, token]);
+
+  const hasCommercialLeakInWorkflow = useMemo(() => {
+    if (!operationalStages.length) return false;
+    return operationalStages
+      .slice(0, POST_SALES_STATUS_KEYS.length)
+      .some((stage) =>
+        COMMERCIAL_STAGE_KEYWORDS.some((keyword) => (stage.name || '').trim().toLowerCase().includes(keyword)),
+      );
+  }, [operationalStages]);
+
+  useEffect(() => {
+    if (!token || !postSalesPipelineId || !operationalStages.length) return;
+    if (!hasCommercialLeakInWorkflow) return;
+    const targetStages = operationalStages.slice(0, POST_SALES_STATUS_KEYS.length);
+    void Promise.all(
+      targetStages.map((stage, idx) => {
+        const expected = POST_SALES_STATUS_LABELS[POST_SALES_STATUS_KEYS[idx]];
+        if ((stage.name || '').trim() === expected) return Promise.resolve();
+        return api(`/stages/${stage.id}`, { method: 'PATCH', body: JSON.stringify({ name: expected }) });
+      }),
+    )
+      .then(() => loadOperationalStages())
+      .catch(() => {
+        // Keep the board usable even if the auto-heal request fails.
+      });
+  }, [api, hasCommercialLeakInWorkflow, loadOperationalStages, operationalStages, postSalesPipelineId, token]);
 
   const selectedDealId = useMemo(() => {
     if (!selectedCaseId) return null;
@@ -271,10 +325,10 @@ export default function PostSalesPage() {
     return stages.slice(0, POST_SALES_STATUS_KEYS.length).map((stage, idx) => ({
       stageId: stage.id,
       statusKey: POST_SALES_STATUS_KEYS[idx],
-      label: stage.name || POST_SALES_STATUS_LABELS[POST_SALES_STATUS_KEYS[idx]],
+      label: hasCommercialLeakInWorkflow ? POST_SALES_STATUS_LABELS[POST_SALES_STATUS_KEYS[idx]] : stage.name || POST_SALES_STATUS_LABELS[POST_SALES_STATUS_KEYS[idx]],
       position: stage.position,
     }));
-  }, [operationalStages]);
+  }, [hasCommercialLeakInWorkflow, operationalStages]);
 
   const statusByStageId = useMemo(() => {
     const map = new Map<string, PostSalesStatus>();
