@@ -179,7 +179,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
           <div className="flex items-center gap-3">
             <button type="button" className="btn-secondary text-sm" onClick={toggleThemeMode}>
-              {themeMode === 'night' ? 'Day' : 'Night'}
+              <span aria-hidden="true">{themeMode === 'night' ? '☀️' : '🌙'}</span>
+              <span className="sr-only">{themeMode === 'night' ? 'Switch to day mode' : 'Switch to night mode'}</span>
             </button>
             {user ? (
               <div className="relative" ref={accountRef}>
