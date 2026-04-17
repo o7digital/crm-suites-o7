@@ -29,7 +29,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   const [accountOpen, setAccountOpen] = useState(false);
   const [workspaceRole, setWorkspaceRole] = useState<'OWNER' | 'ADMIN' | 'MEMBER' | null>(null);
+  const [themeMode, setThemeMode] = useState<'night' | 'day'>('night');
   const accountRef = useRef<HTMLDivElement | null>(null);
+  const themeStorageKey = 'o7-theme-mode';
 
   const showAdminBackToTop = Boolean(pathname && pathname !== '/admin' && pathname.startsWith('/admin/'));
 
@@ -57,6 +59,46 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [api, token]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = window.localStorage.getItem(themeStorageKey);
+    if (saved === 'day' || saved === 'night') {
+      setThemeMode(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const setVar = (name: string, value: string | null) => {
+      if (value) root.style.setProperty(name, value);
+      else root.style.removeProperty(name);
+    };
+
+    if (themeMode === 'day') {
+      root.style.colorScheme = 'light';
+      root.dataset.themeMode = 'day';
+      setVar('--background', '#eef3ff');
+      setVar('--surface', '#ffffff');
+      setVar('--card', '#f7faff');
+      setVar('--foreground', '#0f172a');
+      setVar('--muted', '#475569');
+      setVar('--accent', branding.accentColor || '#2563eb');
+      setVar('--accent-2', branding.accentColor2 || '#0ea5e9');
+      return;
+    }
+
+    root.style.colorScheme = 'dark';
+    root.dataset.themeMode = 'night';
+    setVar('--background', branding.backgroundColor);
+    setVar('--surface', branding.surfaceColor);
+    setVar('--card', branding.cardColor);
+    setVar('--foreground', branding.foregroundColor);
+    setVar('--muted', branding.mutedColor);
+    setVar('--accent', branding.accentColor);
+    setVar('--accent-2', branding.accentColor2);
+  }, [branding, themeMode]);
+
+  useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
       if (!accountOpen) return;
       const target = event.target as Node | null;
@@ -72,6 +114,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     await logout();
     router.replace('/login');
   };
+
+  const toggleThemeMode = useCallback(() => {
+    setThemeMode((prev) => {
+      const next = prev === 'night' ? 'day' : 'night';
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(themeStorageKey, next);
+      }
+      return next;
+    });
+  }, []);
 
   const accountItems = useMemo(
     () => [
@@ -126,6 +178,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
           <div className="flex items-center gap-3">
+            <button type="button" className="btn-secondary text-sm" onClick={toggleThemeMode}>
+              {themeMode === 'night' ? 'Day' : 'Night'}
+            </button>
             {user ? (
               <div className="relative" ref={accountRef}>
                 <button
