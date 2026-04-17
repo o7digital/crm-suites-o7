@@ -19,6 +19,15 @@ export class AdminService {
   constructor(private prisma: PrismaService) {}
   private readonly trialAlertTo = 'osteineur@o7digital.com';
   private readonly trialAlertCc = 'olivier.steineur@icloud.com';
+  private readonly inviteSchemaPendingMessage =
+    'Invite feature is temporarily unavailable while database migration is pending. Redeploy the API (or run migrations), then retry.';
+
+  private isSchemaUpgradePendingError(err: unknown): boolean {
+    return (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      (err.code === 'P2021' || err.code === 'P2022')
+    );
+  }
 
   private isWorkspaceAdmin(role: 'OWNER' | 'ADMIN' | 'MEMBER') {
     return role === 'OWNER' || role === 'ADMIN';
@@ -47,6 +56,9 @@ export class AdminService {
         canManageSubscriptions,
       };
     } catch (err) {
+      if (this.isSchemaUpgradePendingError(err)) {
+        throw new BadRequestException(this.inviteSchemaPendingMessage);
+      }
       const mapped = this.mapSchemaError(err);
       if (mapped) throw mapped;
       throw err;
@@ -54,13 +66,10 @@ export class AdminService {
   }
 
   private mapSchemaError(err: unknown): ServiceUnavailableException | null {
-    if (err instanceof Prisma.PrismaClientKnownRequestError) {
-      // Common Prisma codes when tables/columns are missing because migrations haven't run yet.
-      if (err.code === 'P2021' || err.code === 'P2022') {
-        return new ServiceUnavailableException(
-          'Database schema upgrade pending. Redeploy the API (or run migrations), then retry.',
-        );
-      }
+    if (this.isSchemaUpgradePendingError(err)) {
+      return new ServiceUnavailableException(
+        'Database schema upgrade pending. Redeploy the API (or run migrations), then retry.',
+      );
     }
     return null;
   }
@@ -135,6 +144,9 @@ export class AdminService {
         );
       }
     } catch (err) {
+      if (this.isSchemaUpgradePendingError(err)) {
+        throw new BadRequestException(this.inviteSchemaPendingMessage);
+      }
       const mapped = this.mapSchemaError(err);
       if (mapped) throw mapped;
       throw err;
@@ -430,6 +442,7 @@ export class AdminService {
         },
       });
     } catch (err) {
+      if (this.isSchemaUpgradePendingError(err)) return [];
       const mapped = this.mapSchemaError(err);
       if (mapped) throw mapped;
       throw err;
@@ -456,6 +469,9 @@ export class AdminService {
         select: { id: true, status: true, updatedAt: true },
       });
     } catch (err) {
+      if (this.isSchemaUpgradePendingError(err)) {
+        throw new BadRequestException(this.inviteSchemaPendingMessage);
+      }
       const mapped = this.mapSchemaError(err);
       if (mapped) throw mapped;
       throw err;
@@ -565,6 +581,7 @@ export class AdminService {
         },
       });
     } catch (err) {
+      if (this.isSchemaUpgradePendingError(err)) return [];
       const mapped = this.mapSchemaError(err);
       if (mapped) throw mapped;
       throw err;
@@ -595,6 +612,9 @@ export class AdminService {
         select: { id: true, status: true, updatedAt: true },
       });
     } catch (err) {
+      if (this.isSchemaUpgradePendingError(err)) {
+        throw new BadRequestException(this.inviteSchemaPendingMessage);
+      }
       const mapped = this.mapSchemaError(err);
       if (mapped) throw mapped;
       throw err;
