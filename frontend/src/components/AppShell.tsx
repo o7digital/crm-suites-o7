@@ -94,15 +94,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
             {branding.logoDataUrl ? (
-              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
+              <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={branding.logoDataUrl} alt="Logo" className="h-full w-full object-contain p-1" />
               </div>
             ) : (
-              <div className="brand-mark flex h-14 w-14 items-center justify-center rounded-xl">
+              <div className="brand-mark flex h-28 w-28 items-center justify-center rounded-xl">
                 <div className="text-center leading-[0.95]">
-                  <div className="text-[15px] font-extrabold">o7</div>
-                  <div className="text-[12px] font-semibold">Pulse</div>
+                  <div className="text-[30px] font-extrabold">o7</div>
+                  <div className="text-[24px] font-semibold">Pulse</div>
                 </div>
               </div>
             )}
