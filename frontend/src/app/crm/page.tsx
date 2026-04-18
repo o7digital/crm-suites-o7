@@ -1307,6 +1307,7 @@ export default function CrmPage() {
       const stagesToDelete = existingStages.filter((stage) => !retainedStageIds.has(stage.id));
       const undeletedStageIds = new Set<string>();
       const undeletedStageNames: string[] = [];
+      const failedUpdateStageNames: string[] = [];
 
       for (const stage of stagesToDelete) {
         try {
@@ -1332,14 +1333,18 @@ export default function CrmPage() {
           Math.abs((current.probability ?? 0) - draft.probability) > 0.00001;
         if (!changed) continue;
 
-        await api(`/stages/${draft.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            name: draft.name,
-            status: draft.status,
-            probability: draft.probability,
-          }),
-        });
+        try {
+          await api(`/stages/${draft.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              name: draft.name,
+              status: draft.status,
+              probability: draft.probability,
+            }),
+          });
+        } catch {
+          failedUpdateStageNames.push(current.name || draft.name);
+        }
       }
 
       const orderedExistingStageIds = [...existingStages]
@@ -1379,10 +1384,19 @@ export default function CrmPage() {
       setWorkflowError(null);
       setShowWorkflowModal(false);
       setRequestedStageId(createdStageResult?.created.id || null);
-      if (undeletedStageNames.length > 0) {
-        setError(
-          `Workflow guardado, pero ${undeletedStageNames.length} etapa(s) se mantuvieron porque todavía tienen deals: ${undeletedStageNames.join(', ')}`,
-        );
+      if (undeletedStageNames.length > 0 || failedUpdateStageNames.length > 0) {
+        const warnings: string[] = [];
+        if (undeletedStageNames.length > 0) {
+          warnings.push(
+            `${undeletedStageNames.length} etapa(s) se mantuvieron porque todavía tienen deals: ${undeletedStageNames.join(', ')}`,
+          );
+        }
+        if (failedUpdateStageNames.length > 0) {
+          warnings.push(
+            `${failedUpdateStageNames.length} etapa(s) no se pudieron actualizar: ${failedUpdateStageNames.join(', ')}`,
+          );
+        }
+        setError(`Workflow guardado con advertencias: ${warnings.join(' | ')}`);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to save workflow';

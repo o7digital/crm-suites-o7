@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStageDto } from './dto/create-stage.dto';
 import { UpdateStageDto } from './dto/update-stage.dto';
@@ -62,10 +63,17 @@ export class StagesService {
 
   async update(id: string, dto: UpdateStageDto, user: RequestUser) {
     await this.ensureBelongs(id, user);
-    return this.prisma.stage.update({
-      where: { id },
-      data: dto,
-    });
+    try {
+      return await this.prisma.stage.update({
+        where: { id },
+        data: dto,
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+        throw new NotFoundException('Stage not found');
+      }
+      throw new BadRequestException('Unable to update stage');
+    }
   }
 
   async reorder(dto: ReorderStagesDto, user: RequestUser) {
