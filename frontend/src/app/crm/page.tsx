@@ -1401,6 +1401,9 @@ export default function CrmPage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to save workflow';
       setWorkflowError(message);
+      if (typeof window !== 'undefined') {
+        window.alert('Error save cancel');
+      }
     } finally {
       setWorkflowSaving(false);
     }
