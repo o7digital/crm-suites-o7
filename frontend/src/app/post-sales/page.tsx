@@ -116,24 +116,7 @@ const POST_SALES_STATUS_LABELS: Record<PostSalesStatus, string> = {
   support: 'Support',
   done: 'Done',
 };
-const COMMERCIAL_STAGE_KEYWORDS = [
-  'opportunit',
-  'opportunity',
-  'lead',
-  'prospect',
-  'propuesta',
-  'proposal',
-  'quote',
-  'devis',
-  'negoci',
-  'cita',
-  'meeting',
-  'demo',
-  'discovery',
-  'won',
-  'closed won',
-  'lost',
-];
+const OPERATIONS_PIPELINE_NAME = 'Operations';
 
 const PRIORITY_BADGE: Record<PostSalesPriority, string> = {
   low: 'bg-slate-500/20 text-slate-200 ring-slate-400/30',
@@ -238,54 +221,45 @@ export default function PostSalesPage() {
   useEffect(() => {
     if (!token) return;
     api<Pipeline[]>('/pipelines')
-      .then((data) => {
-        const pipeline = data.find((item) => {
-          const name = item.name.toLowerCase();
-          return (
-            name.includes('post sales') ||
-            name.includes('post-sales') ||
-            name.includes('post venta') ||
-            name.includes('post-venta') ||
-            name.includes('postventa') ||
-            name.includes('delivery')
-          );
+      .then(async (data) => {
+        const existingOperations = data.find(
+          (item) => (item.name || '').trim().toLowerCase() === OPERATIONS_PIPELINE_NAME.toLowerCase(),
+        );
+        if (existingOperations) {
+          setPostSalesPipelineId(existingOperations.id);
+          return;
+        }
+
+        const created = await api<Pipeline>('/pipelines', {
+          method: 'POST',
+          body: JSON.stringify({ name: OPERATIONS_PIPELINE_NAME, isDefault: false }),
         });
-        setPostSalesPipelineId(pipeline?.id || '');
+        setPostSalesPipelineId(created.id);
+
+        await Promise.all(
+          POST_SALES_STATUS_KEYS.map((key, idx) =>
+            api('/stages', {
+              method: 'POST',
+              body: JSON.stringify({
+                pipelineId: created.id,
+                name: POST_SALES_STATUS_LABELS[key],
+                position: idx + 1,
+                status: key === 'done' ? 'WON' : 'OPEN',
+                probability: key === 'done' ? 1 : 0,
+              }),
+            }),
+          ),
+        );
       })
-      .catch(() => {
+      .catch((err) => {
         setPostSalesPipelineId('');
+        setError(err instanceof Error ? err.message : 'Unable to initialize Operations workflow');
       });
   }, [api, token]);
   useEffect(() => {
     if (!token || !postSalesPipelineId) return;
     void loadOperationalStages();
   }, [loadOperationalStages, postSalesPipelineId, token]);
-
-  const hasCommercialLeakInWorkflow = useMemo(() => {
-    if (!operationalStages.length) return false;
-    return operationalStages
-      .slice(0, POST_SALES_STATUS_KEYS.length)
-      .some((stage) =>
-        COMMERCIAL_STAGE_KEYWORDS.some((keyword) => (stage.name || '').trim().toLowerCase().includes(keyword)),
-      );
-  }, [operationalStages]);
-
-  useEffect(() => {
-    if (!token || !postSalesPipelineId || !operationalStages.length) return;
-    if (!hasCommercialLeakInWorkflow) return;
-    const targetStages = operationalStages.slice(0, POST_SALES_STATUS_KEYS.length);
-    void Promise.all(
-      targetStages.map((stage, idx) => {
-        const expected = POST_SALES_STATUS_LABELS[POST_SALES_STATUS_KEYS[idx]];
-        if ((stage.name || '').trim() === expected) return Promise.resolve();
-        return api(`/stages/${stage.id}`, { method: 'PATCH', body: JSON.stringify({ name: expected }) });
-      }),
-    )
-      .then(() => loadOperationalStages())
-      .catch(() => {
-        // Keep the board usable even if the auto-heal request fails.
-      });
-  }, [api, hasCommercialLeakInWorkflow, loadOperationalStages, operationalStages, postSalesPipelineId, token]);
 
   const selectedDealId = useMemo(() => {
     if (!selectedCaseId) return null;
@@ -325,10 +299,10 @@ export default function PostSalesPage() {
     return stages.slice(0, POST_SALES_STATUS_KEYS.length).map((stage, idx) => ({
       stageId: stage.id,
       statusKey: POST_SALES_STATUS_KEYS[idx],
-      label: hasCommercialLeakInWorkflow ? POST_SALES_STATUS_LABELS[POST_SALES_STATUS_KEYS[idx]] : stage.name || POST_SALES_STATUS_LABELS[POST_SALES_STATUS_KEYS[idx]],
+      label: stage.name || POST_SALES_STATUS_LABELS[POST_SALES_STATUS_KEYS[idx]],
       position: stage.position,
     }));
-  }, [hasCommercialLeakInWorkflow, operationalStages]);
+  }, [operationalStages]);
 
   const statusByStageId = useMemo(() => {
     const map = new Map<string, PostSalesStatus>();
@@ -677,8 +651,8 @@ export default function PostSalesPage() {
       <AppShell>
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Post-Sales</p>
-            <h1 className="text-3xl font-semibold">Customer Delivery Pipeline</h1>
+            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Operations</p>
+            <h1 className="text-3xl font-semibold">Operations Flow</h1>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
@@ -731,7 +705,7 @@ export default function PostSalesPage() {
           <div className="space-y-4">
             <div className="card p-4">
               <p className="text-sm text-slate-300">
-                Pipeline flow: CRM deal WON {'->'} automatic Post-Sales case {'->'} operational delivery tracking.
+                Operations flow: CRM deal WON {'->'} automatic case {'->'} operational delivery tracking.
               </p>
             </div>
 
