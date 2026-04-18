@@ -1305,9 +1305,22 @@ export default function CrmPage() {
       const existingById = new Map(existingStages.map((stage) => [stage.id, stage]));
       const retainedStageIds = new Set(normalizedDrafts.map((draft) => draft.id));
       const stagesToDelete = existingStages.filter((stage) => !retainedStageIds.has(stage.id));
+      const undeletedStageIds = new Set<string>();
+      const undeletedStageNames: string[] = [];
 
       for (const stage of stagesToDelete) {
-        await api(`/stages/${stage.id}`, { method: 'DELETE' });
+        try {
+          await api(`/stages/${stage.id}`, { method: 'DELETE' });
+        } catch (err) {
+          const message = err instanceof Error ? err.message.toLowerCase() : '';
+          const hasDeals =
+            message.includes('stage has deals') ||
+            message.includes('move deals before deleting') ||
+            message.includes('[400]');
+          if (!hasDeals) throw err;
+          undeletedStageIds.add(stage.id);
+          undeletedStageNames.push(stage.name);
+        }
       }
 
       for (const draft of normalizedDrafts) {
@@ -1330,9 +1343,16 @@ export default function CrmPage() {
       }
 
       const orderedExistingStageIds = [...existingStages]
+        .filter((stage) => retainedStageIds.has(stage.id) || undeletedStageIds.has(stage.id))
         .sort((a, b) => a.position - b.position)
         .map((stage) => stage.id);
-      const orderedDraftStageIds = normalizedDrafts.map((draft) => draft.id);
+      const orderedDraftStageIds = [
+        ...normalizedDrafts.map((draft) => draft.id),
+        ...existingStages
+          .sort((a, b) => a.position - b.position)
+          .filter((stage) => undeletedStageIds.has(stage.id))
+          .map((stage) => stage.id),
+      ];
       const workflowOrderChanged =
         orderedExistingStageIds.length === orderedDraftStageIds.length &&
         orderedExistingStageIds.some((stageId, index) => stageId !== orderedDraftStageIds[index]);
@@ -1359,6 +1379,11 @@ export default function CrmPage() {
       setWorkflowError(null);
       setShowWorkflowModal(false);
       setRequestedStageId(createdStageResult?.created.id || null);
+      if (undeletedStageNames.length > 0) {
+        setError(
+          `Workflow guardado, pero ${undeletedStageNames.length} etapa(s) se mantuvieron porque todavía tienen deals: ${undeletedStageNames.join(', ')}`,
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to save workflow';
       setWorkflowError(message);
