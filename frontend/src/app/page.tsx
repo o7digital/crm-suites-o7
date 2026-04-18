@@ -77,6 +77,11 @@ type InvoiceSummary = {
   status: string;
 };
 
+function isO7DigitalTenant(tenantName?: string | null) {
+  const normalized = (tenantName || '').trim().toLowerCase();
+  return normalized.includes('o7 digital') || normalized.includes('o7');
+}
+
 function clampProbability(value?: number | null) {
   const raw = Number(value);
   if (!Number.isFinite(raw)) return 0;
@@ -90,6 +95,7 @@ function buildPipelineTotals(
   stages: Stage[],
   deals: Deal[],
   fx: FxRatesSnapshot | null,
+  opts?: { tenantName?: string | null },
 ): PipelineTotal[] {
   const stageById = new Map(stages.map((stage) => [stage.id, stage]));
   const totalsByPipeline = new Map<
@@ -136,10 +142,9 @@ function buildPipelineTotals(
     totalsByPipeline.set(deal.pipelineId, current);
   }
 
-  const sortWeight = (name: string) => {
-    if (name === 'New Sales') return 0;
-    if (name === 'Post Sales') return 1;
-    return 2;
+  const displayPipelineName = (name: string) => {
+    if (isO7DigitalTenant(opts?.tenantName) && name === 'Post Sales') return 'Sales Existing Customers';
+    return name;
   };
 
   return Array.from(totalsByPipeline.values())
@@ -152,20 +157,16 @@ function buildPipelineTotals(
 
       return {
         pipelineId: pipeline.pipelineId,
-        name: pipeline.name,
+        name: displayPipelineName(pipeline.name),
         open: pipeline.open,
         weightedOpenValueUsd,
       };
     })
-    .sort((a, b) => {
-      const rankDiff = sortWeight(a.name) - sortWeight(b.name);
-      if (rankDiff !== 0) return rankDiff;
-      return a.name.localeCompare(b.name);
-    });
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export default function DashboardPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const api = useApi(token);
   const { t } = useI18n();
   const [data, setData] = useState<DashboardPayload | null>(null);
@@ -203,6 +204,7 @@ export default function DashboardPage() {
                 stagesResult.value,
                 dealsResult.value,
                 fxResult.status === 'fulfilled' ? fxResult.value : null,
+                { tenantName: user?.tenantName },
               )
             : [];
 
@@ -229,15 +231,9 @@ export default function DashboardPage() {
       active = false;
       if (timer) window.clearInterval(timer);
     };
-  }, [api, token]);
+  }, [api, token, user?.tenantName]);
 
-  const primaryPipelineTotals = (() => {
-    if (!data?.pipelineTotals?.length) return [];
-    const preferred = ['New Sales', 'Post Sales']
-      .map((name) => data.pipelineTotals.find((pipeline) => pipeline.name === name))
-      .filter((pipeline): pipeline is PipelineTotal => Boolean(pipeline));
-    return preferred.length > 0 ? preferred : data.pipelineTotals.slice(0, 2);
-  })();
+  const primaryPipelineTotals = data?.pipelineTotals ?? [];
 
   const pipelineTotalsHint = data
     ? data.leads.fx?.error
