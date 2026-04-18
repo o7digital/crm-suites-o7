@@ -1308,8 +1308,49 @@ export default function CrmPage() {
       const undeletedStageIds = new Set<string>();
       const undeletedStageNames: string[] = [];
       const failedUpdateStageNames: string[] = [];
+      const pipelineDeals = await api<Deal[]>(`/deals?pipelineId=${workflowTargetPipelineId}`);
+      const dealsByStageId = new Map<string, Deal[]>();
+      for (const deal of pipelineDeals) {
+        const list = dealsByStageId.get(deal.stageId) || [];
+        list.push(deal);
+        dealsByStageId.set(deal.stageId, list);
+      }
 
       for (const stage of stagesToDelete) {
+        const stageDeals = dealsByStageId.get(stage.id) || [];
+        if (stageDeals.length > 0) {
+          const destinationChoices = normalizedDrafts.filter((draft) => draft.id !== stage.id);
+          if (destinationChoices.length === 0) {
+            throw new Error(`No hay etapa destino para mover los deals de "${stage.name}".`);
+          }
+
+          const questionLines = [
+            `La etapa "${stage.name}" tiene ${stageDeals.length} deal(s).`,
+            'Confirma donde moverlos antes de eliminar:',
+            ...destinationChoices.map((choice, index) => `${index + 1}) ${choice.name}`),
+          ];
+          const answer =
+            typeof window === 'undefined'
+              ? '1'
+              : window.prompt(questionLines.join('\n'), '1');
+          if (answer === null) {
+            throw new Error('Guardado cancelado.');
+          }
+          const selected = Number.parseInt(answer.trim(), 10);
+          if (!Number.isFinite(selected) || selected < 1 || selected > destinationChoices.length) {
+            throw new Error('Seleccion invalida. Guardado cancelado.');
+          }
+          const targetStageId = destinationChoices[selected - 1].id;
+          await Promise.all(
+            stageDeals.map((deal) =>
+              api(`/deals/${deal.id}/move-stage`, {
+                method: 'POST',
+                body: JSON.stringify({ stageId: targetStageId }),
+              }),
+            ),
+          );
+        }
+
         try {
           await api(`/stages/${stage.id}`, { method: 'DELETE' });
         } catch (err) {
