@@ -1308,6 +1308,7 @@ export default function CrmPage() {
       const undeletedStageIds = new Set<string>();
       const undeletedStageNames: string[] = [];
       const failedUpdateStageNames: string[] = [];
+      const moveWarnings: string[] = [];
       const pipelineDeals = await api<Deal[]>(`/deals?pipelineId=${workflowTargetPipelineId}`);
       const dealsByStageId = new Map<string, Deal[]>();
       for (const deal of pipelineDeals) {
@@ -1323,6 +1324,8 @@ export default function CrmPage() {
           if (destinationChoices.length === 0) {
             throw new Error(`No hay etapa destino para mover los deals de "${stage.name}".`);
           }
+          const defaultChoice = destinationChoices[0];
+          let targetStageId = defaultChoice.id;
 
           const questionLines = [
             `La etapa "${stage.name}" tiene ${stageDeals.length} deal(s).`,
@@ -1333,14 +1336,20 @@ export default function CrmPage() {
             typeof window === 'undefined'
               ? '1'
               : window.prompt(questionLines.join('\n'), '1');
-          if (answer === null) {
-            throw new Error('Guardado cancelado.');
+          if (answer !== null && answer.trim() !== '') {
+            const selected = Number.parseInt(answer.trim(), 10);
+            if (Number.isFinite(selected) && selected >= 1 && selected <= destinationChoices.length) {
+              targetStageId = destinationChoices[selected - 1].id;
+            } else {
+              moveWarnings.push(
+                `Seleccion invalida para "${stage.name}". Deals movidos a "${defaultChoice.name}" por defecto.`,
+              );
+            }
+          } else {
+            moveWarnings.push(
+              `Sin seleccion manual para "${stage.name}". Deals movidos a "${defaultChoice.name}" por defecto.`,
+            );
           }
-          const selected = Number.parseInt(answer.trim(), 10);
-          if (!Number.isFinite(selected) || selected < 1 || selected > destinationChoices.length) {
-            throw new Error('Seleccion invalida. Guardado cancelado.');
-          }
-          const targetStageId = destinationChoices[selected - 1].id;
           await Promise.all(
             stageDeals.map((deal) =>
               api(`/deals/${deal.id}/move-stage`, {
@@ -1425,7 +1434,7 @@ export default function CrmPage() {
       setWorkflowError(null);
       setShowWorkflowModal(false);
       setRequestedStageId(createdStageResult?.created.id || null);
-      if (undeletedStageNames.length > 0 || failedUpdateStageNames.length > 0) {
+      if (undeletedStageNames.length > 0 || failedUpdateStageNames.length > 0 || moveWarnings.length > 0) {
         const warnings: string[] = [];
         if (undeletedStageNames.length > 0) {
           warnings.push(
@@ -1437,13 +1446,16 @@ export default function CrmPage() {
             `${failedUpdateStageNames.length} etapa(s) no se pudieron actualizar: ${failedUpdateStageNames.join(', ')}`,
           );
         }
+        if (moveWarnings.length > 0) {
+          warnings.push(...moveWarnings);
+        }
         setError(`Workflow guardado con advertencias: ${warnings.join(' | ')}`);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to save workflow';
       setWorkflowError(message);
       if (typeof window !== 'undefined') {
-        window.alert('Error save cancel');
+        window.alert(message || 'Error save cancel');
       }
     } finally {
       setWorkflowSaving(false);
