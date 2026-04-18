@@ -1306,7 +1306,7 @@ export default function CrmPage() {
       const retainedStageIds = new Set(normalizedDrafts.map((draft) => draft.id));
       const stagesToDelete = existingStages.filter((stage) => !retainedStageIds.has(stage.id));
       const undeletedStageIds = new Set<string>();
-      const undeletedStageNames: string[] = [];
+      const undeletedStageReasons: string[] = [];
       const failedUpdateStageNames: string[] = [];
       const moveWarnings: string[] = [];
       const pipelineDeals = await api<Deal[]>(`/deals?pipelineId=${workflowTargetPipelineId}`);
@@ -1366,11 +1366,21 @@ export default function CrmPage() {
           const message = err instanceof Error ? err.message.toLowerCase() : '';
           const hasDeals =
             message.includes('stage has deals') ||
-            message.includes('move deals before deleting') ||
-            message.includes('[400]');
-          if (!hasDeals) throw err;
+            message.includes('move deals before deleting');
+          const hasHistory =
+            message.includes('stage has history') ||
+            message.includes('cannot be deleted') ||
+            message.includes('referenced');
+          const isHandledBusinessError = hasDeals || hasHistory || message.includes('[400]');
+          if (!isHandledBusinessError) throw err;
           undeletedStageIds.add(stage.id);
-          undeletedStageNames.push(stage.name);
+          if (hasHistory) {
+            undeletedStageReasons.push(`${stage.name} (historial)`);
+          } else if (hasDeals) {
+            undeletedStageReasons.push(`${stage.name} (deals activos)`);
+          } else {
+            undeletedStageReasons.push(stage.name);
+          }
         }
       }
 
@@ -1434,11 +1444,11 @@ export default function CrmPage() {
       setWorkflowError(null);
       setShowWorkflowModal(false);
       setRequestedStageId(createdStageResult?.created.id || null);
-      if (undeletedStageNames.length > 0 || failedUpdateStageNames.length > 0 || moveWarnings.length > 0) {
+      if (undeletedStageReasons.length > 0 || failedUpdateStageNames.length > 0 || moveWarnings.length > 0) {
         const warnings: string[] = [];
-        if (undeletedStageNames.length > 0) {
+        if (undeletedStageReasons.length > 0) {
           warnings.push(
-            `${undeletedStageNames.length} etapa(s) se mantuvieron porque todavía tienen deals: ${undeletedStageNames.join(', ')}`,
+            `${undeletedStageReasons.length} etapa(s) no se pudieron eliminar: ${undeletedStageReasons.join(', ')}`,
           );
         }
         if (failedUpdateStageNames.length > 0) {
