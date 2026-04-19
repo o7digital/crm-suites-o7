@@ -44,6 +44,8 @@ type Client = {
   address?: string;
   taxId?: string;
   notes?: string;
+  ownerUserId?: string | null;
+  owner?: { id: string; name: string; email: string } | null;
   createdAt: string;
 };
 
@@ -62,6 +64,8 @@ type ClientDetails = {
   address?: string | null;
   taxId?: string | null;
   notes?: string | null;
+  ownerUserId?: string | null;
+  owner?: { id: string; name: string; email: string } | null;
   collaborators: ClientCollaborator[];
   createdAt: string;
   updatedAt: string;
@@ -81,6 +85,14 @@ type ClientCreatePayload = {
   address?: string;
   taxId?: string;
   notes?: string;
+  ownerUserId?: string;
+};
+
+type WorkspaceUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: "OWNER" | "ADMIN" | "MEMBER";
 };
 
 type ClientImportItem = { row: number; payload: ClientCreatePayload };
@@ -137,6 +149,7 @@ function ClientsPageContent() {
   const { t } = useI18n();
   const detailsClientId = searchParams.get("clientId");
   const [clients, setClients] = useState<Client[]>([]);
+  const [workspaceUsers, setWorkspaceUsers] = useState<WorkspaceUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -162,6 +175,7 @@ function ClientsPageContent() {
     taxId: string;
     address: string;
     notes: string;
+    ownerUserId: string;
   }>({
     firstName: "",
     name: "",
@@ -176,6 +190,7 @@ function ClientsPageContent() {
     taxId: "",
     address: "",
     notes: "",
+    ownerUserId: "",
   });
 
   const [importOpen, setImportOpen] = useState(false);
@@ -217,6 +232,13 @@ function ClientsPageContent() {
     if (!token) return;
     fetchClients();
   }, [token, fetchClients]);
+
+  useEffect(() => {
+    if (!token) return;
+    api<WorkspaceUser[]>("/admin/users")
+      .then((data) => setWorkspaceUsers(data))
+      .catch(() => setWorkspaceUsers([]));
+  }, [api, token]);
 
   const handleCreate = async (payload: Partial<Client>) => {
     setError(null);
@@ -293,6 +315,7 @@ function ClientsPageContent() {
           taxId: data.taxId ?? "",
           address: data.address ?? "",
           notes: data.notes ?? "",
+          ownerUserId: data.ownerUserId ?? "",
         });
       } catch (err) {
         const message =
@@ -403,6 +426,7 @@ function ClientsPageContent() {
           taxId: toOptionalTrimmed(detailsForm.taxId),
           address: toOptionalTrimmed(detailsForm.address),
           notes: toOptionalTrimmed(detailsForm.notes),
+          ownerUserId: toOptionalTrimmed(detailsForm.ownerUserId),
         }),
       });
       setDetailsClient(updated);
@@ -667,7 +691,7 @@ function ClientsPageContent() {
         </div>
       </div>
 
-      <ClientForm onSubmit={handleCreate} />
+      <ClientForm onSubmit={handleCreate} workspaceUsers={workspaceUsers} />
 
       {loading && (
         <div className="mt-6 text-slate-300">{t("clients.loading")}</div>
@@ -1149,6 +1173,26 @@ function ClientsPageContent() {
                       />
                     </label>
                     <label className="block text-sm text-slate-300">
+                      Responsable
+                      <select
+                        className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                        value={detailsForm.ownerUserId}
+                        onChange={(e) =>
+                          setDetailsForm((prev) => ({
+                            ...prev,
+                            ownerUserId: e.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Non assigne</option>
+                        {workspaceUsers.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {(u.name || u.email).trim()} {u.role ? `· ${u.role}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block text-sm text-slate-300">
                       {t("field.function")}
                       <select
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
@@ -1344,8 +1388,10 @@ function ClientsPageContent() {
 
 function ClientForm({
   onSubmit,
+  workspaceUsers,
 }: {
   onSubmit: (payload: Partial<Client>) => Promise<void>;
+  workspaceUsers: WorkspaceUser[];
 }) {
   const { t } = useI18n();
   const [firstName, setFirstName] = useState("");
@@ -1361,6 +1407,7 @@ function ClientForm({
   const [address, setAddress] = useState("");
   const [taxId, setTaxId] = useState("");
   const [notes, setNotes] = useState("");
+  const [ownerUserId, setOwnerUserId] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -1388,6 +1435,7 @@ function ClientForm({
         address: optional(address),
         taxId: optional(taxId),
         notes: optional(notes),
+        ownerUserId: optional(ownerUserId),
       });
       setFirstName("");
       setName("");
@@ -1402,6 +1450,7 @@ function ClientForm({
       setAddress("");
       setTaxId("");
       setNotes("");
+      setOwnerUserId("");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Unable to save client";
@@ -1545,6 +1594,21 @@ function ClientForm({
           className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
           autoComplete="tel"
         />
+      </div>
+      <div>
+        <label className="text-sm text-slate-300">Responsable</label>
+        <select
+          value={ownerUserId}
+          onChange={(e) => setOwnerUserId(e.target.value)}
+          className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+        >
+          <option value="">Non assigne</option>
+          {workspaceUsers.map((u) => (
+            <option key={u.id} value={u.id}>
+              {(u.name || u.email).trim()} {u.role ? `· ${u.role}` : ""}
+            </option>
+          ))}
+        </select>
       </div>
       <div>
         <label className="text-sm text-slate-300">{t("field.website")}</label>

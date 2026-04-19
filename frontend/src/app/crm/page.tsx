@@ -62,11 +62,20 @@ type Deal = {
   probability?: number | null;
   expectedCloseDate?: string | null;
   clientId?: string | null;
+  ownerId?: string | null;
+  owner?: { id: string; name: string; email: string } | null;
   client?: Client | null;
   stageId: string;
   pipelineId: string;
   stage?: Stage | null;
   items?: DealItem[];
+};
+
+type WorkspaceUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
 };
 
 type TenantSettings = {
@@ -257,6 +266,7 @@ export default function CrmPage() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [workspaceUsers, setWorkspaceUsers] = useState<WorkspaceUser[]>([]);
   const [clientsError, setClientsError] = useState<string | null>(null);
   const [fx, setFx] = useState<FxRatesSnapshot | null>(null);
   const [fxLoading, setFxLoading] = useState(false);
@@ -305,6 +315,7 @@ export default function CrmPage() {
     productIds: string[];
     pipelineId: string;
     stageId: string;
+    ownerId: string;
   }>({
     title: '',
     value: '',
@@ -316,6 +327,7 @@ export default function CrmPage() {
     productIds: [],
     pipelineId: '',
     stageId: '',
+    ownerId: '',
   });
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
   const [workflowMode, setWorkflowMode] = useState<WorkflowEditorMode>('edit');
@@ -399,6 +411,7 @@ export default function CrmPage() {
         productIds: [],
         pipelineId: '',
         stageId: '',
+        ownerId: '',
       });
     }
   }, [showModal]);
@@ -410,6 +423,13 @@ export default function CrmPage() {
       .catch(() => {
         // Products are optional for CRM; ignore failures here.
       });
+  }, [api, token]);
+
+  useEffect(() => {
+    if (!token) return;
+    api<WorkspaceUser[]>('/admin/users')
+      .then((data) => setWorkspaceUsers(data))
+      .catch(() => setWorkspaceUsers([]));
   }, [api, token]);
 
   useEffect(() => {
@@ -835,6 +855,7 @@ export default function CrmPage() {
       productIds: [],
       pipelineId,
       stageId: defaultStageId,
+      ownerId: '',
     });
     setShowModal(true);
   };
@@ -857,6 +878,7 @@ export default function CrmPage() {
       productIds: (deal.items ?? []).map((it) => it.productId).filter(Boolean),
       pipelineId: deal.pipelineId,
       stageId: deal.stageId,
+      ownerId: deal.ownerId ?? '',
     });
     setShowModal(true);
   }, []);
@@ -914,6 +936,7 @@ export default function CrmPage() {
             currency: form.currency,
             expectedCloseDate: form.expectedCloseDate || undefined,
             clientId: form.clientId ? form.clientId : null,
+            ownerId: form.ownerId ? form.ownerId : null,
             pipelineId: targetPipelineId,
             stageId,
             probability,
@@ -976,6 +999,7 @@ export default function CrmPage() {
             currency: form.currency,
             expectedCloseDate: form.expectedCloseDate || undefined,
             clientId: form.clientId || undefined,
+            ownerId: form.ownerId || undefined,
             pipelineId: targetPipelineId,
             stageId,
             probability,
@@ -2246,6 +2270,22 @@ export default function CrmPage() {
                   )}
                   {clientsError ? <p className="mt-2 text-xs text-red-200">{clientsError}</p> : null}
                 </label>
+                <label className="block text-sm text-slate-300">
+                  Responsable
+                  <select
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                    value={form.ownerId}
+                    onChange={(e) => setForm((prev) => ({ ...prev, ownerId: e.target.value }))}
+                  >
+                    <option value="">Non assigne</option>
+                    {workspaceUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {(u.name || u.email).trim()} {u.role ? `· ${u.role}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
                 <label className="block text-sm text-slate-300">
                   {t('crm.pipeline')}
                   <select

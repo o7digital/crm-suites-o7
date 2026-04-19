@@ -208,6 +208,24 @@ export class DealsService {
       clientId = client.id;
     }
 
+    let ownerId: string | null | undefined;
+    if (caps.hasOwnerId) {
+      if (dto.ownerId === null) {
+        ownerId = null;
+      } else if (dto.ownerId) {
+        const owner = await this.prisma.user.findFirst({
+          where: { id: dto.ownerId, tenantId: user.tenantId },
+          select: { id: true },
+        });
+        if (!owner) {
+          throw new BadRequestException('Assigned owner not found.');
+        }
+        ownerId = owner.id;
+      } else {
+        ownerId = user.userId;
+      }
+    }
+
     if (uniqueProductIds.length > 0) {
       if (!caps.hasProductTables) {
         throw new BadRequestException(
@@ -242,7 +260,7 @@ export class DealsService {
             ? new Date(dto.expectedCloseDate)
             : undefined,
           clientId,
-          ...(caps.hasOwnerId ? { ownerId: user.userId } : {}),
+          ...(caps.hasOwnerId ? { ownerId } : {}),
           tenantId: user.tenantId,
           pipelineId: dto.pipelineId,
           stageId,
@@ -462,6 +480,22 @@ export class DealsService {
       targetStageId = resolvedTargetStageId;
     }
 
+    let ownerId: string | null | undefined = undefined;
+    if (caps.hasOwnerId && dto.ownerId !== undefined) {
+      if (dto.ownerId === null) {
+        ownerId = null;
+      } else {
+        const owner = await this.prisma.user.findFirst({
+          where: { id: dto.ownerId, tenantId: user.tenantId },
+          select: { id: true },
+        });
+        if (!owner) {
+          throw new BadRequestException('Assigned owner not found.');
+        }
+        ownerId = owner.id;
+      }
+    }
+
     const data: Prisma.DealUncheckedUpdateInput = {
       title: dto.title,
       value: dto.value,
@@ -470,6 +504,7 @@ export class DealsService {
         ? new Date(dto.expectedCloseDate)
         : undefined,
       ...(caps.hasClientId ? { clientId: dto.clientId } : {}),
+      ...(caps.hasOwnerId && dto.ownerId !== undefined ? { ownerId } : {}),
       ...(caps.hasProbability && dto.probability !== undefined
         ? { probability: dto.probability }
         : {}),

@@ -16,6 +16,7 @@ export class SchemaUpgraderService {
     await this.ensureTaskTimeTrackingFields();
     await this.ensureProductsSchema();
     await this.ensureClientProfileFields();
+    await this.ensureClientOwnerUserId();
     await this.ensureClientCollaboratorsSchema();
     await this.ensureSubscriptionsSchema();
     await this.ensureSubscriptionTrialAlertFields();
@@ -335,6 +336,39 @@ export class SchemaUpgraderService {
         );
       } catch {
         // Ignore permissions / already-added races.
+      }
+    }
+  }
+
+  private async ensureClientOwnerUserId() {
+    const hasOwnerUserId = await this.columnExists('Client', 'ownerUserId');
+    if (!hasOwnerUserId) {
+      try {
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "Client" ADD COLUMN "ownerUserId" TEXT;`,
+        );
+      } catch {
+        // Ignore permissions / already-added races.
+      }
+    }
+
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "Client_ownerUserId_idx" ON "Client"("ownerUserId");`,
+    );
+
+    const fkName = 'Client_ownerUserId_fkey';
+    const fkExists = await this.constraintExists(fkName);
+    if (!fkExists) {
+      try {
+        await this.prisma.$executeRawUnsafe(`
+          ALTER TABLE "Client"
+          ADD CONSTRAINT "${fkName}"
+          FOREIGN KEY ("ownerUserId") REFERENCES "User"("id")
+          ON DELETE SET NULL
+          ON UPDATE CASCADE;
+        `);
+      } catch {
+        // Ignore if the constraint already exists under a different name.
       }
     }
   }

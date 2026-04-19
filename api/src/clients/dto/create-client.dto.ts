@@ -5,6 +5,7 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
 } from 'class-validator';
 
@@ -110,4 +111,12 @@ export class CreateClientDto {
   @IsString()
   @Transform(({ value }) => optionalTrimmedString(value))
   notes?: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  @Transform(({ value }) => {
+    if (value === null) return null;
+    return optionalTrimmedString(value);
+  })
+  ownerUserId?: string | null;
 }
