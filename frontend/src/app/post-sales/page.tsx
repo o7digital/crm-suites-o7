@@ -261,6 +261,15 @@ export default function PostSalesPage() {
     void loadOperationalStages();
   }, [loadOperationalStages, postSalesPipelineId, token]);
 
+  useEffect(() => {
+    if (!showWorkflowEditor) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setShowWorkflowEditor(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showWorkflowEditor]);
+
   const selectedDealId = useMemo(() => {
     if (!selectedCaseId) return null;
     return postSalesCases.find((item) => item.id === selectedCaseId)?.deal?.id || null;
@@ -509,6 +518,7 @@ export default function PostSalesPage() {
           }),
       );
       await loadOperationalStages();
+      setShowWorkflowEditor(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to update workflow');
     } finally {
@@ -1225,15 +1235,28 @@ export default function PostSalesPage() {
           </div>
         ) : null}
         {showWorkflowEditor ? (
-          <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/70 px-4 py-8 md:items-center" onClick={() => setShowWorkflowEditor(false)}>
-            <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#1a2747] p-6 shadow-2xl shadow-black/40" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 px-4 py-8 md:items-center"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setShowWorkflowEditor(false)}
+          >
+            <div
+              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1a2747] p-6 shadow-2xl shadow-black/40"
+              onClick={(event) => event.stopPropagation()}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Workflow Operationnel</p>
                   <h2 className="mt-1 text-xl font-semibold text-slate-100">Etapes Post-Sales</h2>
                 </div>
-                <button type="button" className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300 hover:bg-white/10" onClick={() => setShowWorkflowEditor(false)}>
-                  Close
+                <button
+                  type="button"
+                  aria-label="Close workflow editor"
+                  className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300 hover:bg-white/10"
+                  onClick={() => setShowWorkflowEditor(false)}
+                >
+                  X
                 </button>
               </div>
               <div className="mt-4 space-y-3">
