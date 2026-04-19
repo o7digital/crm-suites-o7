@@ -678,10 +678,30 @@ export default function CrmPage() {
         const [y, m] = iso.split('-').map((part) => Number(part));
         return y === forecastYear && m === month + 1;
       });
-      const total = dealsInMonth.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0);
-      return { month, deals: dealsInMonth, total };
+      const totalsByCurrency = dealsInMonth.reduce<Record<string, number>>((acc, deal) => {
+        const currency = (deal.currency || 'USD').toUpperCase();
+        const value = Number(deal.value);
+        if (!Number.isFinite(value)) return acc;
+        acc[currency] = (acc[currency] || 0) + value;
+        return acc;
+      }, {});
+      const entries = Object.entries(totalsByCurrency);
+      const needsConversion = entries.some(([currency]) => currency !== crmDisplayCurrency);
+      const totalLabel = (() => {
+        if (entries.length === 0) return formatCurrencyTotal(0, crmDisplayCurrency);
+        if (!needsConversion) return formatCurrencyTotal(totalsByCurrency[crmDisplayCurrency] ?? 0, crmDisplayCurrency);
+        if (!fx) return fxLoading ? `${crmDisplayCurrency} ...` : `${crmDisplayCurrency} --`;
+        const missingRate = entries.some(([currency]) => convertCurrency(1, currency, crmDisplayCurrency, fx) === null);
+        if (missingRate) return `${crmDisplayCurrency} --`;
+        const convertedTotal = entries.reduce((sum, [currency, value]) => {
+          const converted = convertCurrency(value, currency, crmDisplayCurrency, fx);
+          return converted === null ? sum : sum + converted;
+        }, 0);
+        return formatCurrencyTotal(convertedTotal, crmDisplayCurrency);
+      })();
+      return { month, deals: dealsInMonth, totalLabel };
     });
-  }, [filteredDeals, forecastMonthOrder, forecastYear]);
+  }, [crmDisplayCurrency, filteredDeals, forecastMonthOrder, forecastYear, fx, fxLoading]);
 
   const forecastUndatedDeals = useMemo(() => {
     return filteredDeals.filter((deal) => !toDateInputValue(deal.expectedCloseDate));
@@ -1926,7 +1946,7 @@ export default function CrmPage() {
                   </div>
                 </div>
 
-                {forecastColumns.map(({ month, deals: monthDeals, total }) => {
+                {forecastColumns.map(({ month, deals: monthDeals, totalLabel }) => {
                   const label = new Intl.DateTimeFormat(undefined, { month: 'long' }).format(new Date(forecastYear, month, 1));
                   return (
                     <div
@@ -1942,7 +1962,7 @@ export default function CrmPage() {
                     >
                       <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{label}</p>
                       <p className="mt-1 text-sm text-slate-300">Deals: {monthDeals.length}</p>
-                      <p className="text-sm text-cyan-200">Total: {formatCurrencyTotal(total, crmDisplayCurrency)}</p>
+                      <p className="text-sm text-cyan-200">Total: {totalLabel}</p>
                       <div className="mt-3 space-y-2">
                         {monthDeals.map((deal) => (
                           <button
