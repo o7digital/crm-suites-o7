@@ -7,6 +7,7 @@ import { useApi, useAuth } from '../../contexts/AuthContext';
 import { getClientDisplayName } from '@/lib/clients';
 import { CalendarSyncCard } from '@/components/CalendarSyncCard';
 import { TaskCalendarActions } from '@/components/TaskCalendarActions';
+import { WindowControls } from '@/components/WindowControls';
 
 type Pipeline = {
   id: string;
@@ -170,6 +171,10 @@ export default function PostSalesPage() {
   const [selectedDealDetails, setSelectedDealDetails] = useState<DealDetails | null>(null);
   const [downloadingDocKey, setDownloadingDocKey] = useState<string | null>(null);
   const [showWorkflowEditor, setShowWorkflowEditor] = useState(false);
+  const [caseWindowMinimized, setCaseWindowMinimized] = useState(false);
+  const [caseWindowMaximized, setCaseWindowMaximized] = useState(false);
+  const [workflowWindowMinimized, setWorkflowWindowMinimized] = useState(false);
+  const [workflowWindowMaximized, setWorkflowWindowMaximized] = useState(false);
   const [workflowNameDrafts, setWorkflowNameDrafts] = useState<Record<string, string>>({});
   const [newStageName, setNewStageName] = useState('');
   const [workflowSaving, setWorkflowSaving] = useState(false);
@@ -312,6 +317,20 @@ export default function PostSalesPage() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showWorkflowEditor]);
+
+  useEffect(() => {
+    if (!selectedCaseId) {
+      setCaseWindowMinimized(false);
+      setCaseWindowMaximized(false);
+    }
+  }, [selectedCaseId]);
+
+  useEffect(() => {
+    if (!showWorkflowEditor) {
+      setWorkflowWindowMinimized(false);
+      setWorkflowWindowMaximized(false);
+    }
   }, [showWorkflowEditor]);
 
   const selectedDealId = useMemo(() => {
@@ -1164,23 +1183,25 @@ export default function PostSalesPage() {
             onClick={() => setSelectedCaseId(null)}
           >
             <div
-              className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1a2747] p-6 shadow-2xl shadow-black/40 md:p-8"
+              className={`w-full overflow-y-auto rounded-2xl border border-white/10 bg-[#1a2747] p-6 shadow-2xl shadow-black/40 md:p-8 ${caseWindowMaximized ? 'max-w-[96vw] max-h-[94vh]' : 'max-w-5xl max-h-[90vh]'}`}
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3">
+                <WindowControls
+                  onClose={() => setSelectedCaseId(null)}
+                  onMinimize={() => setCaseWindowMinimized((prev) => !prev)}
+                  onToggleMaximize={() => setCaseWindowMaximized((prev) => !prev)}
+                  isMinimized={caseWindowMinimized}
+                  isMaximized={caseWindowMaximized}
+                />
                 <div>
                   <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Post-Sales client sheet</p>
                   <h2 className="mt-1 text-2xl font-semibold text-slate-100">{selectedCase.name}</h2>
                 </div>
-                <button
-                  type="button"
-                  className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300 hover:bg-white/10"
-                  onClick={() => setSelectedCaseId(null)}
-                >
-                  Close
-                </button>
               </div>
 
+              {!caseWindowMinimized ? (
+              <>
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-cyan-300/35 bg-cyan-500/15 px-2.5 py-1 text-[11px] font-semibold text-cyan-100">
                   Post-Operation: {statusLabelByKey[selectedCase.status]}
@@ -1275,6 +1296,8 @@ export default function PostSalesPage() {
                   </div>
                 </div>
               </div>
+              </>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -1286,23 +1309,24 @@ export default function PostSalesPage() {
             onClick={() => setShowWorkflowEditor(false)}
           >
             <div
-              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1a2747] p-6 shadow-2xl shadow-black/40"
+              className={`w-full overflow-y-auto rounded-2xl border border-white/10 bg-[#1a2747] p-6 shadow-2xl shadow-black/40 ${workflowWindowMaximized ? 'max-w-[96vw] max-h-[94vh]' : 'max-w-2xl max-h-[90vh]'}`}
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3">
+                <WindowControls
+                  onClose={() => setShowWorkflowEditor(false)}
+                  onMinimize={() => setWorkflowWindowMinimized((prev) => !prev)}
+                  onToggleMaximize={() => setWorkflowWindowMaximized((prev) => !prev)}
+                  isMinimized={workflowWindowMinimized}
+                  isMaximized={workflowWindowMaximized}
+                />
                 <div>
                   <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Workflow Operationnel</p>
                   <h2 className="mt-1 text-xl font-semibold text-slate-100">Etapes Post-Sales</h2>
                 </div>
-                <button
-                  type="button"
-                  aria-label="Close workflow editor"
-                  className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300 hover:bg-white/10"
-                  onClick={() => setShowWorkflowEditor(false)}
-                >
-                  X
-                </button>
               </div>
+              {!workflowWindowMinimized ? (
+              <>
               <div className="mt-4 space-y-3">
                 {boardColumns.map((col, idx) => (
                   <div key={col.stageId} className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
@@ -1334,6 +1358,8 @@ export default function PostSalesPage() {
                   </button>
                 </div>
               </div>
+              </>
+              ) : null}
             </div>
           </div>
         ) : null}

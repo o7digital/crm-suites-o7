@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { CLIENT_FUNCTION_OPTIONS, getClientDisplayName } from '@/lib/clients';
 import { convertCurrency, formatCurrencyTotal, type FxRatesSnapshot } from '@/lib/fx';
 import { useI18n } from '../../contexts/I18nContext';
+import { WindowControls } from '../../components/WindowControls';
 
 type Pipeline = {
   id: string;
@@ -95,6 +96,7 @@ type WorkflowStageDraft = {
 
 type WorkflowEditorMode = 'edit' | 'create';
 type CrmStatusFilter = 'ALL' | Stage['status'];
+type CrmViewMode = 'KANBAN' | 'LIST' | 'FORECAST';
 
 type NewStageDraft = {
   name: string;
@@ -330,6 +332,10 @@ export default function CrmPage() {
     ownerId: '',
   });
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
+  const [dealWindowMinimized, setDealWindowMinimized] = useState(false);
+  const [dealWindowMaximized, setDealWindowMaximized] = useState(false);
+  const [workflowWindowMinimized, setWorkflowWindowMinimized] = useState(false);
+  const [workflowWindowMaximized, setWorkflowWindowMaximized] = useState(false);
   const [workflowMode, setWorkflowMode] = useState<WorkflowEditorMode>('edit');
   const [workflowEditingPipelineId, setWorkflowEditingPipelineId] = useState('');
   const [workflowPipelineName, setWorkflowPipelineName] = useState('');
@@ -347,6 +353,7 @@ export default function CrmPage() {
   const [workflowInfo, setWorkflowInfo] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<CrmStatusFilter>('ALL');
   const [vendorFilter, setVendorFilter] = useState<string>('ALL');
+  const [viewMode, setViewMode] = useState<CrmViewMode>('KANBAN');
   const [statusDropHover, setStatusDropHover] = useState<Stage['status'] | null>(null);
   const [workflowDraggedStageId, setWorkflowDraggedStageId] = useState<string | null>(null);
   const [workflowStageDropTarget, setWorkflowStageDropTarget] = useState<{
@@ -381,6 +388,8 @@ export default function CrmPage() {
 
   useEffect(() => {
     if (!showModal) {
+      setDealWindowMinimized(false);
+      setDealWindowMaximized(false);
       setShowClientCreate(false);
       setModalStagesLoading(false);
       setModalStagesError(null);
@@ -415,6 +424,13 @@ export default function CrmPage() {
       });
     }
   }, [showModal]);
+
+  useEffect(() => {
+    if (!showWorkflowModal) {
+      setWorkflowWindowMinimized(false);
+      setWorkflowWindowMaximized(false);
+    }
+  }, [showWorkflowModal]);
 
   useEffect(() => {
     if (!token) return;
@@ -647,6 +663,19 @@ export default function CrmPage() {
     if (statusFilter === 'OPEN') return [] as Stage['status'][];
     return [statusFilter];
   }, [statusFilter]);
+
+  const forecastByStage = useMemo(() => {
+    return visibleStages.map((stage) => {
+      const stageDeals = filteredDeals.filter((deal) => deal.stageId === stage.id);
+      const total = stageDeals.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0);
+      const weighted = stageDeals.reduce((sum, deal) => {
+        const probability = Number.isFinite(Number(deal.probability)) ? Number(deal.probability) : Number(stage.probability || 0);
+        const normalized = Math.max(0, Math.min(1, Number.isFinite(probability) ? probability : 0));
+        return sum + (Number(deal.value) || 0) * normalized;
+      }, 0);
+      return { stage, count: stageDeals.length, total, weighted };
+    });
+  }, [filteredDeals, visibleStages]);
 
   const updateWorkflowStageDropTarget = (
     event: DragEvent<HTMLDivElement>,
@@ -1642,6 +1671,24 @@ export default function CrmPage() {
               </button>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {(['KANBAN', 'LIST', 'FORECAST'] as CrmViewMode[]).map((mode) => {
+                const isActive = viewMode === mode;
+                const label = mode === 'KANBAN' ? 'Kanban' : mode === 'LIST' ? 'List' : 'Forecast';
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setViewMode(mode)}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition ${
+                      isActive
+                        ? 'border-cyan-300/60 bg-cyan-400/15 text-cyan-100'
+                        : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
               {(['ALL', 'OPEN', 'WON', 'LOST'] as CrmStatusFilter[]).map((filterValue) => {
                 const isActive = statusFilter === filterValue;
                 const label = filterValue === 'ALL' ? t('crm.filterAll') : t(`stageStatus.${filterValue}`);
@@ -1689,30 +1736,86 @@ export default function CrmPage() {
           </div>
         )}
 
-        {/* Keep all stages on one line (no wrap). Horizontal scroll if needed. */}
-        <div className="overflow-x-auto pb-4 2xl:-ml-48 2xl:w-[calc(100%+24rem)]">
-          <div className="flex w-max gap-4 pr-6">
-            {visibleStages.map((stage) => (
-              <StageColumn
-                key={stage.id}
-                stage={stage}
-                deals={filteredDeals.filter((deal) => deal.stageId === stage.id)}
-                displayCurrency={crmDisplayCurrency}
-                fx={fx}
-                fxLoading={fxLoading}
-                onMoveDeal={handleMoveDeal}
-                onOpenDeal={openDealFromCard}
-                onDealDragStart={() => {
-                  lastDragAtRef.current = Date.now();
-                }}
-                onRequestAddStageAfter={(sourceStage) => openWorkflowEditor(sourceStage.id)}
-                highlighted={highlightStageId === stage.id}
-              />
-            ))}
+        {viewMode === 'KANBAN' ? (
+          <>
+          {/* Keep all stages on one line (no wrap). Horizontal scroll if needed. */}
+          <div className="overflow-x-auto pb-4 2xl:-ml-48 2xl:w-[calc(100%+24rem)]">
+            <div className="flex w-max gap-4 pr-6">
+              {visibleStages.map((stage) => (
+                <StageColumn
+                  key={stage.id}
+                  stage={stage}
+                  deals={filteredDeals.filter((deal) => deal.stageId === stage.id)}
+                  displayCurrency={crmDisplayCurrency}
+                  fx={fx}
+                  fxLoading={fxLoading}
+                  onMoveDeal={handleMoveDeal}
+                  onOpenDeal={openDealFromCard}
+                  onDealDragStart={() => {
+                    lastDragAtRef.current = Date.now();
+                  }}
+                  onRequestAddStageAfter={(sourceStage) => openWorkflowEditor(sourceStage.id)}
+                  highlighted={highlightStageId === stage.id}
+                />
+              ))}
+            </div>
           </div>
-        </div>
+          </>
+        ) : null}
 
-        {showStatusDropZones ? (
+        {viewMode === 'LIST' ? (
+          <div className="card overflow-x-auto p-4">
+            <table className="w-full min-w-[920px] text-sm">
+              <thead className="text-slate-400">
+                <tr>
+                  <th className="px-3 py-2 text-left">Lead</th>
+                  <th className="px-3 py-2 text-left">Client</th>
+                  <th className="px-3 py-2 text-left">Stage</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-right">Value</th>
+                  <th className="px-3 py-2 text-right">Probability</th>
+                  <th className="px-3 py-2 text-left">Close date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDeals.map((deal) => (
+                  <tr key={deal.id} className="cursor-pointer border-t border-white/10 hover:bg-white/5" onClick={() => openEditModal(deal)}>
+                    <td className="px-3 py-2 font-semibold text-slate-100">{deal.title}</td>
+                    <td className="px-3 py-2 text-slate-300">{deal.client ? getClientDisplayName(deal.client) : '—'}</td>
+                    <td className="px-3 py-2 text-slate-300">{stageNameById[deal.stageId] ? stageName(stageNameById[deal.stageId]) : '—'}</td>
+                    <td className="px-3 py-2 text-slate-400">{stageStatusById[deal.stageId] ? t(`stageStatus.${stageStatusById[deal.stageId]}`) : '—'}</td>
+                    <td className="px-3 py-2 text-right text-slate-200">{deal.currency} {Number(deal.value || 0).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right text-slate-300">{Math.round((Number.isFinite(Number(deal.probability)) ? Number(deal.probability) : 0) * 100)}%</td>
+                    <td className="px-3 py-2 text-slate-400">{toDateInputValue(deal.expectedCloseDate) || '—'}</td>
+                  </tr>
+                ))}
+                {filteredDeals.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-3 text-slate-500" colSpan={7}>{t('crm.noDeals')}</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {viewMode === 'FORECAST' ? (
+          <div className="card p-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {forecastByStage.map(({ stage, count, total, weighted }) => (
+                <div key={stage.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{t(`stageStatus.${stage.status}`)}</p>
+                  <p className="mt-1 text-base font-semibold text-slate-100">{stageName(stage.name)}</p>
+                  <p className="mt-2 text-sm text-slate-300">Deals: {count}</p>
+                  <p className="text-sm text-slate-300">Pipeline total: {formatCurrencyTotal(total, crmDisplayCurrency)}</p>
+                  <p className="text-sm text-cyan-200">Forecast weighted: {formatCurrencyTotal(weighted, crmDisplayCurrency)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {viewMode === 'KANBAN' && showStatusDropZones ? (
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {(['WON', 'LOST'] as Stage['status'][]).map((status) => {
             const targetStage = status === 'WON' ? firstWonStage : firstLostStage;
@@ -1810,20 +1913,22 @@ export default function CrmPage() {
 
         {showWorkflowModal && (
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-10">
-            <div className="card flex w-full max-w-3xl max-h-[90vh] flex-col overflow-hidden p-6">
+            <div className={`card flex w-full flex-col overflow-hidden p-6 ${workflowWindowMaximized ? 'max-w-[96vw] max-h-[94vh]' : 'max-w-3xl max-h-[90vh]'}`}>
               <div className="flex items-center justify-between">
+                <WindowControls
+                  onClose={closeWorkflowModal}
+                  onMinimize={() => setWorkflowWindowMinimized((prev) => !prev)}
+                  onToggleMaximize={() => setWorkflowWindowMaximized((prev) => !prev)}
+                  isMinimized={workflowWindowMinimized}
+                  isMaximized={workflowWindowMaximized}
+                />
                 <h2 className="text-xl font-semibold">
                   {workflowIsCreateMode ? t('crm.newWorkflow') : `${t('common.manage')} ${t('tasks.section')}`}
                 </h2>
-                <button
-                  className="text-slate-400"
-                  type="button"
-                  onClick={closeWorkflowModal}
-                >
-                  ✕
-                </button>
               </div>
 
+              {!workflowWindowMinimized ? (
+              <>
               <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -2095,19 +2200,27 @@ export default function CrmPage() {
                 </button>
                 </div>
               </div>
+              </>
+              ) : null}
             </div>
           </div>
         )}
 
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-10">
-            <div className="card flex w-full max-w-md max-h-[90vh] flex-col overflow-hidden p-6">
+            <div className={`card flex w-full flex-col overflow-hidden p-6 ${dealWindowMaximized ? 'max-w-[96vw] max-h-[94vh]' : 'max-w-md max-h-[90vh]'}`}>
               <div className="flex items-center justify-between">
+                <WindowControls
+                  onClose={() => setShowModal(false)}
+                  onMinimize={() => setDealWindowMinimized((prev) => !prev)}
+                  onToggleMaximize={() => setDealWindowMaximized((prev) => !prev)}
+                  isMinimized={dealWindowMinimized}
+                  isMaximized={dealWindowMaximized}
+                />
                 <h2 className="text-xl font-semibold">{editingDeal ? t('crm.editDeal') : t('crm.newDeal')}</h2>
-                <button className="text-slate-400" onClick={() => setShowModal(false)}>
-                  ✕
-                </button>
               </div>
+              {!dealWindowMinimized ? (
+              <>
               <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
                 <label className="block text-sm text-slate-300">
                   {t('crm.dealName')}
@@ -2496,6 +2609,8 @@ export default function CrmPage() {
                   {editingDeal ? t('common.save') : t('crm.createDeal')}
                 </button>
               </div>
+              </>
+              ) : null}
             </div>
           </div>
         )}
