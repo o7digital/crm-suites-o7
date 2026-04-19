@@ -354,6 +354,7 @@ export default function CrmPage() {
   const [statusFilter, setStatusFilter] = useState<CrmStatusFilter>('ALL');
   const [vendorFilter, setVendorFilter] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<CrmViewMode>('KANBAN');
+  const [forecastYear, setForecastYear] = useState<number>(new Date().getFullYear());
   const [statusDropHover, setStatusDropHover] = useState<Stage['status'] | null>(null);
   const [workflowDraggedStageId, setWorkflowDraggedStageId] = useState<string | null>(null);
   const [workflowStageDropTarget, setWorkflowStageDropTarget] = useState<{
@@ -664,18 +665,27 @@ export default function CrmPage() {
     return [statusFilter];
   }, [statusFilter]);
 
-  const forecastByStage = useMemo(() => {
-    return visibleStages.map((stage) => {
-      const stageDeals = filteredDeals.filter((deal) => deal.stageId === stage.id);
-      const total = stageDeals.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0);
-      const weighted = stageDeals.reduce((sum, deal) => {
-        const probability = Number.isFinite(Number(deal.probability)) ? Number(deal.probability) : Number(stage.probability || 0);
-        const normalized = Math.max(0, Math.min(1, Number.isFinite(probability) ? probability : 0));
-        return sum + (Number(deal.value) || 0) * normalized;
-      }, 0);
-      return { stage, count: stageDeals.length, total, weighted };
+  const forecastMonthOrder = useMemo(() => {
+    const currentMonth = new Date().getMonth();
+    return Array.from({ length: 12 }, (_, idx) => (currentMonth + idx) % 12);
+  }, []);
+
+  const forecastColumns = useMemo(() => {
+    return forecastMonthOrder.map((month) => {
+      const dealsInMonth = filteredDeals.filter((deal) => {
+        const iso = toDateInputValue(deal.expectedCloseDate);
+        if (!iso) return false;
+        const [y, m] = iso.split('-').map((part) => Number(part));
+        return y === forecastYear && m === month + 1;
+      });
+      const total = dealsInMonth.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0);
+      return { month, deals: dealsInMonth, total };
     });
-  }, [filteredDeals, visibleStages]);
+  }, [filteredDeals, forecastMonthOrder, forecastYear]);
+
+  const forecastUndatedDeals = useMemo(() => {
+    return filteredDeals.filter((deal) => !toDateInputValue(deal.expectedCloseDate));
+  }, [filteredDeals]);
 
   const updateWorkflowStageDropTarget = (
     event: DragEvent<HTMLDivElement>,
@@ -1194,6 +1204,30 @@ export default function CrmPage() {
       return;
     }
     await handleMoveDeal(dealId, targetStage.id);
+  };
+
+  const handleMoveDealToForecastMonth = async (dealId: string, month: number) => {
+    const targetDeal = deals.find((deal) => deal.id === dealId);
+    if (!targetDeal) return;
+
+    const existingIso = toDateInputValue(targetDeal.expectedCloseDate);
+    let day = 1;
+    if (existingIso) {
+      const parsedDay = Number(existingIso.slice(8, 10));
+      day = Number.isFinite(parsedDay) && parsedDay >= 1 && parsedDay <= 31 ? parsedDay : 1;
+    }
+    const nextIso = `${forecastYear}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+    try {
+      await api<Deal>(`/deals/${dealId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ expectedCloseDate: nextIso }),
+      });
+      setDeals((prev) => prev.map((deal) => (deal.id === dealId ? { ...deal, expectedCloseDate: nextIso } : deal)));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to move lead to forecast month';
+      setError(message);
+    }
   };
 
   const updateWorkflowStageDraft = (stageId: string, patch: Partial<WorkflowStageDraft>) => {
@@ -1801,16 +1835,95 @@ export default function CrmPage() {
 
         {viewMode === 'FORECAST' ? (
           <div className="card p-4">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {forecastByStage.map(({ stage, count, total, weighted }) => (
-                <div key={stage.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{t(`stageStatus.${stage.status}`)}</p>
-                  <p className="mt-1 text-base font-semibold text-slate-100">{stageName(stage.name)}</p>
-                  <p className="mt-2 text-sm text-slate-300">Deals: {count}</p>
-                  <p className="text-sm text-slate-300">Pipeline total: {formatCurrencyTotal(total, crmDisplayCurrency)}</p>
-                  <p className="text-sm text-cyan-200">Forecast weighted: {formatCurrencyTotal(weighted, crmDisplayCurrency)}</p>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-slate-200">Monthly forecast by closing date</p>
+              <select
+                className="btn-secondary text-sm"
+                value={forecastYear}
+                onChange={(e) => setForecastYear(Number(e.target.value))}
+              >
+                {[forecastYear - 1, forecastYear, forecastYear + 1].map((year) => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
+            <div className="overflow-x-auto pb-2">
+              <div className="flex min-w-max gap-3">
+                {forecastColumns.map(({ month, deals: monthDeals, total }) => {
+                  const label = new Intl.DateTimeFormat(undefined, { month: 'long' }).format(new Date(forecastYear, month, 1));
+                  return (
+                    <div
+                      key={`${forecastYear}-${month}`}
+                      className="w-[260px] rounded-xl border border-white/10 bg-white/5 p-3"
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const dealId = event.dataTransfer.getData('text/plain');
+                        if (!dealId) return;
+                        void handleMoveDealToForecastMonth(dealId, month);
+                      }}
+                    >
+                      <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{label}</p>
+                      <p className="mt-1 text-sm text-slate-300">Deals: {monthDeals.length}</p>
+                      <p className="text-sm text-cyan-200">Total: {formatCurrencyTotal(total, crmDisplayCurrency)}</p>
+                      <div className="mt-3 space-y-2">
+                        {monthDeals.map((deal) => (
+                          <button
+                            key={deal.id}
+                            type="button"
+                            draggable
+                            onDragStart={(event) => {
+                              event.dataTransfer.effectAllowed = 'move';
+                              event.dataTransfer.setData('text/plain', deal.id);
+                            }}
+                            onClick={() => openEditModal(deal)}
+                            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:bg-white/10"
+                          >
+                            <p className="truncate text-sm font-semibold text-slate-100">{deal.title}</p>
+                            <p className="mt-1 text-xs text-slate-400">{deal.client ? getClientDisplayName(deal.client) : 'No client'}</p>
+                            <p className="mt-1 text-xs text-slate-300">
+                              {deal.currency} {Number(deal.value || 0).toLocaleString()}
+                            </p>
+                          </button>
+                        ))}
+                        {monthDeals.length === 0 ? <p className="text-xs text-slate-500">{t('crm.noDeals')}</p> : null}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div
+                  className="w-[260px] rounded-xl border border-dashed border-white/15 bg-white/[0.03] p-3"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const dealId = event.dataTransfer.getData('text/plain');
+                    if (!dealId) return;
+                    void handleMoveDealToForecastMonth(dealId, new Date().getMonth());
+                  }}
+                >
+                  <p className="text-xs uppercase tracking-[0.12em] text-slate-500">No closing date</p>
+                  <p className="mt-1 text-sm text-slate-400">Deals: {forecastUndatedDeals.length}</p>
+                  <div className="mt-3 space-y-2">
+                    {forecastUndatedDeals.map((deal) => (
+                      <button
+                        key={deal.id}
+                        type="button"
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = 'move';
+                          event.dataTransfer.setData('text/plain', deal.id);
+                        }}
+                        onClick={() => openEditModal(deal)}
+                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:bg-white/10"
+                      >
+                        <p className="truncate text-sm font-semibold text-slate-100">{deal.title}</p>
+                        <p className="mt-1 text-xs text-slate-400">{deal.client ? getClientDisplayName(deal.client) : 'No client'}</p>
+                      </button>
+                    ))}
+                    {forecastUndatedDeals.length === 0 ? <p className="text-xs text-slate-500">{t('crm.noDeals')}</p> : null}
+                  </div>
                 </div>
-              ))}
+              </div>
             </div>
           </div>
         ) : null}
