@@ -29,7 +29,7 @@ type AdminContextResponse = {
 export default function AdminHomePage() {
   const { token } = useAuth();
   const api = useApi(token);
-  const [canShowSubscriptionsTile, setCanShowSubscriptionsTile] = useState(false);
+  const [canShowSubscriptionsTile, setCanShowSubscriptionsTile] = useState(true);
 
   useEffect(() => {
     if (!token) return;
@@ -42,7 +42,8 @@ export default function AdminHomePage() {
       })
       .catch(() => {
         if (!active) return;
-        setCanShowSubscriptionsTile(false);
+        // Keep the tile visible on transient context/API failures.
+        setCanShowSubscriptionsTile(true);
       });
 
     return () => {

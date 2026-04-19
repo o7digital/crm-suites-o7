@@ -7,6 +7,9 @@ import { RequestUser } from '../common/user.decorator';
 import { CreateClientCollaboratorDto } from './dto/create-client-collaborator.dto';
 
 const CLIENT_DETAILS_INCLUDE = {
+  owner: {
+    select: { id: true, name: true, email: true },
+  },
   collaborators: {
     orderBy: [{ createdAt: 'asc' }],
   },
@@ -17,14 +20,24 @@ export class ClientsService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateClientDto, user: RequestUser) {
+    if (dto.ownerUserId) {
+      const owner = await this.prisma.user.findFirst({
+        where: { id: dto.ownerUserId, tenantId: user.tenantId },
+        select: { id: true },
+      });
+      if (!owner) throw new NotFoundException('Owner user not found');
+    }
+
     return this.prisma.client.create({
       data: { ...dto, tenantId: user.tenantId },
+      include: CLIENT_DETAILS_INCLUDE,
     });
   }
 
   async findAll(user: RequestUser) {
     return this.prisma.client.findMany({
       where: { tenantId: user.tenantId },
+      include: { owner: { select: { id: true, name: true, email: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -40,6 +53,13 @@ export class ClientsService {
 
   async update(id: string, dto: UpdateClientDto, user: RequestUser) {
     await this.ensureBelongs(id, user);
+    if (dto.ownerUserId) {
+      const owner = await this.prisma.user.findFirst({
+        where: { id: dto.ownerUserId, tenantId: user.tenantId },
+        select: { id: true },
+      });
+      if (!owner) throw new NotFoundException('Owner user not found');
+    }
     return this.prisma.client.update({
       where: { id },
       data: dto,

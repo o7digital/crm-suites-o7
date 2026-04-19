@@ -134,6 +134,7 @@ const COMMERCIAL_STAGE_KEYWORDS = [
   'closed won',
   'lost',
 ];
+const OPERATIONS_PIPELINE_NAME = 'Operations';
 
 const PRIORITY_BADGE: Record<PostSalesPriority, string> = {
   low: 'bg-slate-500/20 text-slate-200 ring-slate-400/30',
@@ -238,22 +239,39 @@ export default function PostSalesPage() {
   useEffect(() => {
     if (!token) return;
     api<Pipeline[]>('/pipelines')
-      .then((data) => {
-        const pipeline = data.find((item) => {
-          const name = item.name.toLowerCase();
-          return (
-            name.includes('post sales') ||
-            name.includes('post-sales') ||
-            name.includes('post venta') ||
-            name.includes('post-venta') ||
-            name.includes('postventa') ||
-            name.includes('delivery')
-          );
+      .then(async (data) => {
+        const existingOperations = data.find(
+          (item) => (item.name || '').trim().toLowerCase() === OPERATIONS_PIPELINE_NAME.toLowerCase(),
+        );
+        if (existingOperations) {
+          setPostSalesPipelineId(existingOperations.id);
+          return;
+        }
+
+        const created = await api<Pipeline>('/pipelines', {
+          method: 'POST',
+          body: JSON.stringify({ name: OPERATIONS_PIPELINE_NAME, isDefault: false }),
         });
-        setPostSalesPipelineId(pipeline?.id || '');
+        setPostSalesPipelineId(created.id);
+
+        await Promise.all(
+          POST_SALES_STATUS_KEYS.map((key, idx) =>
+            api('/stages', {
+              method: 'POST',
+              body: JSON.stringify({
+                pipelineId: created.id,
+                name: POST_SALES_STATUS_LABELS[key],
+                position: idx + 1,
+                status: key === 'done' ? 'WON' : 'OPEN',
+                probability: key === 'done' ? 1 : 0,
+              }),
+            }),
+          ),
+        );
       })
-      .catch(() => {
+      .catch((err) => {
         setPostSalesPipelineId('');
+        setError(err instanceof Error ? err.message : 'Unable to initialize Operations workflow');
       });
   }, [api, token]);
   useEffect(() => {
@@ -286,6 +304,15 @@ export default function PostSalesPage() {
         // Keep the board usable even if the auto-heal request fails.
       });
   }, [api, hasCommercialLeakInWorkflow, loadOperationalStages, operationalStages, postSalesPipelineId, token]);
+
+  useEffect(() => {
+    if (!showWorkflowEditor) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') setShowWorkflowEditor(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showWorkflowEditor]);
 
   const selectedDealId = useMemo(() => {
     if (!selectedCaseId) return null;
@@ -535,6 +562,7 @@ export default function PostSalesPage() {
           }),
       );
       await loadOperationalStages();
+      setShowWorkflowEditor(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to update workflow');
     } finally {
@@ -677,8 +705,8 @@ export default function PostSalesPage() {
       <AppShell>
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Post-Sales</p>
-            <h1 className="text-3xl font-semibold">Customer Delivery Pipeline</h1>
+            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Operations</p>
+            <h1 className="text-3xl font-semibold">Operations Flow</h1>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1">
@@ -731,7 +759,7 @@ export default function PostSalesPage() {
           <div className="space-y-4">
             <div className="card p-4">
               <p className="text-sm text-slate-300">
-                Pipeline flow: CRM deal WON {'->'} automatic Post-Sales case {'->'} operational delivery tracking.
+                Operations flow: CRM deal WON {'->'} automatic case {'->'} operational delivery tracking.
               </p>
             </div>
 
@@ -1251,15 +1279,28 @@ export default function PostSalesPage() {
           </div>
         ) : null}
         {showWorkflowEditor ? (
-          <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/70 px-4 py-8 md:items-center" onClick={() => setShowWorkflowEditor(false)}>
-            <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#1a2747] p-6 shadow-2xl shadow-black/40" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 px-4 py-8 md:items-center"
+            role="dialog"
+            aria-modal="true"
+            onClick={() => setShowWorkflowEditor(false)}
+          >
+            <div
+              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-white/10 bg-[#1a2747] p-6 shadow-2xl shadow-black/40"
+              onClick={(event) => event.stopPropagation()}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Workflow Operationnel</p>
                   <h2 className="mt-1 text-xl font-semibold text-slate-100">Etapes Post-Sales</h2>
                 </div>
-                <button type="button" className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300 hover:bg-white/10" onClick={() => setShowWorkflowEditor(false)}>
-                  Close
+                <button
+                  type="button"
+                  aria-label="Close workflow editor"
+                  className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300 hover:bg-white/10"
+                  onClick={() => setShowWorkflowEditor(false)}
+                >
+                  X
                 </button>
               </div>
               <div className="mt-4 space-y-3">

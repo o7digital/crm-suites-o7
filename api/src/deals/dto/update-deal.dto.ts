@@ -35,4 +35,8 @@ export class UpdateDealDto {
   @IsOptional()
   @IsUUID('4')
   clientId?: string | null;
+
+  @IsOptional()
+  @IsUUID('4')
+  ownerId?: string | null;
 }

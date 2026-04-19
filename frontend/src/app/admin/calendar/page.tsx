@@ -6,6 +6,8 @@ import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useApi, useAuth } from '../../../contexts/AuthContext';
 
+const GOOGLE_CALENDAR_SYNC_ENABLED = false;
+
 type GoogleCalendarStatus = {
   configReady: boolean;
   connected: boolean;
@@ -167,15 +169,16 @@ function AdminCalendarPageContent() {
                   type="button"
                   className="btn-primary"
                   onClick={handleConnect}
-                  disabled={busyAction !== null || !status?.configReady}
+                  disabled={true}
+                  title="Coming soon"
                 >
-                  {busyAction === 'connect' ? 'Redirecting...' : status?.connected ? 'Reconnect Google' : 'Connect Google'}
+                  Coming soon
                 </button>
                 <button
                   type="button"
                   className="btn-secondary"
                   onClick={handleSyncNow}
-                  disabled={busyAction !== null || !status?.connected}
+                  disabled={true}
                 >
                   {busyAction === 'sync' ? 'Syncing...' : 'Sync now'}
                 </button>
@@ -183,12 +186,17 @@ function AdminCalendarPageContent() {
                   type="button"
                   className="rounded-lg border border-red-500/30 px-4 py-2 text-sm text-red-200 hover:bg-red-500/10 disabled:opacity-50"
                   onClick={handleDisconnect}
-                  disabled={busyAction !== null || !status?.connected}
+                  disabled={true}
                 >
                   {busyAction === 'disconnect' ? 'Disconnecting...' : 'Disconnect'}
                 </button>
               </div>
             </div>
+            {!GOOGLE_CALENDAR_SYNC_ENABLED ? (
+              <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+                Google Calendar sync is temporarily disabled while we stabilize onboarding. Coming soon.
+              </div>
+            ) : null}
 
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <InfoItem label="CRM admin account" value={status?.crmUserEmail || 'Loading...'} />

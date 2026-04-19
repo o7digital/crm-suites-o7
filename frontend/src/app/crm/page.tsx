@@ -62,11 +62,20 @@ type Deal = {
   probability?: number | null;
   expectedCloseDate?: string | null;
   clientId?: string | null;
+  ownerId?: string | null;
+  owner?: { id: string; name: string; email: string } | null;
   client?: Client | null;
   stageId: string;
   pipelineId: string;
   stage?: Stage | null;
   items?: DealItem[];
+};
+
+type WorkspaceUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
 };
 
 type TenantSettings = {
@@ -257,6 +266,7 @@ export default function CrmPage() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [workspaceUsers, setWorkspaceUsers] = useState<WorkspaceUser[]>([]);
   const [clientsError, setClientsError] = useState<string | null>(null);
   const [fx, setFx] = useState<FxRatesSnapshot | null>(null);
   const [fxLoading, setFxLoading] = useState(false);
@@ -305,6 +315,7 @@ export default function CrmPage() {
     productIds: string[];
     pipelineId: string;
     stageId: string;
+    ownerId: string;
   }>({
     title: '',
     value: '',
@@ -316,6 +327,7 @@ export default function CrmPage() {
     productIds: [],
     pipelineId: '',
     stageId: '',
+    ownerId: '',
   });
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
   const [workflowMode, setWorkflowMode] = useState<WorkflowEditorMode>('edit');
@@ -399,6 +411,7 @@ export default function CrmPage() {
         productIds: [],
         pipelineId: '',
         stageId: '',
+        ownerId: '',
       });
     }
   }, [showModal]);
@@ -410,6 +423,13 @@ export default function CrmPage() {
       .catch(() => {
         // Products are optional for CRM; ignore failures here.
       });
+  }, [api, token]);
+
+  useEffect(() => {
+    if (!token) return;
+    api<WorkspaceUser[]>('/admin/users')
+      .then((data) => setWorkspaceUsers(data))
+      .catch(() => setWorkspaceUsers([]));
   }, [api, token]);
 
   useEffect(() => {
@@ -835,6 +855,7 @@ export default function CrmPage() {
       productIds: [],
       pipelineId,
       stageId: defaultStageId,
+      ownerId: '',
     });
     setShowModal(true);
   };
@@ -857,6 +878,7 @@ export default function CrmPage() {
       productIds: (deal.items ?? []).map((it) => it.productId).filter(Boolean),
       pipelineId: deal.pipelineId,
       stageId: deal.stageId,
+      ownerId: deal.ownerId ?? '',
     });
     setShowModal(true);
   }, []);
@@ -914,6 +936,7 @@ export default function CrmPage() {
             currency: form.currency,
             expectedCloseDate: form.expectedCloseDate || undefined,
             clientId: form.clientId ? form.clientId : null,
+            ownerId: form.ownerId ? form.ownerId : null,
             pipelineId: targetPipelineId,
             stageId,
             probability,
@@ -976,6 +999,7 @@ export default function CrmPage() {
             currency: form.currency,
             expectedCloseDate: form.expectedCloseDate || undefined,
             clientId: form.clientId || undefined,
+            ownerId: form.ownerId || undefined,
             pipelineId: targetPipelineId,
             stageId,
             probability,
@@ -1305,9 +1329,83 @@ export default function CrmPage() {
       const existingById = new Map(existingStages.map((stage) => [stage.id, stage]));
       const retainedStageIds = new Set(normalizedDrafts.map((draft) => draft.id));
       const stagesToDelete = existingStages.filter((stage) => !retainedStageIds.has(stage.id));
+      const undeletedStageIds = new Set<string>();
+      const undeletedStageReasons: string[] = [];
+      const failedUpdateStageNames: string[] = [];
+      const moveWarnings: string[] = [];
+      const pipelineDeals = await api<Deal[]>(`/deals?pipelineId=${workflowTargetPipelineId}`);
+      const dealsByStageId = new Map<string, Deal[]>();
+      for (const deal of pipelineDeals) {
+        const list = dealsByStageId.get(deal.stageId) || [];
+        list.push(deal);
+        dealsByStageId.set(deal.stageId, list);
+      }
 
       for (const stage of stagesToDelete) {
-        await api(`/stages/${stage.id}`, { method: 'DELETE' });
+        const stageDeals = dealsByStageId.get(stage.id) || [];
+        if (stageDeals.length > 0) {
+          const destinationChoices = normalizedDrafts.filter((draft) => draft.id !== stage.id);
+          if (destinationChoices.length === 0) {
+            throw new Error(`No hay etapa destino para mover los deals de "${stage.name}".`);
+          }
+          const defaultChoice = destinationChoices[0];
+          let targetStageId = defaultChoice.id;
+
+          const questionLines = [
+            `La etapa "${stage.name}" tiene ${stageDeals.length} deal(s).`,
+            'Confirma donde moverlos antes de eliminar:',
+            ...destinationChoices.map((choice, index) => `${index + 1}) ${choice.name}`),
+          ];
+          const answer =
+            typeof window === 'undefined'
+              ? '1'
+              : window.prompt(questionLines.join('\n'), '1');
+          if (answer !== null && answer.trim() !== '') {
+            const selected = Number.parseInt(answer.trim(), 10);
+            if (Number.isFinite(selected) && selected >= 1 && selected <= destinationChoices.length) {
+              targetStageId = destinationChoices[selected - 1].id;
+            } else {
+              moveWarnings.push(
+                `Seleccion invalida para "${stage.name}". Deals movidos a "${defaultChoice.name}" por defecto.`,
+              );
+            }
+          } else {
+            moveWarnings.push(
+              `Sin seleccion manual para "${stage.name}". Deals movidos a "${defaultChoice.name}" por defecto.`,
+            );
+          }
+          await Promise.all(
+            stageDeals.map((deal) =>
+              api(`/deals/${deal.id}/move-stage`, {
+                method: 'POST',
+                body: JSON.stringify({ stageId: targetStageId }),
+              }),
+            ),
+          );
+        }
+
+        try {
+          await api(`/stages/${stage.id}`, { method: 'DELETE' });
+        } catch (err) {
+          const message = err instanceof Error ? err.message.toLowerCase() : '';
+          const hasDeals =
+            message.includes('stage has deals') ||
+            message.includes('move deals before deleting');
+          const hasHistory =
+            message.includes('stage has history') ||
+            message.includes('cannot be deleted') ||
+            message.includes('referenced');
+          const isHandledBusinessError = hasDeals || hasHistory || message.includes('[400]');
+          if (!isHandledBusinessError) throw err;
+          undeletedStageIds.add(stage.id);
+          if (hasHistory) {
+            undeletedStageReasons.push(`${stage.name} (historial)`);
+          } else if (hasDeals) {
+            undeletedStageReasons.push(`${stage.name} (deals activos)`);
+          } else {
+            undeletedStageReasons.push(stage.name);
+          }
+        }
       }
 
       for (const draft of normalizedDrafts) {
@@ -1319,20 +1417,31 @@ export default function CrmPage() {
           Math.abs((current.probability ?? 0) - draft.probability) > 0.00001;
         if (!changed) continue;
 
-        await api(`/stages/${draft.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({
-            name: draft.name,
-            status: draft.status,
-            probability: draft.probability,
-          }),
-        });
+        try {
+          await api(`/stages/${draft.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              name: draft.name,
+              status: draft.status,
+              probability: draft.probability,
+            }),
+          });
+        } catch {
+          failedUpdateStageNames.push(current.name || draft.name);
+        }
       }
 
       const orderedExistingStageIds = [...existingStages]
+        .filter((stage) => retainedStageIds.has(stage.id) || undeletedStageIds.has(stage.id))
         .sort((a, b) => a.position - b.position)
         .map((stage) => stage.id);
-      const orderedDraftStageIds = normalizedDrafts.map((draft) => draft.id);
+      const orderedDraftStageIds = [
+        ...normalizedDrafts.map((draft) => draft.id),
+        ...existingStages
+          .sort((a, b) => a.position - b.position)
+          .filter((stage) => undeletedStageIds.has(stage.id))
+          .map((stage) => stage.id),
+      ];
       const workflowOrderChanged =
         orderedExistingStageIds.length === orderedDraftStageIds.length &&
         orderedExistingStageIds.some((stageId, index) => stageId !== orderedDraftStageIds[index]);
@@ -1359,9 +1468,29 @@ export default function CrmPage() {
       setWorkflowError(null);
       setShowWorkflowModal(false);
       setRequestedStageId(createdStageResult?.created.id || null);
+      if (undeletedStageReasons.length > 0 || failedUpdateStageNames.length > 0 || moveWarnings.length > 0) {
+        const warnings: string[] = [];
+        if (undeletedStageReasons.length > 0) {
+          warnings.push(
+            `${undeletedStageReasons.length} etapa(s) no se pudieron eliminar: ${undeletedStageReasons.join(', ')}`,
+          );
+        }
+        if (failedUpdateStageNames.length > 0) {
+          warnings.push(
+            `${failedUpdateStageNames.length} etapa(s) no se pudieron actualizar: ${failedUpdateStageNames.join(', ')}`,
+          );
+        }
+        if (moveWarnings.length > 0) {
+          warnings.push(...moveWarnings);
+        }
+        setError(`Workflow guardado con advertencias: ${warnings.join(' | ')}`);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to save workflow';
       setWorkflowError(message);
+      if (typeof window !== 'undefined') {
+        window.alert(message || 'Error save cancel');
+      }
     } finally {
       setWorkflowSaving(false);
     }
@@ -2141,6 +2270,22 @@ export default function CrmPage() {
                   )}
                   {clientsError ? <p className="mt-2 text-xs text-red-200">{clientsError}</p> : null}
                 </label>
+                <label className="block text-sm text-slate-300">
+                  Responsable
+                  <select
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                    value={form.ownerId}
+                    onChange={(e) => setForm((prev) => ({ ...prev, ownerId: e.target.value }))}
+                  >
+                    <option value="">Non assigne</option>
+                    {workspaceUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {(u.name || u.email).trim()} {u.role ? `· ${u.role}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
                 <label className="block text-sm text-slate-300">
                   {t('crm.pipeline')}
                   <select

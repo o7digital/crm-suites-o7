@@ -63,6 +63,10 @@ export class CreateDealDto {
   clientId?: string;
 
   @IsOptional()
+  @IsUUID('4')
+  ownerId?: string | null;
+
+  @IsOptional()
   @Transform(({ value }) => coerceStringArray(value))
   @IsArray()
   @ArrayMaxSize(50)

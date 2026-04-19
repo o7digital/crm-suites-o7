@@ -75,6 +75,7 @@ model User {
 
   tenant                   Tenant                    @relation(fields: [tenantId], references: [id])
   deals                    Deal[]                    @relation("DealOwner")
+  clientsOwned             Client[]                  @relation("ClientOwner")
   postSalesCasesOwned      PostSalesCase[]           @relation("PostSalesCaseOwner")
   googleCalendarConnection GoogleCalendarConnection?
 }
@@ -137,16 +138,20 @@ model Client {
   address       String?
   taxId         String?
   notes         String?
+  ownerUserId   String?
   tenantId      String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   tenant        Tenant               @relation(fields: [tenantId], references: [id])
+  owner         User?                @relation("ClientOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   tasks         Task[]
   invoices      Invoice[]
   deals         Deal[]
   postSalesCases PostSalesCase[]
   collaborators ClientCollaborator[]
+
+  @@index([ownerUserId])
 }
 
 model ClientCollaborator {
