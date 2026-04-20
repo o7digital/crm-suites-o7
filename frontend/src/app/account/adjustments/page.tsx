@@ -304,9 +304,9 @@ export default function AccountAdjustmentsPage() {
                   {COLOR_FIELDS.map((field) => (
                     <div key={field.key}>
                       <label className="text-sm text-slate-300">{t(field.labelKey)}</label>
-                      <div className="mt-2 flex items-center gap-3">
+                      <div className="mt-2 flex items-center gap-2 rounded-lg bg-white/5 px-2 py-1 ring-1 ring-white/10 focus-within:ring-2 focus-within:ring-cyan-400">
                         <label
-                          className="relative block h-10 w-10 cursor-pointer overflow-hidden rounded-full ring-2 ring-white/20 hover:ring-cyan-300/70"
+                          className="relative block h-8 w-8 shrink-0 cursor-pointer overflow-hidden rounded-full ring-2 ring-white/20 hover:ring-cyan-300/70"
                           title={`${t(field.labelKey)} · click to pick`}
                         >
                           <input
@@ -317,34 +317,15 @@ export default function AccountAdjustmentsPage() {
                             aria-label={t(field.labelKey)}
                           />
                           <span
-                            className="absolute inset-[3px] rounded-full border border-white/25"
+                            className="absolute inset-[2px] rounded-full border border-white/25"
                             style={{ background: toColorInputValue(themeDraft[field.key], DEFAULT_THEME[field.key]) }}
                           />
                         </label>
                         <input
-                          className="flex-1 rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                          className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none"
                           value={themeDraft[field.key]}
                           onChange={(e) => updateThemeField(field.key, e.target.value)}
                           placeholder={DEFAULT_THEME[field.key]}
-                        />
-                        <button
-                          type="button"
-                          className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-300 hover:bg-white/10"
-                          onClick={() => {
-                            const picker = document.getElementById(`color-${field.key}`) as HTMLInputElement | null;
-                            picker?.click();
-                          }}
-                        >
-                          Pick
-                        </button>
-                        <input
-                          id={`color-${field.key}`}
-                          type="color"
-                          value={toColorInputValue(themeDraft[field.key], DEFAULT_THEME[field.key])}
-                          onChange={(e) => updateThemeField(field.key, e.target.value)}
-                          className="sr-only"
-                          aria-hidden
-                          tabIndex={-1}
                         />
                       </div>
                     </div>
