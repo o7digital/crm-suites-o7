@@ -44,6 +44,14 @@ function isHexColor(value: string) {
   return /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(value.trim());
 }
 
+function toColorInputValue(value: string, fallback: string) {
+  const raw = value.trim();
+  if (!isHexColor(raw)) return fallback;
+  if (raw.length === 7) return raw.toLowerCase();
+  const short = raw.slice(1).toLowerCase();
+  return `#${short[0]}${short[0]}${short[1]}${short[1]}${short[2]}${short[2]}`;
+}
+
 export default function AccountAdjustmentsPage() {
   const { language, setLanguage, t } = useI18n();
   const { branding, updateBranding, loading: brandingLoading, error: brandingError } = useBranding();
@@ -297,13 +305,19 @@ export default function AccountAdjustmentsPage() {
                     <div key={field.key}>
                       <label className="text-sm text-slate-300">{t(field.labelKey)}</label>
                       <div className="mt-2 flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={isHexColor(themeDraft[field.key]) ? themeDraft[field.key] : DEFAULT_THEME[field.key]}
-                          onChange={(e) => updateThemeField(field.key, e.target.value)}
-                          className="h-10 w-10 cursor-pointer rounded-lg border border-white/10 bg-transparent"
-                          aria-label={t(field.labelKey)}
-                        />
+                        <label className="relative block h-11 w-14 cursor-pointer overflow-hidden rounded-lg ring-1 ring-white/15">
+                          <input
+                            type="color"
+                            value={toColorInputValue(themeDraft[field.key], DEFAULT_THEME[field.key])}
+                            onChange={(e) => updateThemeField(field.key, e.target.value)}
+                            className="absolute inset-0 cursor-pointer opacity-0"
+                            aria-label={t(field.labelKey)}
+                          />
+                          <span
+                            className="absolute inset-1 rounded-md border border-white/20"
+                            style={{ background: toColorInputValue(themeDraft[field.key], DEFAULT_THEME[field.key]) }}
+                          />
+                        </label>
                         <input
                           className="flex-1 rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                           value={themeDraft[field.key]}

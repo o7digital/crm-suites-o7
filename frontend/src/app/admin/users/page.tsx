@@ -25,6 +25,13 @@ type PendingInvite = {
   updatedAt: string;
 };
 
+type AdminContextResponse = {
+  seatLimit?: number | null;
+  currentUsersCount?: number;
+  pendingInvitesCount?: number;
+  isUnlimitedWorkspace?: boolean;
+};
+
 export default function AdminUsersPage() {
   const { token, user: currentUser } = useAuth();
   const api = useApi(token);
@@ -42,6 +49,7 @@ export default function AdminUsersPage() {
   const [savingInvite, setSavingInvite] = useState(false);
   const [draftRoles, setDraftRoles] = useState<Record<string, User['role']>>({});
   const [savingRoleUserId, setSavingRoleUserId] = useState<string | null>(null);
+  const [adminContext, setAdminContext] = useState<AdminContextResponse | null>(null);
 
   const buildInviteLink = useCallback(
     (invite: { token: string; email: string; name: string | null }) => {
@@ -59,8 +67,11 @@ export default function AdminUsersPage() {
   );
 
   const load = useCallback(() => {
-    Promise.allSettled([api<User[]>('/admin/users'), api<PendingInvite[]>('/admin/user-invites')])
-      .then(([usersRes, invitesRes]) => {
+    Promise.allSettled([
+      api<User[]>('/admin/users'),
+      api<PendingInvite[]>('/admin/user-invites'),
+      api<AdminContextResponse>('/admin/context'),
+    ]).then(([usersRes, invitesRes, contextRes]) => {
         if (usersRes.status === 'fulfilled') {
           setUsers(usersRes.value);
           setError(null);
@@ -73,6 +84,10 @@ export default function AdminUsersPage() {
         } else {
           const msg = invitesRes.reason instanceof Error ? invitesRes.reason.message : '';
           if (msg) setInviteMessage(`Invites unavailable: ${msg}`);
+        }
+
+        if (contextRes.status === 'fulfilled') {
+          setAdminContext(contextRes.value);
         }
       })
       .finally(() => setLoading(false));
@@ -197,6 +212,10 @@ export default function AdminUsersPage() {
   };
 
   const canCreateInvite = useMemo(() => inviteEmail.trim().length > 0 && !savingInvite, [inviteEmail, savingInvite]);
+  const totalReservedSeats = (adminContext?.currentUsersCount || users.length) + (adminContext?.pendingInvitesCount || invites.length);
+  const seatLimit = adminContext?.seatLimit ?? null;
+  const isUnlimitedWorkspace = Boolean(adminContext?.isUnlimitedWorkspace);
+  const seatsRemaining = seatLimit === null ? null : Math.max(0, seatLimit - totalReservedSeats);
 
   return (
     <Guard>
@@ -207,6 +226,20 @@ export default function AdminUsersPage() {
         </div>
 
         <div className="card p-5">
+          <div className="mb-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm">
+            <p className="text-slate-300">
+              <span className="font-semibold text-slate-100">Users autorisés:</span>{' '}
+              {isUnlimitedWorkspace ? 'Ilimitados (o7 digital)' : seatLimit === null ? 'Sin limite' : seatLimit}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              {isUnlimitedWorkspace || seatLimit === null
+                ? `Activos: ${adminContext?.currentUsersCount || users.length} · Invitaciones pendientes: ${
+                    adminContext?.pendingInvitesCount || invites.length
+                  }`
+                : `Usados: ${totalReservedSeats}/${seatLimit} · Libres: ${seatsRemaining}`}
+            </p>
+          </div>
+
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-slate-100">{t('adminUsers.invite.title')}</p>
@@ -260,7 +293,12 @@ export default function AdminUsersPage() {
               </select>
             </div>
             <div className="flex items-end">
-              <button type="button" className="btn-secondary w-full justify-center" disabled={!canCreateInvite} onClick={createInvite}>
+              <button
+                type="button"
+                className="btn-secondary w-full justify-center"
+                disabled={!canCreateInvite || (!isUnlimitedWorkspace && seatLimit !== null && totalReservedSeats >= seatLimit)}
+                onClick={createInvite}
+              >
                 {savingInvite ? 'Saving…' : 'Save'}
               </button>
             </div>
