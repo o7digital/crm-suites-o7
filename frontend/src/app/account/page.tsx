@@ -5,9 +5,28 @@ import { Guard } from '../../components/Guard';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 
+function normalizeDisplayName(name?: string | null, email?: string | null) {
+  const rawName = String(name || '').trim();
+  const rawEmail = String(email || '').trim().toLowerCase();
+  if (rawName && rawName.toLowerCase() !== rawEmail) return rawName;
+
+  const localPart = rawEmail.split('@')[0] || '';
+  if (!localPart) return '—';
+
+  const compact = localPart.replace(/[._-]+/g, ' ').trim();
+  if (!compact) return '—';
+
+  return compact
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
+    .join(' ');
+}
+
 export default function AccountPage() {
   const { user } = useAuth();
   const { t } = useI18n();
+  const displayName = normalizeDisplayName(user?.name, user?.email);
 
   return (
     <Guard>
@@ -21,7 +40,7 @@ export default function AccountPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <p className="text-xs uppercase tracking-[0.15em] text-slate-500">{t('field.name')}</p>
-              <p className="mt-1 text-sm text-slate-200">{user?.name || '—'}</p>
+              <p className="mt-1 text-sm text-slate-200">{displayName}</p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.15em] text-slate-500">{t('field.email')}</p>

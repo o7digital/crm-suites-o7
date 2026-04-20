@@ -518,6 +518,14 @@ export class AdminService {
   async getContext(user: RequestUser) {
     const role = await this.getUserRole(user);
     const context = await this.getSubscriptionWorkspaceContext(user.tenantId);
+    const seatLimit = await this.getCustomerSeatLimit(user.tenantId);
+    const [currentUsersCount, pendingInvitesCount] = await Promise.all([
+      this.prisma.user.count({ where: { tenantId: user.tenantId } }),
+      this.prisma.userInvite.count({
+        where: { tenantId: user.tenantId, status: 'PENDING' },
+      }),
+    ]);
+    const isUnlimitedWorkspace = context.ownsSubscriptions && !context.isCustomerTenant;
     return {
       role,
       isAdmin: this.isWorkspaceAdmin(role),
@@ -526,6 +534,10 @@ export class AdminService {
       canManageSubscriptions: context.canManageSubscriptions,
       ownsSubscriptions: context.ownsSubscriptions,
       isCustomerTenant: context.isCustomerTenant,
+      seatLimit,
+      currentUsersCount,
+      pendingInvitesCount,
+      isUnlimitedWorkspace,
     };
   }
 

@@ -1,12 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
+import { useAuth } from '../../../contexts/AuthContext';
 import { useI18n } from '../../../contexts/I18nContext';
 import type { LanguageCode } from '../../../i18n/types';
 
 type TemplateCard = {
+  id?: string;
+  docType?: string;
   title: string;
   description: string;
   href: string;
@@ -27,7 +30,7 @@ type ContractsUi = {
 
 const UI_BY_LANGUAGE_CORE: Record<'fr' | 'en' | 'es', ContractsUi> = {
   fr: {
-    heading: 'Contracts',
+    heading: 'Documents to sign',
     intro: 'Pack contractuel pret a personnaliser pour vos abonnements clients (MSA + RGPD + securite).',
     hint: "Astuce: completez les variables {{...}} puis exportez en PDF.",
     openLabel: 'Ouvrir',
@@ -60,7 +63,7 @@ const UI_BY_LANGUAGE_CORE: Record<'fr' | 'en' | 'es', ContractsUi> = {
     ],
   },
   en: {
-    heading: 'Contracts',
+    heading: 'Documents to sign',
     intro: 'Contract pack ready to customize for your subscriptions (MSA + GDPR + security).',
     hint: 'Tip: fill {{...}} placeholders, then export to PDF.',
     openLabel: 'Open',
@@ -93,7 +96,7 @@ const UI_BY_LANGUAGE_CORE: Record<'fr' | 'en' | 'es', ContractsUi> = {
     ],
   },
   es: {
-    heading: 'Contratos',
+    heading: 'Documents to sign',
     intro: 'Pack contractual listo para personalizar en tus suscripciones (MSA + RGPD + seguridad).',
     hint: 'Tip: completa las variables {{...}} y luego exporta a PDF.',
     openLabel: 'Abrir',
@@ -104,21 +107,29 @@ const UI_BY_LANGUAGE_CORE: Record<'fr' | 'en' | 'es', ContractsUi> = {
     printError: 'No se pudo abrir la ventana PDF. Habilita popups y vuelve a intentar.',
     templates: [
       {
+        id: 'es-msa',
+        docType: 'Contract',
         title: '01 - Contrato SaaS (MSA)',
         description: 'Contrato principal: suscripcion, responsabilidad, terminacion y firmas.',
         href: '/contracts/es/01_master_service_agreement_template.md',
       },
       {
+        id: 'es-dpa',
+        docType: 'NDA',
         title: '02 - Anexo DPA / RGPD',
         description: 'Clausulas de tratamiento de datos (art. 28 RGPD).',
         href: '/contracts/es/02_dpa_rgpd_template.md',
       },
       {
+        id: 'es-security',
+        docType: 'Letter of intention',
         title: '03 - Anexo de seguridad',
         description: 'Medidas tecnicas y organizativas de seguridad.',
         href: '/contracts/es/03_annexe_securite_template.md',
       },
       {
+        id: 'es-subprocessors',
+        docType: 'Proposal',
         title: '04 - Anexo de subencargados',
         description: 'Listado de subencargados (Stripe, hosting, Mailcow, etc.).',
         href: '/contracts/es/04_annexe_sous_traitants_template.md',
@@ -149,12 +160,55 @@ function escapeHtml(raw: string): string {
     .replaceAll("'", '&#39;');
 }
 
+function normalizeTemplateCards(cards: TemplateCard[]): TemplateCard[] {
+  return cards.map((item, index) => ({
+    id: String(item.id || `doc-${index + 1}`),
+    docType: String(item.docType || 'Contract'),
+    title: String(item.title || `Document ${index + 1}`),
+    description: String(item.description || ''),
+    href: String(item.href || ''),
+  }));
+}
+
 export default function AdminContractsPage() {
+  const { user } = useAuth();
   const { language } = useI18n();
   const [pdfBusyHref, setPdfBusyHref] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
 
   const ui = useMemo(() => UI_BY_LANGUAGE[language] || UI_BY_LANGUAGE.en, [language]);
+  const storageKey = useMemo(
+    () => (user?.tenantId ? `o7-documents-to-sign-v1:${user.tenantId}` : null),
+    [user?.tenantId],
+  );
+  const [templates, setTemplates] = useState<TemplateCard[]>(normalizeTemplateCards(ui.templates));
+
+  useEffect(() => {
+    if (!storageKey || typeof window === 'undefined') {
+      setTemplates(normalizeTemplateCards(ui.templates));
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) {
+        setTemplates(normalizeTemplateCards(ui.templates));
+        return;
+      }
+      const parsed = JSON.parse(raw) as TemplateCard[];
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        setTemplates(normalizeTemplateCards(ui.templates));
+        return;
+      }
+      setTemplates(normalizeTemplateCards(parsed));
+    } catch {
+      setTemplates(normalizeTemplateCards(ui.templates));
+    }
+  }, [storageKey, ui.templates]);
+
+  useEffect(() => {
+    if (!storageKey || typeof window === 'undefined') return;
+    window.localStorage.setItem(storageKey, JSON.stringify(templates));
+  }, [storageKey, templates]);
 
   const generatePdf = async (template: TemplateCard) => {
     setPdfError(null);
@@ -217,11 +271,77 @@ export default function AdminContractsPage() {
           </p>
         </div>
 
+        <div className="card mt-6 p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-100">Document types</p>
+            <button
+              type="button"
+              className="btn-secondary text-xs"
+              onClick={() =>
+                setTemplates((prev) => [
+                  ...prev,
+                  {
+                    id: `custom-${Date.now()}`,
+                    docType: 'Custom',
+                    title: 'New document',
+                    description: 'Describe when this document should be signed.',
+                    href: '',
+                  },
+                ])
+              }
+            >
+              Add type
+            </button>
+          </div>
+          <p className="text-xs text-slate-400">
+            You can personalize document types: Letter of intention, NDA, Contract, Proposal, etc.
+          </p>
+        </div>
+
         <div className="mt-6 grid gap-4 md:grid-cols-2">
-          {ui.templates.map((tpl) => (
-            <div key={tpl.href} className="card p-5">
+          {templates.map((tpl, index) => (
+            <div key={tpl.id || `row-${index}`} className="card p-5">
+              <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                <input
+                  className="rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                  value={tpl.docType}
+                  onChange={(e) =>
+                    setTemplates((prev) => prev.map((x) => (x.id === tpl.id ? { ...x, docType: e.target.value } : x)))
+                  }
+                  placeholder="Type (NDA, LOI, Contract...)"
+                />
+                <input
+                  className="rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                  value={tpl.href}
+                  onChange={(e) =>
+                    setTemplates((prev) => prev.map((x) => (x.id === tpl.id ? { ...x, href: e.target.value } : x)))
+                  }
+                  placeholder="/contracts/en/..."
+                />
+              </div>
+              <p className="mb-2 text-xs uppercase tracking-[0.12em] text-cyan-300">{tpl.docType || 'Document'}</p>
               <p className="text-lg font-semibold text-slate-100">{tpl.title}</p>
               <p className="mt-2 text-sm text-slate-400">{tpl.description}</p>
+              <div className="mt-3 grid gap-2">
+                <input
+                  className="rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                  value={tpl.title}
+                  onChange={(e) =>
+                    setTemplates((prev) => prev.map((x) => (x.id === tpl.id ? { ...x, title: e.target.value } : x)))
+                  }
+                  placeholder="Document title"
+                />
+                <input
+                  className="rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                  value={tpl.description}
+                  onChange={(e) =>
+                    setTemplates((prev) =>
+                      prev.map((x) => (x.id === tpl.id ? { ...x, description: e.target.value } : x)),
+                    )
+                  }
+                  placeholder="Description"
+                />
+              </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 <a className="btn-secondary text-sm" href={tpl.href} target="_blank" rel="noreferrer">
                   {ui.openLabel}
@@ -236,6 +356,13 @@ export default function AdminContractsPage() {
                   disabled={pdfBusyHref === tpl.href}
                 >
                   {pdfBusyHref === tpl.href ? 'Generating...' : ui.pdfLabel}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-200 hover:bg-red-500/10"
+                  onClick={() => setTemplates((prev) => prev.filter((x) => x.id !== tpl.id))}
+                >
+                  Remove
                 </button>
               </div>
             </div>

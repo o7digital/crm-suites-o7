@@ -153,6 +153,9 @@ function ClientsPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"LIST" | "CREATE">("LIST");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | ClientStatus>("ALL");
 
   const [detailsClient, setDetailsClient] = useState<ClientDetails | null>(
     null,
@@ -666,6 +669,27 @@ function ClientsPageContent() {
     fetchClients();
   };
 
+  const filteredClients = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return clients.filter((client) => {
+      const normalizedStatus = normalizeClientStatus(client.clientStatus);
+      if (statusFilter !== "ALL" && normalizedStatus !== statusFilter) return false;
+      if (!query) return true;
+
+      const haystack = [
+        getClientDisplayName(client),
+        client.email || "",
+        client.company || "",
+        client.phone || "",
+        client.companySector || "",
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [clients, searchQuery, statusFilter]);
+
   return (
     <>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -676,6 +700,18 @@ function ClientsPageContent() {
           <h1 className="text-3xl font-semibold">{t("nav.clients")}</h1>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            className={`text-sm ${viewMode === "LIST" ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setViewMode("LIST")}
+          >
+            Consultar / Modificar
+          </button>
+          <button
+            className={`text-sm ${viewMode === "CREATE" ? "btn-primary" : "btn-secondary"}`}
+            onClick={() => setViewMode("CREATE")}
+          >
+            Nuevo cliente/prospecto
+          </button>
           <button className="btn-secondary text-sm" onClick={handleExportCsv}>
             {t("clients.exportCsv")}
           </button>
@@ -691,7 +727,41 @@ function ClientsPageContent() {
         </div>
       </div>
 
-      <ClientForm onSubmit={handleCreate} workspaceUsers={workspaceUsers} />
+      {viewMode === "CREATE" ? (
+        <ClientForm onSubmit={handleCreate} workspaceUsers={workspaceUsers} />
+      ) : (
+        <div className="card p-4">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+            <input
+              className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+              placeholder="Buscar por nombre, email, empresa..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <select
+              className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(
+                  e.target.value === "ALL"
+                    ? "ALL"
+                    : (normalizeClientStatus(e.target.value) ?? "CLIENT"),
+                )
+              }
+            >
+              <option value="ALL">Todos los estados</option>
+              {CLIENT_STATUS_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>
+                  {t(`clients.status.${opt.toLowerCase()}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            {filteredClients.length} resultado(s)
+          </p>
+        </div>
+      )}
 
       {loading && (
         <div className="mt-6 text-slate-300">{t("clients.loading")}</div>
@@ -708,7 +778,7 @@ function ClientsPageContent() {
       )}
 
       <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/30">
-        {clients.length > 0 ? (
+        {filteredClients.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
               <thead className="bg-white/5 text-slate-400">
@@ -731,7 +801,7 @@ function ClientsPageContent() {
                 </tr>
               </thead>
               <tbody>
-                {clients.map((client) => {
+                {filteredClients.map((client) => {
                   const clientStatus = normalizeClientStatus(
                     client.clientStatus,
                   );
@@ -810,15 +880,28 @@ function ClientsPageContent() {
                         ) : null}
                       </td>
                       <td className="px-4 py-4 text-right">
-                        <button
-                          className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDelete(client.id);
-                          }}
-                        >
-                          {t("common.delete")}
-                        </button>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            className="btn-secondary text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(
+                                `/clients?clientId=${encodeURIComponent(client.id)}`,
+                              );
+                            }}
+                          >
+                            Modificar
+                          </button>
+                          <button
+                            className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(client.id);
+                            }}
+                          >
+                            {t("common.delete")}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -827,7 +910,7 @@ function ClientsPageContent() {
             </table>
           </div>
         ) : null}
-        {clients.length === 0 && !loading ? (
+        {filteredClients.length === 0 && !loading ? (
           <p className="p-4 text-sm text-slate-400">{t("clients.empty")}</p>
         ) : null}
       </div>
