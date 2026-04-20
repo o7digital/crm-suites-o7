@@ -519,12 +519,23 @@ export class AdminService {
     const role = await this.getUserRole(user);
     const context = await this.getSubscriptionWorkspaceContext(user.tenantId);
     const seatLimit = await this.getCustomerSeatLimit(user.tenantId);
-    const [currentUsersCount, pendingInvitesCount] = await Promise.all([
-      this.prisma.user.count({ where: { tenantId: user.tenantId } }),
-      this.prisma.userInvite.count({
+    const currentUsersCount = await this.prisma.user.count({
+      where: { tenantId: user.tenantId },
+    });
+    let pendingInvitesCount = 0;
+    try {
+      pendingInvitesCount = await this.prisma.userInvite.count({
         where: { tenantId: user.tenantId, status: 'PENDING' },
-      }),
-    ]);
+      });
+    } catch (err) {
+      // Keep /admin/context resilient if user-invites schema isn't deployed yet.
+      if (!this.isSchemaUpgradePendingError(err)) {
+        const mapped = this.mapSchemaError(err);
+        if (mapped) throw mapped;
+        throw err;
+      }
+      pendingInvitesCount = 0;
+    }
     const isUnlimitedWorkspace = context.ownsSubscriptions && !context.isCustomerTenant;
     return {
       role,
