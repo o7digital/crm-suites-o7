@@ -305,7 +305,10 @@ export default function AccountAdjustmentsPage() {
                     <div key={field.key}>
                       <label className="text-sm text-slate-300">{t(field.labelKey)}</label>
                       <div className="mt-2 flex items-center gap-3">
-                        <label className="relative block h-11 w-14 cursor-pointer overflow-hidden rounded-lg ring-1 ring-white/15">
+                        <label
+                          className="relative block h-10 w-10 cursor-pointer overflow-hidden rounded-full ring-2 ring-white/20 hover:ring-cyan-300/70"
+                          title={`${t(field.labelKey)} · click to pick`}
+                        >
                           <input
                             type="color"
                             value={toColorInputValue(themeDraft[field.key], DEFAULT_THEME[field.key])}
@@ -314,7 +317,7 @@ export default function AccountAdjustmentsPage() {
                             aria-label={t(field.labelKey)}
                           />
                           <span
-                            className="absolute inset-1 rounded-md border border-white/20"
+                            className="absolute inset-[3px] rounded-full border border-white/25"
                             style={{ background: toColorInputValue(themeDraft[field.key], DEFAULT_THEME[field.key]) }}
                           />
                         </label>
@@ -323,6 +326,25 @@ export default function AccountAdjustmentsPage() {
                           value={themeDraft[field.key]}
                           onChange={(e) => updateThemeField(field.key, e.target.value)}
                           placeholder={DEFAULT_THEME[field.key]}
+                        />
+                        <button
+                          type="button"
+                          className="rounded-lg border border-white/15 px-2 py-1 text-xs text-slate-300 hover:bg-white/10"
+                          onClick={() => {
+                            const picker = document.getElementById(`color-${field.key}`) as HTMLInputElement | null;
+                            picker?.click();
+                          }}
+                        >
+                          Pick
+                        </button>
+                        <input
+                          id={`color-${field.key}`}
+                          type="color"
+                          value={toColorInputValue(themeDraft[field.key], DEFAULT_THEME[field.key])}
+                          onChange={(e) => updateThemeField(field.key, e.target.value)}
+                          className="sr-only"
+                          aria-hidden
+                          tabIndex={-1}
                         />
                       </div>
                     </div>
