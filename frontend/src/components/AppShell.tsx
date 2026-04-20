@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useApi, useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../contexts/I18nContext';
 import { useBranding } from '../contexts/BrandingContext';
@@ -23,12 +23,10 @@ const nav = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, token } = useAuth();
-  const api = useApi(token);
+  const { user, logout } = useAuth();
   const { branding } = useBranding();
   const { t } = useI18n();
   const [accountOpen, setAccountOpen] = useState(false);
-  const [workspaceRole, setWorkspaceRole] = useState<'OWNER' | 'ADMIN' | 'MEMBER' | null>(null);
   const [themeMode, setThemeMode] = useState<'night' | 'day'>('night');
   const accountRef = useRef<HTMLDivElement | null>(null);
   const themeStorageKey = 'o7-theme-mode';
@@ -43,20 +41,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     },
     [pathname],
   );
-
-  useEffect(() => {
-    if (!token) {
-      setWorkspaceRole(null);
-      return;
-    }
-    api<{ role?: 'OWNER' | 'ADMIN' | 'MEMBER' }>('/admin/context')
-      .then((data) => {
-        setWorkspaceRole(data?.role || null);
-      })
-      .catch(() => {
-        setWorkspaceRole(null);
-      });
-  }, [api, token]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -134,11 +118,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     [],
   );
 
-  const canAccessPostSales = workspaceRole === 'OWNER' || workspaceRole === 'ADMIN';
-  const filteredNav = useMemo(
-    () => nav.filter((item) => (item.href === '/post-sales' ? canAccessPostSales : true)),
-    [canAccessPostSales],
-  );
+  const filteredNav = useMemo(() => nav, []);
 
   return (
     <div className="min-h-screen">
