@@ -44,8 +44,6 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
-`start:prod` applies database migrations first (`prisma migrate deploy`), then starts the API.
-
 ## Run tests
 
 ```bash
