@@ -6,7 +6,6 @@ WORKDIR /app
 # Install dependencies
 COPY api/package*.json api/tsconfig*.json api/nest-cli.json ./api/
 COPY api/prisma ./api/prisma
-COPY api/scripts ./api/scripts
 RUN cd api && npm ci
 # Generate Prisma client using targets declared in prisma/schema.prisma.
 RUN cd api && npx prisma generate
@@ -21,7 +20,6 @@ WORKDIR /app
 COPY --from=builder /app/api/dist ./dist
 COPY --from=builder /app/api/package*.json ./
 COPY --from=builder /app/api/prisma ./prisma
-COPY --from=builder /app/api/scripts ./scripts
 RUN npm ci --omit=dev \
   && npx prisma generate
 ENV PORT=8080
