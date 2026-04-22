@@ -410,18 +410,24 @@ export class AdminService {
 
   async listUsers(user: RequestUser) {
     await this.ensureAdmin(user);
-    return this.prisma.user.findMany({
-      where: { tenantId: user.tenantId },
-      orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    try {
+      return await this.prisma.user.findMany({
+        where: { tenantId: user.tenantId },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      const mapped = this.mapSchemaError(err);
+      if (mapped) throw mapped;
+      throw err;
+    }
   }
 
   async listUserInvites(user: RequestUser) {
