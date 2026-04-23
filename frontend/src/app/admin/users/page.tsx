@@ -42,6 +42,7 @@ export default function AdminUsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [inviteUrl, setInviteUrl] = useState('');
   const [inviteMessage, setInviteMessage] = useState<string | null>(null);
+  const [inviteFeatureUnavailable, setInviteFeatureUnavailable] = useState(false);
 
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
@@ -81,9 +82,16 @@ export default function AdminUsersPage() {
 
         if (invitesRes.status === 'fulfilled') {
           setInvites(invitesRes.value);
+          setInviteFeatureUnavailable(false);
         } else {
           const msg = invitesRes.reason instanceof Error ? invitesRes.reason.message : '';
-          if (msg) setInviteMessage(`Invites unavailable: ${msg}`);
+          if (msg.includes('Database schema upgrade pending') || msg.includes('[503]')) {
+            setInviteFeatureUnavailable(true);
+            setInvites([]);
+            setInviteMessage(null);
+          } else if (msg) {
+            setInviteMessage(`Invites unavailable: ${msg}`);
+          }
         }
 
         if (contextRes.status === 'fulfilled') {
@@ -211,7 +219,10 @@ export default function AdminUsersPage() {
     setSavingRoleUserId(null);
   };
 
-  const canCreateInvite = useMemo(() => inviteEmail.trim().length > 0 && !savingInvite, [inviteEmail, savingInvite]);
+  const canCreateInvite = useMemo(
+    () => inviteEmail.trim().length > 0 && !savingInvite && !inviteFeatureUnavailable,
+    [inviteEmail, savingInvite, inviteFeatureUnavailable],
+  );
   const totalReservedSeats = (adminContext?.currentUsersCount || users.length) + (adminContext?.pendingInvitesCount || invites.length);
   const seatLimit = adminContext?.seatLimit ?? null;
   const isUnlimitedWorkspace = Boolean(adminContext?.isUnlimitedWorkspace);
@@ -246,12 +257,21 @@ export default function AdminUsersPage() {
               <p className="mt-1 text-sm text-slate-400">{t('adminUsers.invite.subtitle')}</p>
               <p className="mt-2 text-xs text-slate-500">{t('adminUsers.invite.rolesHint')}</p>
             </div>
-            <button type="button" className="btn-primary" onClick={copyInviteLink} disabled={!inviteUrl}>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={copyInviteLink}
+              disabled={!inviteUrl || inviteFeatureUnavailable}
+            >
               {t('adminUsers.invite.copyButton')}
             </button>
           </div>
 
-          {inviteUrl ? (
+          {inviteFeatureUnavailable ? (
+            <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+              Invitations temporairement indisponibles.
+            </div>
+          ) : inviteUrl ? (
             <div className="mt-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
               <p className="text-xs text-slate-400">{t('adminUsers.invite.linkLabel')}</p>
               <p className="mt-1 break-all font-mono text-xs text-slate-200">{inviteUrl}</p>
@@ -269,6 +289,7 @@ export default function AdminUsersPage() {
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="jorge@company.com"
                 className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                disabled={inviteFeatureUnavailable}
               />
             </div>
             <div>
@@ -278,6 +299,7 @@ export default function AdminUsersPage() {
                 onChange={(e) => setInviteName(e.target.value)}
                 placeholder="Jorge"
                 className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                disabled={inviteFeatureUnavailable}
               />
             </div>
             <div>
@@ -286,6 +308,7 @@ export default function AdminUsersPage() {
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as 'OWNER' | 'ADMIN' | 'MEMBER')}
                 className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                disabled={inviteFeatureUnavailable}
               >
                 <option value="ADMIN">{t('adminUsers.roleAdmin')}</option>
                 <option value="MEMBER">{t('adminUsers.roleMember')}</option>
@@ -313,7 +336,9 @@ export default function AdminUsersPage() {
         {!loading && (
           <div className="card mt-6 p-5">
             <p className="mb-3 text-sm font-semibold text-slate-100">Pending invites</p>
-            {invites.length === 0 ? (
+            {inviteFeatureUnavailable ? (
+              <p className="text-sm text-slate-400">Invitations temporarily unavailable.</p>
+            ) : invites.length === 0 ? (
               <p className="text-sm text-slate-400">No pending invites.</p>
             ) : (
               <div className="overflow-x-auto">
