@@ -106,6 +106,7 @@ type NewStageDraft = {
 };
 
 type WorkflowStageDropPlacement = 'before' | 'after';
+type DealDropPlacement = 'before' | 'after';
 
 let workflowStageDraftCounter = 0;
 
@@ -221,6 +222,10 @@ function parseProbabilityPct(value: string) {
   return parsed;
 }
 
+function getDealOrderStorageKey(tenantId: string, pipelineId: string) {
+  return `crm.deal-order.${tenantId}.${pipelineId}`;
+}
+
 function formatDealsUsdTotal(
   deals: Deal[],
   fx: FxRatesSnapshot | null,
@@ -280,6 +285,7 @@ export default function CrmPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [dealDuplicating, setDealDuplicating] = useState(false);
+  const [dealStatusSaving, setDealStatusSaving] = useState<Stage['status'] | null>(null);
   const [proposalFile, setProposalFile] = useState<File | null>(null);
   const [proposalFileName, setProposalFileName] = useState('');
   const [proposalError, setProposalError] = useState<string | null>(null);
@@ -361,6 +367,7 @@ export default function CrmPage() {
     stageId: string;
     placement: WorkflowStageDropPlacement;
   } | null>(null);
+  const [dealOrderByStageId, setDealOrderByStageId] = useState<Record<string, string[]>>({});
   const workflowIsCreateMode = workflowMode === 'create';
   const workflowTargetPipelineId = workflowIsCreateMode ? '' : workflowEditingPipelineId;
   const newStageNameValue = newStageDraft.name.trim();
@@ -583,6 +590,46 @@ export default function CrmPage() {
       active = false;
     };
   }, [api, pipelineId, token]);
+
+  useEffect(() => {
+    if (!user?.tenantId || !pipelineId) {
+      setDealOrderByStageId({});
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(getDealOrderStorageKey(user.tenantId, pipelineId));
+      if (!raw) {
+        setDealOrderByStageId({});
+        return;
+      }
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        setDealOrderByStageId({});
+        return;
+      }
+      const normalized: Record<string, string[]> = {};
+      for (const [stageId, value] of Object.entries(parsed)) {
+        if (Array.isArray(value)) {
+          normalized[stageId] = value.filter((id): id is string => typeof id === 'string');
+        }
+      }
+      setDealOrderByStageId(normalized);
+    } catch {
+      setDealOrderByStageId({});
+    }
+  }, [pipelineId, user?.tenantId]);
+
+  useEffect(() => {
+    if (!user?.tenantId || !pipelineId) return;
+    try {
+      localStorage.setItem(
+        getDealOrderStorageKey(user.tenantId, pipelineId),
+        JSON.stringify(dealOrderByStageId),
+      );
+    } catch {
+      // ignore storage failures (private mode / quota)
+    }
+  }, [dealOrderByStageId, pipelineId, user?.tenantId]);
 
   const sortedStages = useMemo(() => {
     return [...stages].sort((a, b) => a.position - b.position);
@@ -1224,11 +1271,100 @@ export default function CrmPage() {
       setDeals((prev) =>
         prev.map((deal) => (deal.id === dealId ? { ...deal, stageId } : deal)),
       );
+      setDealOrderByStageId((prev) => {
+        const next: Record<string, string[]> = {};
+        for (const [id, orderedIds] of Object.entries(prev)) {
+          next[id] = orderedIds.filter((orderedId) => orderedId !== dealId);
+        }
+        const destination = next[stageId] ? [...next[stageId]] : [];
+        destination.push(dealId);
+        next[stageId] = Array.from(new Set(destination));
+        return next;
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to move deal';
       setError(message);
     }
   };
+
+  const handleReorderDealInStage = useCallback(
+    (stageId: string, draggedDealId: string, targetDealId: string, placement: DealDropPlacement) => {
+      if (!draggedDealId || !targetDealId || draggedDealId === targetDealId) return;
+      setDealOrderByStageId((prev) => {
+        const stageDealIds = deals.filter((deal) => deal.stageId === stageId).map((deal) => deal.id);
+        if (stageDealIds.length === 0) return prev;
+
+        const base = (prev[stageId] || []).filter((id) => stageDealIds.includes(id));
+        for (const id of stageDealIds) {
+          if (!base.includes(id)) base.push(id);
+        }
+        if (!base.includes(draggedDealId)) base.push(draggedDealId);
+
+        const withoutDragged = base.filter((id) => id !== draggedDealId);
+        const targetIndex = withoutDragged.findIndex((id) => id === targetDealId);
+        if (targetIndex < 0) return prev;
+
+        const insertIndex = placement === 'before' ? targetIndex : targetIndex + 1;
+        const reordered = [
+          ...withoutDragged.slice(0, insertIndex),
+          draggedDealId,
+          ...withoutDragged.slice(insertIndex),
+        ];
+        return { ...prev, [stageId]: reordered };
+      });
+    },
+    [deals],
+  );
+
+  const getDealsForStage = useCallback(
+    (stageId: string) => {
+      const stageDeals = filteredDeals.filter((deal) => deal.stageId === stageId);
+      const orderedIds = dealOrderByStageId[stageId] || [];
+      if (orderedIds.length === 0) return stageDeals;
+
+      const positionById = new Map<string, number>();
+      orderedIds.forEach((id, index) => positionById.set(id, index));
+
+      return [...stageDeals].sort((a, b) => {
+        const aPos = positionById.get(a.id);
+        const bPos = positionById.get(b.id);
+        if (aPos === undefined && bPos === undefined) return 0;
+        if (aPos === undefined) return 1;
+        if (bPos === undefined) return -1;
+        return aPos - bPos;
+      });
+    },
+    [dealOrderByStageId, filteredDeals],
+  );
+
+  const handleMarkEditingDealStatus = useCallback(
+    async (status: 'WON' | 'LOST') => {
+      if (!editingDeal) return;
+      const targetStage = modalSortedStages.find((s) => s.status === status);
+      if (!targetStage) {
+        setError(`No ${status} stage available in this pipeline`);
+        return;
+      }
+      setDealStatusSaving(status);
+      setError(null);
+      try {
+        const updated = await api<Deal>(`/deals/${editingDeal.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ stageId: targetStage.id }),
+        });
+        const merged = { ...editingDeal, ...updated, stageId: targetStage.id };
+        setEditingDeal(merged);
+        setForm((prev) => ({ ...prev, stageId: targetStage.id }));
+        setDeals((prev) => prev.map((d) => (d.id === editingDeal.id ? { ...d, ...merged } : d)));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : `Unable to mark ${status}`;
+        setError(message);
+      } finally {
+        setDealStatusSaving(null);
+      }
+    },
+    [api, editingDeal, modalSortedStages],
+  );
 
   const handleDropDealToStatus = async (dealId: string, status: Stage['status']) => {
     const targetStage = status === 'WON' ? firstWonStage : firstLostStage;
@@ -1806,17 +1942,28 @@ export default function CrmPage() {
         {viewMode === 'KANBAN' ? (
           <>
           {/* Keep all stages on one line (no wrap). Horizontal scroll if needed. */}
-          <div className="overflow-x-auto pb-4 2xl:-ml-48 2xl:w-[calc(100%+24rem)]">
+          <div
+            className="overflow-x-auto overscroll-x-contain pb-4 2xl:-ml-48 2xl:w-[calc(100%+24rem)]"
+            onWheel={(event) => {
+              // Keep horizontal trackpad gestures inside CRM board and avoid parent/page navigation.
+              const hasHorizontalIntent = Math.abs(event.deltaX) > 0 || event.shiftKey;
+              if (!hasHorizontalIntent) return;
+              event.preventDefault();
+              const horizontalDelta = Math.abs(event.deltaX) > 0 ? event.deltaX : event.deltaY;
+              event.currentTarget.scrollLeft += horizontalDelta;
+            }}
+          >
             <div className="flex w-max gap-4 pr-6">
               {visibleStages.map((stage) => (
                 <StageColumn
                   key={stage.id}
                   stage={stage}
-                  deals={filteredDeals.filter((deal) => deal.stageId === stage.id)}
+                  deals={getDealsForStage(stage.id)}
                   displayCurrency={crmDisplayCurrency}
                   fx={fx}
                   fxLoading={fxLoading}
                   onMoveDeal={handleMoveDeal}
+                  onReorderDealInStage={handleReorderDealInStage}
                   onOpenDeal={openDealFromCard}
                   onDealDragStart={() => {
                     lastDragAtRef.current = Date.now();
@@ -2386,7 +2533,7 @@ export default function CrmPage() {
 
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-10">
-            <div className={`card flex w-full flex-col overflow-hidden p-6 ${dealWindowMaximized ? 'max-w-[96vw] max-h-[94vh]' : 'max-w-md max-h-[90vh]'}`}>
+            <div className={`card flex w-full flex-col overflow-hidden p-6 ${dealWindowMaximized ? 'max-w-[96vw] max-h-[94vh]' : 'max-w-4xl max-h-[90vh]'}`}>
               <div className="flex items-center justify-between">
                 <WindowControls
                   onClose={() => setShowModal(false)}
@@ -2769,7 +2916,25 @@ export default function CrmPage() {
                   {proposalError ? <p className="mt-2 text-xs text-red-200">{proposalError}</p> : null}
                 </div>
               </div>
-              <div className="mt-6 flex items-center justify-end gap-2">
+              <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
+                {editingDeal ? (
+                  <>
+                    <button
+                      className="rounded-lg border border-emerald-400/30 bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/30 disabled:opacity-60"
+                      onClick={() => void handleMarkEditingDealStatus('WON')}
+                      disabled={dealDuplicating || dealStatusSaving !== null}
+                    >
+                      {dealStatusSaving === 'WON' ? 'WIN…' : 'WIN'}
+                    </button>
+                    <button
+                      className="rounded-lg border border-red-400/30 bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-500/30 disabled:opacity-60"
+                      onClick={() => void handleMarkEditingDealStatus('LOST')}
+                      disabled={dealDuplicating || dealStatusSaving !== null}
+                    >
+                      {dealStatusSaving === 'LOST' ? 'LOST…' : 'LOST'}
+                    </button>
+                  </>
+                ) : null}
                 {editingDeal ? (
                   <button className="btn-secondary" onClick={handleDeleteDeal} disabled={dealDuplicating}>
                     {t('common.delete')}
@@ -2804,6 +2969,7 @@ function StageColumn({
   fx,
   fxLoading,
   onMoveDeal,
+  onReorderDealInStage,
   onOpenDeal,
   onDealDragStart,
   onRequestAddStageAfter,
@@ -2815,6 +2981,12 @@ function StageColumn({
   fx: FxRatesSnapshot | null;
   fxLoading: boolean;
   onMoveDeal: (dealId: string, stageId: string) => void;
+  onReorderDealInStage: (
+    stageId: string,
+    draggedDealId: string,
+    targetDealId: string,
+    placement: DealDropPlacement,
+  ) => void;
   onOpenDeal: (deal: Deal) => void;
   onDealDragStart: () => void;
   onRequestAddStageAfter: (stage: Stage) => void;
@@ -2922,6 +3094,25 @@ function StageColumn({
             onDragStart={(event) => {
               event.dataTransfer.setData('text/plain', deal.id);
               onDealDragStart();
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const draggedDealId = event.dataTransfer.getData('text/plain');
+              if (!draggedDealId) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const placement: DealDropPlacement =
+                event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+              if (draggedDealId !== deal.id) {
+                onReorderDealInStage(stage.id, draggedDealId, deal.id, placement);
+              }
+              const draggedIsInSameStage = deals.some((d) => d.id === draggedDealId);
+              if (!draggedIsInSameStage) {
+                void onMoveDeal(draggedDealId, stage.id);
+              }
             }}
             role="button"
             tabIndex={0}
