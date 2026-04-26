@@ -77,6 +77,7 @@ export default function DealPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [statusSaving, setStatusSaving] = useState<Stage['status'] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -236,6 +237,35 @@ export default function DealPage() {
     }
   }, [api, deal, dealId, router]);
 
+  const handleMarkStatus = useCallback(
+    async (status: 'WON' | 'LOST') => {
+      if (!dealId || !deal) return;
+      const targetStage = stages.find((s) => s.status === status);
+      if (!targetStage) {
+        setError(`No ${status} stage available in this pipeline`);
+        return;
+      }
+      setStatusSaving(status);
+      setError(null);
+      setSuccess(null);
+      try {
+        const updated = await api<Deal>(`/deals/${dealId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ stageId: targetStage.id }),
+        });
+        setDeal(updated);
+        setForm((prev) => ({ ...prev, stageId: targetStage.id }));
+        setSuccess(status === 'WON' ? 'Marked as WIN' : 'Marked as LOST');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : `Unable to mark ${status}`;
+        setError(message);
+      } finally {
+        setStatusSaving(null);
+      }
+    },
+    [api, deal, dealId, stages],
+  );
+
   return (
     <Guard>
       <AppShell>
@@ -384,6 +414,20 @@ export default function DealPage() {
               </div>
 
               <div className="mt-6 flex items-center justify-end gap-2">
+                <button
+                  className="rounded-lg border border-emerald-400/30 bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/30 disabled:opacity-60"
+                  onClick={() => void handleMarkStatus('WON')}
+                  disabled={saving || duplicating || statusSaving !== null}
+                >
+                  {statusSaving === 'WON' ? 'WIN…' : 'WIN'}
+                </button>
+                <button
+                  className="rounded-lg border border-red-400/30 bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-500/30 disabled:opacity-60"
+                  onClick={() => void handleMarkStatus('LOST')}
+                  disabled={saving || duplicating || statusSaving !== null}
+                >
+                  {statusSaving === 'LOST' ? 'LOST…' : 'LOST'}
+                </button>
                 <button className="btn-secondary" onClick={load} disabled={saving || duplicating}>
                   Cancel
                 </button>
