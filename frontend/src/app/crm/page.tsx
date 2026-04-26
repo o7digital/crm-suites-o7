@@ -2533,7 +2533,7 @@ export default function CrmPage() {
 
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-10">
-            <div className={`card flex w-full flex-col overflow-hidden p-6 ${dealWindowMaximized ? 'max-w-[96vw] max-h-[94vh]' : 'max-w-md max-h-[90vh]'}`}>
+            <div className={`card flex w-full flex-col overflow-hidden p-6 ${dealWindowMaximized ? 'max-w-[96vw] max-h-[94vh]' : 'max-w-4xl max-h-[90vh]'}`}>
               <div className="flex items-center justify-between">
                 <WindowControls
                   onClose={() => setShowModal(false)}
@@ -2916,7 +2916,7 @@ export default function CrmPage() {
                   {proposalError ? <p className="mt-2 text-xs text-red-200">{proposalError}</p> : null}
                 </div>
               </div>
-              <div className="mt-6 flex items-center justify-end gap-2">
+              <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
                 {editingDeal ? (
                   <>
                     <button
