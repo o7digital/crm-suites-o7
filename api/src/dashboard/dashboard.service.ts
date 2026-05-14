@@ -26,17 +26,24 @@ export class DashboardService {
         hasProbability: this.schemaCache.hasProbability,
       };
     }
-    const cols = await this.prisma.$queryRaw<Array<{ column_name: string }>>`
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = 'Deal'
-        AND column_name IN ('ownerId', 'probability')
-    `;
-    const hasOwnerId = cols.some((c) => c.column_name === 'ownerId');
-    const hasProbability = cols.some((c) => c.column_name === 'probability');
-    this.schemaCache = { checkedAt: now, hasOwnerId, hasProbability };
-    return { hasOwnerId, hasProbability };
+    try {
+      const cols = await this.prisma.$queryRaw<Array<{ column_name: string }>>`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'Deal'
+          AND column_name IN ('ownerId', 'probability')
+      `;
+      const hasOwnerId = cols.some((c) => c.column_name === 'ownerId');
+      const hasProbability = cols.some((c) => c.column_name === 'probability');
+      this.schemaCache = { checkedAt: now, hasOwnerId, hasProbability };
+      return { hasOwnerId, hasProbability };
+    } catch {
+      // Keep dashboard available when metadata lookup is restricted in production DBs.
+      const fallback = { checkedAt: now, hasOwnerId: true, hasProbability: true };
+      this.schemaCache = fallback;
+      return { hasOwnerId: fallback.hasOwnerId, hasProbability: fallback.hasProbability };
+    }
   }
 
   private async getUserRole(user: RequestUser): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
