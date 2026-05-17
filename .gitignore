@@ -12,3 +12,4 @@ uploads
 /frontend/.turbo
 db_data
 .npm
+.vercel
