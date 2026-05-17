@@ -717,9 +717,17 @@ export default function CrmPage() {
     return Array.from({ length: 12 }, (_, idx) => (currentMonth + idx) % 12);
   }, []);
 
+  const forecastPipelineDeals = useMemo(() => {
+    return filteredDeals.filter((deal) => stageStatusById[deal.stageId] !== 'LOST');
+  }, [filteredDeals, stageStatusById]);
+
+  const forecastLostDeals = useMemo(() => {
+    return filteredDeals.filter((deal) => stageStatusById[deal.stageId] === 'LOST');
+  }, [filteredDeals, stageStatusById]);
+
   const forecastColumns = useMemo(() => {
     return forecastMonthOrder.map((month) => {
-      const dealsInMonth = filteredDeals.filter((deal) => {
+      const dealsInMonth = forecastPipelineDeals.filter((deal) => {
         const iso = toDateInputValue(deal.expectedCloseDate);
         if (!iso) return false;
         const [y, m] = iso.split('-').map((part) => Number(part));
@@ -748,24 +756,24 @@ export default function CrmPage() {
       })();
       return { month, deals: dealsInMonth, totalLabel };
     });
-  }, [crmDisplayCurrency, filteredDeals, forecastMonthOrder, forecastYear, fx, fxLoading]);
+  }, [crmDisplayCurrency, forecastMonthOrder, forecastPipelineDeals, forecastYear, fx, fxLoading]);
 
   const forecastUndatedDeals = useMemo(() => {
-    return filteredDeals.filter((deal) => !toDateInputValue(deal.expectedCloseDate));
-  }, [filteredDeals]);
+    return forecastPipelineDeals.filter((deal) => !toDateInputValue(deal.expectedCloseDate));
+  }, [forecastPipelineDeals]);
 
   const forecastOutOfYearDeals = useMemo(() => {
-    return filteredDeals.filter((deal) => {
+    return forecastPipelineDeals.filter((deal) => {
       const iso = toDateInputValue(deal.expectedCloseDate);
       if (!iso) return false;
       const [y] = iso.split('-').map((part) => Number(part));
       return y !== forecastYear;
     });
-  }, [filteredDeals, forecastYear]);
+  }, [forecastPipelineDeals, forecastYear]);
 
   const forecastInYearDealsCount = useMemo(() => {
-    return filteredDeals.length - forecastUndatedDeals.length - forecastOutOfYearDeals.length;
-  }, [filteredDeals.length, forecastOutOfYearDeals.length, forecastUndatedDeals.length]);
+    return forecastPipelineDeals.length - forecastUndatedDeals.length - forecastOutOfYearDeals.length;
+  }, [forecastOutOfYearDeals.length, forecastPipelineDeals.length, forecastUndatedDeals.length]);
 
   const updateWorkflowStageDropTarget = (
     event: DragEvent<HTMLDivElement>,
@@ -2019,7 +2027,7 @@ export default function CrmPage() {
               <div>
                 <p className="text-sm font-semibold text-slate-200">Monthly forecast by closing date</p>
                 <p className="text-xs text-slate-400">
-                  Leads: {filteredDeals.length} · In {forecastYear}: {forecastInYearDealsCount} · No closing date: {forecastUndatedDeals.length} · Outside year: {forecastOutOfYearDeals.length}
+                  Pipeline leads: {forecastPipelineDeals.length} · Lost: {forecastLostDeals.length} · In {forecastYear}: {forecastInYearDealsCount} · No closing date: {forecastUndatedDeals.length} · Outside year: {forecastOutOfYearDeals.length}
                 </p>
               </div>
               <select
@@ -2034,6 +2042,28 @@ export default function CrmPage() {
             </div>
             <div className="overflow-x-auto pb-2">
               <div className="flex min-w-max gap-3">
+                <div
+                  className="w-[260px] rounded-xl border border-rose-400/30 bg-rose-500/10 p-3"
+                >
+                  <p className="text-xs uppercase tracking-[0.12em] text-rose-200">Lost</p>
+                  <p className="mt-1 text-sm text-rose-100">Deals: {forecastLostDeals.length}</p>
+                  <p className="text-xs text-rose-200/70">Leads marked as lost are listed here, not in pipeline columns</p>
+                  <div className="mt-3 space-y-2">
+                    {forecastLostDeals.map((deal) => (
+                      <button
+                        key={deal.id}
+                        type="button"
+                        onClick={() => openEditModal(deal)}
+                        className="w-full rounded-lg border border-rose-300/30 bg-rose-500/10 px-3 py-2 text-left transition hover:bg-rose-500/20"
+                      >
+                        <p className="truncate text-sm font-semibold text-rose-50">{deal.title}</p>
+                        <p className="mt-1 text-xs text-rose-100/80">{deal.client ? getClientDisplayName(deal.client) : 'No client'}</p>
+                      </button>
+                    ))}
+                    {forecastLostDeals.length === 0 ? <p className="text-xs text-rose-100/70">{t('crm.noDeals')}</p> : null}
+                  </div>
+                </div>
+
                 <div
                   className="w-[260px] rounded-xl border border-dashed border-white/15 bg-white/[0.03] p-3"
                   onDragOver={(event) => event.preventDefault()}
