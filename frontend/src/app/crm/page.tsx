@@ -121,6 +121,17 @@ function isOperationsLikeStage(stageName?: string | null) {
   );
 }
 
+function isLostLikeStage(stageName?: string | null) {
+  const normalized = (stageName || '').trim().toLowerCase();
+  if (!normalized) return false;
+  return ['lost', 'perdido', 'perdu', 'verloren', 'perso'].includes(normalized);
+}
+
+function getEffectiveStageStatus(stage: Stage): Stage['status'] {
+  if (stage.status === 'LOST' || isLostLikeStage(stage.name)) return 'LOST';
+  return stage.status;
+}
+
 function createWorkflowStageDraftId() {
   workflowStageDraftCounter += 1;
   return `workflow-stage-draft-${workflowStageDraftCounter}`;
@@ -641,7 +652,7 @@ export default function CrmPage() {
 
   const stageStatusById = useMemo(() => {
     const map: Record<string, Stage['status']> = {};
-    for (const stage of sortedStages) map[stage.id] = stage.status;
+    for (const stage of sortedStages) map[stage.id] = getEffectiveStageStatus(stage);
     return map;
   }, [sortedStages]);
 
@@ -674,19 +685,19 @@ export default function CrmPage() {
 
   const visibleStages = useMemo(() => {
     if (statusFilter === 'ALL') return sortedStages;
-    return sortedStages.filter((stage) => stage.status === statusFilter);
+    return sortedStages.filter((stage) => getEffectiveStageStatus(stage) === statusFilter);
   }, [sortedStages, statusFilter]);
 
   const visiblePipelineStages = useMemo(() => {
-    return visibleStages.filter((stage) => stage.status !== 'LOST');
+    return visibleStages.filter((stage) => getEffectiveStageStatus(stage) !== 'LOST');
   }, [visibleStages]);
 
   const firstWonStage = useMemo(() => {
-    return sortedStages.find((stage) => stage.status === 'WON') || null;
+    return sortedStages.find((stage) => getEffectiveStageStatus(stage) === 'WON') || null;
   }, [sortedStages]);
 
   const firstLostStage = useMemo(() => {
-    return sortedStages.find((stage) => stage.status === 'LOST') || null;
+    return sortedStages.find((stage) => getEffectiveStageStatus(stage) === 'LOST') || null;
   }, [sortedStages]);
 
   const openLeadsCount = useMemo(() => {
@@ -2793,7 +2804,7 @@ export default function CrmPage() {
                     <option value="">{modalSortedStages.length ? t('crm.selectStage') : t('crm.noStagesShort')}</option>
                     {modalSortedStages.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {stageName(s.name)} · {s.status === 'WON' && isOperationsLikeStage(s.name) ? 'Operaciones' : t(`stageStatus.${s.status}`)} ·{' '}
+                        {stageName(s.name)} · {getEffectiveStageStatus(s) === 'WON' && isOperationsLikeStage(s.name) ? 'Operaciones' : t(`stageStatus.${getEffectiveStageStatus(s)}`)} ·{' '}
                         {Math.round((s.probability ?? 0) * 100)}%
                       </option>
                     ))}
@@ -3107,10 +3118,11 @@ function StageColumn({
   highlighted: boolean;
 }) {
   const { t, stageName } = useI18n();
+  const effectiveStatus = getEffectiveStageStatus(stage);
   const stageStatusLabel =
-    stage.status === 'WON' && isOperationsLikeStage(stage.name)
+    effectiveStatus === 'WON' && isOperationsLikeStage(stage.name)
       ? 'Operaciones'
-      : t(`stageStatus.${stage.status}`);
+      : t(`stageStatus.${effectiveStatus}`);
   const getEffectiveDealProbability = (deal: Deal) => {
     const raw = Number(deal.probability ?? stage.probability ?? 0);
     if (!Number.isFinite(raw)) return 0;
