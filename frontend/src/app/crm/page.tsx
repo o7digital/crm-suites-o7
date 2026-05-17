@@ -677,6 +677,10 @@ export default function CrmPage() {
     return sortedStages.filter((stage) => stage.status === statusFilter);
   }, [sortedStages, statusFilter]);
 
+  const visiblePipelineStages = useMemo(() => {
+    return visibleStages.filter((stage) => stage.status !== 'LOST');
+  }, [visibleStages]);
+
   const firstWonStage = useMemo(() => {
     return sortedStages.find((stage) => stage.status === 'WON') || null;
   }, [sortedStages]);
@@ -707,10 +711,13 @@ export default function CrmPage() {
 
   const showStatusDropZones = statusFilter === 'ALL' || statusFilter === 'OPEN';
   const summaryStatuses = useMemo(() => {
-    if (statusFilter === 'ALL') return ['WON', 'LOST'] as Stage['status'][];
+    if (statusFilter === 'ALL') {
+      return (viewMode === 'KANBAN' ? ['WON'] : ['WON', 'LOST']) as Stage['status'][];
+    }
+    if (viewMode === 'KANBAN' && statusFilter === 'LOST') return [] as Stage['status'][];
     if (statusFilter === 'OPEN') return [] as Stage['status'][];
     return [statusFilter];
-  }, [statusFilter]);
+  }, [statusFilter, viewMode]);
 
   const forecastMonthOrder = useMemo(() => {
     const currentMonth = new Date().getMonth();
@@ -1962,7 +1969,7 @@ export default function CrmPage() {
             }}
           >
             <div className="flex w-max gap-4 pr-6">
-              {visibleStages.map((stage) => (
+              {visiblePipelineStages.map((stage) => (
                 <StageColumn
                   key={stage.id}
                   stage={stage}
@@ -1980,6 +1987,18 @@ export default function CrmPage() {
                   highlighted={highlightStageId === stage.id}
                 />
               ))}
+              {(statusFilter === 'ALL' || statusFilter === 'LOST') ? (
+                <LostDealsColumn
+                  deals={lostDeals}
+                  totalLabel={lostTotalUsdLabel}
+                  lostStage={firstLostStage}
+                  onOpenDeal={openEditModal}
+                  onDealDragStart={() => {
+                    lastDragAtRef.current = Date.now();
+                  }}
+                  onMoveToLost={(dealId) => handleDropDealToStatus(dealId, 'LOST')}
+                />
+              ) : null}
             </div>
           </div>
           </>
@@ -2042,28 +2061,6 @@ export default function CrmPage() {
             </div>
             <div className="overflow-x-auto pb-2">
               <div className="flex min-w-max gap-3">
-                <div
-                  className="w-[260px] rounded-xl border border-rose-400/30 bg-rose-500/10 p-3"
-                >
-                  <p className="text-xs uppercase tracking-[0.12em] text-rose-200">Lost</p>
-                  <p className="mt-1 text-sm text-rose-100">Deals: {forecastLostDeals.length}</p>
-                  <p className="text-xs text-rose-200/70">Leads marked as lost are listed here, not in pipeline columns</p>
-                  <div className="mt-3 space-y-2">
-                    {forecastLostDeals.map((deal) => (
-                      <button
-                        key={deal.id}
-                        type="button"
-                        onClick={() => openEditModal(deal)}
-                        className="w-full rounded-lg border border-rose-300/30 bg-rose-500/10 px-3 py-2 text-left transition hover:bg-rose-500/20"
-                      >
-                        <p className="truncate text-sm font-semibold text-rose-50">{deal.title}</p>
-                        <p className="mt-1 text-xs text-rose-100/80">{deal.client ? getClientDisplayName(deal.client) : 'No client'}</p>
-                      </button>
-                    ))}
-                    {forecastLostDeals.length === 0 ? <p className="text-xs text-rose-100/70">{t('crm.noDeals')}</p> : null}
-                  </div>
-                </div>
-
                 <div
                   className="w-[260px] rounded-xl border border-dashed border-white/15 bg-white/[0.03] p-3"
                   onDragOver={(event) => event.preventDefault()}
@@ -2165,6 +2162,16 @@ export default function CrmPage() {
                     </div>
                   );
                 })}
+                <LostDealsColumn
+                  deals={forecastLostDeals}
+                  totalLabel={lostTotalUsdLabel}
+                  lostStage={firstLostStage}
+                  onOpenDeal={openEditModal}
+                  onDealDragStart={() => {
+                    lastDragAtRef.current = Date.now();
+                  }}
+                  onMoveToLost={(dealId) => handleDropDealToStatus(dealId, 'LOST')}
+                />
               </div>
             </div>
           </div>
@@ -2989,6 +2996,83 @@ export default function CrmPage() {
         )}
       </AppShell>
     </Guard>
+  );
+}
+
+function LostDealsColumn({
+  deals,
+  totalLabel,
+  lostStage,
+  onOpenDeal,
+  onDealDragStart,
+  onMoveToLost,
+}: {
+  deals: Deal[];
+  totalLabel: string;
+  lostStage: Stage | null;
+  onOpenDeal: (deal: Deal) => void;
+  onDealDragStart: () => void;
+  onMoveToLost: (dealId: string) => void;
+}) {
+  const { t, stageName } = useI18n();
+
+  return (
+    <div
+      className="w-[260px] shrink-0 rounded-xl border border-rose-400/30 bg-rose-500/10 p-4"
+      onDragOver={(event) => {
+        if (!lostStage) return;
+        event.preventDefault();
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        if (!lostStage) return;
+        const dealId = event.dataTransfer.getData('text/plain');
+        if (dealId) onMoveToLost(dealId);
+      }}
+    >
+      <div className="flex items-center justify-between">
+        <div className="text-left">
+          <p className="text-sm text-rose-200">{t('stageStatus.LOST')}</p>
+          <h3 className="text-lg font-semibold text-rose-50">
+            {lostStage ? stageName(lostStage.name) : t('crm.noStagesShort')}
+          </h3>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-rose-100/70">{t('crm.deals')}</p>
+          <p className="text-sm font-semibold text-rose-50">{deals.length}</p>
+        </div>
+      </div>
+      <p className="mt-2 text-xs text-rose-100/80">{t('crm.total')} USD: {totalLabel}</p>
+      <div className="mt-4 space-y-3">
+        {deals.map((deal) => (
+          <button
+            key={deal.id}
+            type="button"
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.setData('text/plain', deal.id);
+              onDealDragStart();
+            }}
+            onClick={() => onOpenDeal(deal)}
+            className="w-full cursor-pointer rounded-xl border border-rose-300/30 bg-rose-500/10 px-3 py-3 text-left text-sm transition hover:bg-rose-500/20 focus:outline-none focus:ring-2 focus:ring-rose-300/40"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <p className="truncate font-semibold text-rose-50">{deal.title}</p>
+              <span className="mt-0.5 rounded-full bg-rose-300/10 px-2 py-0.5 text-[11px] font-semibold text-rose-100">
+                LOST
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-rose-100/75">
+              {deal.client ? getClientDisplayName(deal.client) : 'No client'}
+            </p>
+            <p className="mt-2 text-xs text-rose-100/85">
+              {deal.currency} {Number(deal.value || 0).toLocaleString()}
+            </p>
+          </button>
+        ))}
+        {deals.length === 0 ? <p className="text-xs text-rose-100/70">{t('crm.noDeals')}</p> : null}
+      </div>
+    </div>
   );
 }
 
