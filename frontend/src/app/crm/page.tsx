@@ -1604,14 +1604,14 @@ export default function CrmPage() {
         if (stageDeals.length > 0) {
           const destinationChoices = normalizedDrafts.filter((draft) => draft.id !== stage.id);
           if (destinationChoices.length === 0) {
-            throw new Error(`No hay etapa destino para mover los deals de "${stage.name}".`);
+            throw new Error(`No destination stage to move deals from "${stage.name}".`);
           }
           const defaultChoice = destinationChoices[0];
           let targetStageId = defaultChoice.id;
 
           const questionLines = [
-            `La etapa "${stage.name}" tiene ${stageDeals.length} deal(s).`,
-            'Confirma donde moverlos antes de eliminar:',
+            `Stage "${stage.name}" has ${stageDeals.length} deal(s).`,
+            'Confirm where to move them before deleting:',
             ...destinationChoices.map((choice, index) => `${index + 1}) ${choice.name}`),
           ];
           const answer =
@@ -1624,12 +1624,12 @@ export default function CrmPage() {
               targetStageId = destinationChoices[selected - 1].id;
             } else {
               moveWarnings.push(
-                `Seleccion invalida para "${stage.name}". Deals movidos a "${defaultChoice.name}" por defecto.`,
+                `Invalid selection for "${stage.name}". Deals moved to "${defaultChoice.name}" by default.`,
               );
             }
           } else {
             moveWarnings.push(
-              `Sin seleccion manual para "${stage.name}". Deals movidos a "${defaultChoice.name}" por defecto.`,
+              `No manual selection for "${stage.name}". Deals moved to "${defaultChoice.name}" by default.`,
             );
           }
           await Promise.all(

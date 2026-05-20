@@ -704,13 +704,13 @@ function ClientsPageContent() {
             className={`text-sm ${viewMode === "LIST" ? "btn-primary" : "btn-secondary"}`}
             onClick={() => setViewMode("LIST")}
           >
-            Consultar / Modificar
+            {t("clients.viewEdit")}
           </button>
           <button
             className={`text-sm ${viewMode === "CREATE" ? "btn-primary" : "btn-secondary"}`}
             onClick={() => setViewMode("CREATE")}
           >
-            Nuevo cliente/prospecto
+            {t("clients.addClientProspect")}
           </button>
           <button className="btn-secondary text-sm" onClick={handleExportCsv}>
             {t("clients.exportCsv")}
@@ -734,7 +734,7 @@ function ClientsPageContent() {
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
             <input
               className="w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
-              placeholder="Buscar por nombre, email, empresa..."
+              placeholder={t("clients.searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -749,7 +749,7 @@ function ClientsPageContent() {
                 )
               }
             >
-              <option value="ALL">Todos los estados</option>
+              <option value="ALL">{t("clients.allStatuses")}</option>
               {CLIENT_STATUS_OPTIONS.map((opt) => (
                 <option key={opt} value={opt}>
                   {t(`clients.status.${opt.toLowerCase()}`)}
@@ -758,7 +758,7 @@ function ClientsPageContent() {
             </select>
           </div>
           <p className="mt-2 text-xs text-slate-400">
-            {filteredClients.length} resultado(s)
+            {t("clients.resultsCount", { count: filteredClients.length })}
           </p>
         </div>
       )}
@@ -890,7 +890,7 @@ function ClientsPageContent() {
                               );
                             }}
                           >
-                            Modificar
+                            {t("common.manage")}
                           </button>
                           <button
                             className="rounded-lg border border-red-500/30 px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
