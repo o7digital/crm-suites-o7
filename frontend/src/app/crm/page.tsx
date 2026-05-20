@@ -237,8 +237,9 @@ function getDealOrderStorageKey(tenantId: string, pipelineId: string) {
   return `crm.deal-order.${tenantId}.${pipelineId}`;
 }
 
-function formatDealsUsdTotal(
+function formatDealsTotalInCurrency(
   deals: Deal[],
+  displayCurrency: DealCurrency,
   fx: FxRatesSnapshot | null,
   fxLoading: boolean,
 ) {
@@ -251,23 +252,23 @@ function formatDealsUsdTotal(
   }, {});
   const entries = Object.entries(totals);
 
-  if (entries.length === 0) return formatCurrencyTotal(0, 'USD');
+  if (entries.length === 0) return formatCurrencyTotal(0, displayCurrency);
 
-  const requiresConversion = entries.some(([currency]) => currency !== 'USD');
-  if (!requiresConversion) return formatCurrencyTotal(totals.USD ?? 0, 'USD');
+  const requiresConversion = entries.some(([currency]) => currency !== displayCurrency);
+  if (!requiresConversion) return formatCurrencyTotal(totals[displayCurrency] ?? 0, displayCurrency);
 
-  if (!fx) return fxLoading ? 'USD …' : 'USD —';
+  if (!fx) return fxLoading ? `${displayCurrency} …` : `${displayCurrency} —`;
 
   const missing = entries
     .map(([currency]) => currency)
-    .filter((currency) => convertCurrency(1, currency, 'USD', fx) === null);
-  if (missing.length > 0) return 'USD —';
+    .filter((currency) => convertCurrency(1, currency, displayCurrency, fx) === null);
+  if (missing.length > 0) return `${displayCurrency} —`;
 
   const convertedTotal = entries.reduce((sum, [currency, value]) => {
-    const converted = convertCurrency(value, currency, 'USD', fx);
+    const converted = convertCurrency(value, currency, displayCurrency, fx);
     return converted === null ? sum : sum + converted;
   }, 0);
-  return formatCurrencyTotal(convertedTotal, 'USD');
+  return formatCurrencyTotal(convertedTotal, displayCurrency);
 }
 
 export default function CrmPage() {
@@ -712,13 +713,13 @@ export default function CrmPage() {
     return filteredDeals.filter((deal) => stageStatusById[deal.stageId] === 'LOST');
   }, [filteredDeals, stageStatusById]);
 
-  const wonTotalUsdLabel = useMemo(() => {
-    return formatDealsUsdTotal(wonDeals, fx, fxLoading);
-  }, [fx, fxLoading, wonDeals]);
+  const wonTotalLabel = useMemo(() => {
+    return formatDealsTotalInCurrency(wonDeals, crmDisplayCurrency, fx, fxLoading);
+  }, [crmDisplayCurrency, fx, fxLoading, wonDeals]);
 
-  const lostTotalUsdLabel = useMemo(() => {
-    return formatDealsUsdTotal(lostDeals, fx, fxLoading);
-  }, [fx, fxLoading, lostDeals]);
+  const lostTotalLabel = useMemo(() => {
+    return formatDealsTotalInCurrency(lostDeals, crmDisplayCurrency, fx, fxLoading);
+  }, [crmDisplayCurrency, fx, fxLoading, lostDeals]);
 
   const showStatusDropZones = statusFilter === 'ALL' || statusFilter === 'OPEN';
   const summaryStatuses = useMemo(() => {
@@ -1898,6 +1899,18 @@ export default function CrmPage() {
               <button className="btn-primary" onClick={openCreateModal}>
                 {t('crm.newDeal')}
               </button>
+              <select
+                className="btn-secondary text-sm"
+                value={crmDisplayCurrency}
+                onChange={(e) => setCrmDisplayCurrency(e.target.value as DealCurrency)}
+                title={t('field.currency')}
+              >
+                {DEAL_CURRENCIES.map((cur) => (
+                  <option key={cur} value={cur}>
+                    {cur}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {(['KANBAN', 'LIST', 'FORECAST'] as CrmViewMode[]).map((mode) => {
@@ -2001,7 +2014,8 @@ export default function CrmPage() {
               {(statusFilter === 'ALL' || statusFilter === 'LOST') ? (
                 <LostDealsColumn
                   deals={lostDeals}
-                  totalLabel={lostTotalUsdLabel}
+                  totalLabel={lostTotalLabel}
+                  displayCurrency={crmDisplayCurrency}
                   lostStage={firstLostStage}
                   onOpenDeal={openEditModal}
                   onDealDragStart={() => {
@@ -2175,7 +2189,8 @@ export default function CrmPage() {
                 })}
                 <LostDealsColumn
                   deals={forecastLostDeals}
-                  totalLabel={lostTotalUsdLabel}
+                  totalLabel={lostTotalLabel}
+                  displayCurrency={crmDisplayCurrency}
                   lostStage={firstLostStage}
                   onOpenDeal={openEditModal}
                   onDealDragStart={() => {
@@ -2233,7 +2248,7 @@ export default function CrmPage() {
           <div className={`mt-4 grid gap-4 ${summaryStatuses.length === 1 ? 'lg:grid-cols-1' : 'lg:grid-cols-2'}`}>
             {summaryStatuses.map((status) => {
               const statusDeals = status === 'WON' ? wonDeals : lostDeals;
-              const totalLabel = status === 'WON' ? wonTotalUsdLabel : lostTotalUsdLabel;
+              const totalLabel = status === 'WON' ? wonTotalLabel : lostTotalLabel;
 
               return (
                 <div key={status} className="card p-4">
@@ -2244,7 +2259,7 @@ export default function CrmPage() {
                         {statusDeals.length} {t('crm.deals')}
                       </p>
                       <p className="text-[11px] text-slate-500">
-                        {t('crm.total')} USD: {totalLabel}
+                        {t('crm.total')} {crmDisplayCurrency}: {totalLabel}
                       </p>
                     </div>
                   </div>
@@ -3013,6 +3028,7 @@ export default function CrmPage() {
 function LostDealsColumn({
   deals,
   totalLabel,
+  displayCurrency,
   lostStage,
   onOpenDeal,
   onDealDragStart,
@@ -3020,6 +3036,7 @@ function LostDealsColumn({
 }: {
   deals: Deal[];
   totalLabel: string;
+  displayCurrency: DealCurrency;
   lostStage: Stage | null;
   onOpenDeal: (deal: Deal) => void;
   onDealDragStart: () => void;
@@ -3053,7 +3070,7 @@ function LostDealsColumn({
           <p className="text-sm font-semibold text-rose-50">{deals.length}</p>
         </div>
       </div>
-      <p className="mt-2 text-xs text-rose-100/80">{t('crm.total')} USD: {totalLabel}</p>
+      <p className="mt-2 text-xs text-rose-100/80">{t('crm.total')} {displayCurrency}: {totalLabel}</p>
       <div className="mt-4 space-y-3">
         {deals.map((deal) => (
           <button
