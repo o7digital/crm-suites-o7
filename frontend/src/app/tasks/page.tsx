@@ -127,7 +127,7 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
   const [clientId, setClientId] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState<'USD' | 'EUR' | 'MXN'>('USD');
+  const [currency, setCurrency] = useState<'USD' | 'EUR' | 'MXN' | 'CAD'>('USD');
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -200,12 +200,13 @@ function TaskForm({ clients, onSubmit }: { clients: Client[]; onSubmit: (payload
         <label className="text-sm text-slate-300">{t('field.currency')}</label>
         <select
           value={currency}
-          onChange={(e) => setCurrency(e.target.value as 'USD' | 'EUR' | 'MXN')}
+          onChange={(e) => setCurrency(e.target.value as 'USD' | 'EUR' | 'MXN' | 'CAD')}
           className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
         >
           <option value="USD">USD</option>
           <option value="EUR">EUR</option>
           <option value="MXN">MXN</option>
+          <option value="CAD">CAD</option>
         </select>
       </div>
       <div className="md:col-span-6 flex justify-end">
