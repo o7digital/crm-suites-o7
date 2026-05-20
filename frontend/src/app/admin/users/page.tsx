@@ -239,15 +239,20 @@ export default function AdminUsersPage() {
         <div className="card p-5">
           <div className="mb-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm">
             <p className="text-slate-300">
-              <span className="font-semibold text-slate-100">Users autorisés:</span>{' '}
-              {isUnlimitedWorkspace ? 'Ilimitados (o7 digital)' : seatLimit === null ? 'Sin limite' : seatLimit}
+              <span className="font-semibold text-slate-100">{t('adminUsers.seatsLabel')}</span>{' '}
+              {isUnlimitedWorkspace ? t('adminUsers.seatsUnlimited') : seatLimit === null ? t('adminUsers.seatsNoLimit') : seatLimit}
             </p>
             <p className="mt-1 text-xs text-slate-400">
               {isUnlimitedWorkspace || seatLimit === null
-                ? `Activos: ${adminContext?.currentUsersCount || users.length} · Invitaciones pendientes: ${
-                    adminContext?.pendingInvitesCount || invites.length
-                  }`
-                : `Usados: ${totalReservedSeats}/${seatLimit} · Libres: ${seatsRemaining}`}
+                ? t('adminUsers.seatsActivePending', {
+                    active: adminContext?.currentUsersCount || users.length,
+                    pending: adminContext?.pendingInvitesCount || invites.length,
+                  })
+                : t('adminUsers.seatsUsedFree', {
+                    used: totalReservedSeats,
+                    limit: seatLimit,
+                    free: seatsRemaining ?? 0,
+                  })}
             </p>
           </div>
 
@@ -269,7 +274,7 @@ export default function AdminUsersPage() {
 
           {inviteFeatureUnavailable ? (
             <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-              Invitations temporairement indisponibles.
+              {t('adminUsers.invitesTemporarilyUnavailable')}
             </div>
           ) : inviteUrl ? (
             <div className="mt-4 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
@@ -282,7 +287,7 @@ export default function AdminUsersPage() {
 
           <div className="mt-5 grid gap-3 md:grid-cols-4">
             <div>
-              <label className="text-sm text-slate-300">Invite email</label>
+              <label className="text-sm text-slate-300">{t('adminUsers.inviteEmail')}</label>
               <input
                 type="email"
                 value={inviteEmail}
@@ -293,7 +298,7 @@ export default function AdminUsersPage() {
               />
             </div>
             <div>
-              <label className="text-sm text-slate-300">Name (optional)</label>
+              <label className="text-sm text-slate-300">{t('adminUsers.inviteNameOptional')}</label>
               <input
                 value={inviteName}
                 onChange={(e) => setInviteName(e.target.value)}
@@ -303,7 +308,7 @@ export default function AdminUsersPage() {
               />
             </div>
             <div>
-              <label className="text-sm text-slate-300">Role on join</label>
+              <label className="text-sm text-slate-300">{t('adminUsers.roleOnJoin')}</label>
               <select
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as 'OWNER' | 'ADMIN' | 'MEMBER')}
@@ -322,7 +327,7 @@ export default function AdminUsersPage() {
                 disabled={!canCreateInvite || (!isUnlimitedWorkspace && seatLimit !== null && totalReservedSeats >= seatLimit)}
                 onClick={createInvite}
               >
-                {savingInvite ? 'Saving…' : 'Save'}
+                {savingInvite ? t('common.saving') : t('common.save')}
               </button>
             </div>
           </div>
@@ -335,11 +340,11 @@ export default function AdminUsersPage() {
 
         {!loading && (
           <div className="card mt-6 p-5">
-            <p className="mb-3 text-sm font-semibold text-slate-100">Pending invites</p>
+            <p className="mb-3 text-sm font-semibold text-slate-100">{t('adminUsers.pendingInvites')}</p>
             {inviteFeatureUnavailable ? (
-              <p className="text-sm text-slate-400">Invitations temporarily unavailable.</p>
+              <p className="text-sm text-slate-400">{t('adminUsers.invitesTemporarilyUnavailable')}</p>
             ) : invites.length === 0 ? (
-              <p className="text-sm text-slate-400">No pending invites.</p>
+              <p className="text-sm text-slate-400">{t('adminSubscriptions.invites.empty')}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -347,8 +352,8 @@ export default function AdminUsersPage() {
                     <tr>
                       <th className="pb-2 text-left">Email</th>
                       <th className="pb-2 text-left">Role</th>
-                      <th className="pb-2 text-left">Created</th>
-                      <th className="pb-2 text-left">Actions</th>
+                      <th className="pb-2 text-left">{t('adminUsers.created')}</th>
+                      <th className="pb-2 text-left">{t('clients.table.actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -360,14 +365,14 @@ export default function AdminUsersPage() {
                         <td className="py-2">
                           <div className="flex gap-2">
                             <button type="button" className="btn-secondary text-xs" onClick={() => void copyPendingInvite(inv)}>
-                              Copy link
+                              {t('adminUsers.copyLink')}
                             </button>
                             <button
                               type="button"
                               className="rounded-lg border border-red-500/30 px-3 py-2 text-xs text-red-200 hover:bg-red-500/10"
                               onClick={() => void revokeInvite(inv.id)}
                             >
-                              Revoke
+                              {t('adminSubscriptions.invites.revoke')}
                             </button>
                           </div>
                         </td>
@@ -423,11 +428,11 @@ export default function AdminUsersPage() {
                               savingRoleUserId === u.id
                             }
                           >
-                            {savingRoleUserId === u.id ? 'Saving…' : 'Save'}
+                            {savingRoleUserId === u.id ? t('common.saving') : t('common.save')}
                           </button>
                         </div>
                         {currentUser?.id === u.id ? (
-                          <p className="mt-1 text-xs text-slate-500">Your role is managed by the workspace.</p>
+                          <p className="mt-1 text-xs text-slate-500">{t('adminUsers.roleSelfManaged')}</p>
                         ) : null}
                       </td>
                       <td className="py-2 text-slate-400">{new Date(u.createdAt).toLocaleDateString()}</td>
