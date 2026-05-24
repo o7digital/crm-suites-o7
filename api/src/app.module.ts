@@ -20,6 +20,7 @@ import { FxModule } from './fx/fx.module';
 import { IaModule } from './ia/ia.module';
 import { TenantModule } from './tenant/tenant.module';
 import { PostSalesModule } from './post-sales/post-sales.module';
+import { PublicLeadsModule } from './public-leads/public-leads.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { PostSalesModule } from './post-sales/post-sales.module';
     ProductsModule,
     TenantModule,
     PostSalesModule,
+    PublicLeadsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
