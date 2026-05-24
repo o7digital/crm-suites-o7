@@ -11,6 +11,7 @@ type PublicLeadPayload = {
   source?: string;
   language?: string;
   siteCode?: string;
+  pipelineId?: string;
 };
 
 @Injectable()
@@ -82,10 +83,21 @@ export class PublicLeadsService {
             },
           });
 
-      const pipeline = await tx.pipeline.findFirst({
-        where: { tenantId: owner.tenantId, isDefault: true },
-        select: { id: true },
-      });
+      const requestedPipelineId =
+        this.clean(payload.pipelineId) || process.env.O7_PUBLIC_LEADS_PIPELINE_ID;
+      const pipeline = requestedPipelineId
+        ? await tx.pipeline.findFirst({
+            where: { id: requestedPipelineId, tenantId: owner.tenantId },
+            select: { id: true },
+          })
+        : (await tx.pipeline.findFirst({
+            where: { tenantId: owner.tenantId, name: 'New Sales' },
+            select: { id: true },
+          })) ||
+          (await tx.pipeline.findFirst({
+            where: { tenantId: owner.tenantId, isDefault: true },
+            select: { id: true },
+          }));
 
       const stage = pipeline
         ? await tx.stage.findFirst({
