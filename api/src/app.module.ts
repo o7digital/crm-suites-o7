@@ -21,6 +21,7 @@ import { IaModule } from './ia/ia.module';
 import { TenantModule } from './tenant/tenant.module';
 import { PostSalesModule } from './post-sales/post-sales.module';
 import { PublicLeadsModule } from './public-leads/public-leads.module';
+import { LegalModule } from './legal/legal.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { PublicLeadsModule } from './public-leads/public-leads.module';
     TenantModule,
     PostSalesModule,
     PublicLeadsModule,
+    LegalModule,
   ],
   controllers: [AppController],
   providers: [AppService],

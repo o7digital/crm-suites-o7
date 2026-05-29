@@ -41,6 +41,7 @@ model Tenant {
   dealItems                 DealItem[]
   postSalesCases            PostSalesCase[]
   userInvites               UserInvite[]
+  legalAcceptances          LegalAcceptance[]
   googleCalendarConnections GoogleCalendarConnection[]
   clientCollaborators       ClientCollaborator[]
 }
@@ -77,7 +78,29 @@ model User {
   deals                    Deal[]                    @relation("DealOwner")
   clientsOwned             Client[]                  @relation("ClientOwner")
   postSalesCasesOwned      PostSalesCase[]           @relation("PostSalesCaseOwner")
+  legalAcceptances         LegalAcceptance[]
   googleCalendarConnection GoogleCalendarConnection?
+}
+
+model LegalAcceptance {
+  id              String   @id @default(uuid())
+  tenantId        String
+  userId          String?
+  email           String
+  contractVersion String
+  country         String?
+  acceptedAt      DateTime @default(now())
+  ipAddress       String?
+  userAgent       String?
+  source          String   @default("SIGNUP")
+  createdAt       DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([email])
+  @@index([contractVersion])
 }
 
 model Subscription {

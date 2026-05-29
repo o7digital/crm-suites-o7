@@ -25,6 +25,8 @@ type AuthContextValue = {
     email: string;
     password: string;
     inviteToken?: string;
+    legalCountry?: string;
+    legalContractVersion?: string;
   }) => Promise<'signed-in' | 'confirm'>;
   logout: () => Promise<void>;
 };
@@ -164,6 +166,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email: string;
       password: string;
       inviteToken?: string;
+      legalCountry?: string;
+      legalContractVersion?: string;
     }) => {
       const tenantId = payload.tenantId || generateTenantId();
       const supabase = mustSupabase();
@@ -188,6 +192,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return 'confirm';
       }
       await bootstrapTenant(data.session.access_token);
+      try {
+        const apiBase = apiBaseForRequests();
+        await fetch(`${apiBase}/legal/accept`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            accepted: true,
+            tenantId,
+            email: payload.email,
+            contractVersion: payload.legalContractVersion || 'v1-en-2026-05-29',
+            country: payload.legalCountry || undefined,
+            source: 'SIGNUP',
+          }),
+        });
+      } catch {
+        // Legal acceptance should not block account creation if endpoint is temporarily unavailable.
+      }
       syncSession(data.session);
       return 'signed-in';
     },

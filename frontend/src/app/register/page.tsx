@@ -43,6 +43,7 @@ export default function RegisterPage() {
 }
 
 function RegisterPageContent() {
+  const LEGAL_CONTRACT_VERSION = 'v1-en-2026-05-29';
   const { register } = useAuth();
   const router = useRouter();
   const { t } = useI18n();
@@ -109,6 +110,8 @@ function RegisterPageContent() {
         email,
         password,
         inviteToken: inviteToken || undefined,
+        legalCountry: legalCountry || undefined,
+        legalContractVersion: LEGAL_CONTRACT_VERSION,
       });
       if (result === 'confirm') {
         setInfo(t('register.checkEmail'));
