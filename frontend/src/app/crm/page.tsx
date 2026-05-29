@@ -127,7 +127,18 @@ function isLostLikeStage(stageName?: string | null) {
   return ['lost', 'perdido', 'perdu', 'verloren', 'perso'].includes(normalized);
 }
 
+function isWonLikeStage(stageName?: string | null) {
+  const normalized = (stageName || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (!normalized) return false;
+  return ['won', 'gagne', 'ganado', 'gewonnen', 'ganho', 'vinto'].includes(normalized);
+}
+
 function getEffectiveStageStatus(stage: Stage): Stage['status'] {
+  if (stage.status === 'WON' || isWonLikeStage(stage.name)) return 'WON';
   if (stage.status === 'LOST' || isLostLikeStage(stage.name)) return 'LOST';
   return stage.status;
 }
@@ -737,7 +748,7 @@ export default function CrmPage() {
   }, []);
 
   const forecastPipelineDeals = useMemo(() => {
-    return filteredDeals.filter((deal) => stageStatusById[deal.stageId] !== 'LOST');
+    return filteredDeals.filter((deal) => stageStatusById[deal.stageId] === 'OPEN');
   }, [filteredDeals, stageStatusById]);
 
   const forecastLostDeals = useMemo(() => {
@@ -899,7 +910,7 @@ export default function CrmPage() {
   }, [requestedStageId, sortedStages]);
 
   const defaultStageId = useMemo(() => {
-    const openStage = sortedStages.find((stage) => stage.status === 'OPEN');
+    const openStage = sortedStages.find((stage) => getEffectiveStageStatus(stage) === 'OPEN');
     return openStage?.id || sortedStages[0]?.id || '';
   }, [sortedStages]);
 
@@ -913,7 +924,7 @@ export default function CrmPage() {
   }, [modalPipelineId, pipelineId, stages, stagesByPipelineId]);
 
   const modalDefaultStageId = useMemo(() => {
-    const openStage = modalSortedStages.find((stage) => stage.status === 'OPEN');
+    const openStage = modalSortedStages.find((stage) => getEffectiveStageStatus(stage) === 'OPEN');
     return openStage?.id || modalSortedStages[0]?.id || '';
   }, [modalSortedStages]);
 
@@ -1367,7 +1378,7 @@ export default function CrmPage() {
   const handleMarkEditingDealStatus = useCallback(
     async (status: 'WON' | 'LOST') => {
       if (!editingDeal) return;
-      const targetStage = modalSortedStages.find((s) => s.status === status);
+      const targetStage = modalSortedStages.find((s) => getEffectiveStageStatus(s) === status);
       if (!targetStage) {
         setError(`No ${status} stage available in this pipeline`);
         return;

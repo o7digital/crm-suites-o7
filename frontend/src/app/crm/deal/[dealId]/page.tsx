@@ -63,6 +63,27 @@ function parseProbabilityPct(value: string) {
   return parsed;
 }
 
+function getEffectiveStageStatus(stage: Stage): Stage['status'] {
+  const normalizedName = (stage.name || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (
+    stage.status === 'WON' ||
+    ['won', 'gagne', 'ganado', 'gewonnen', 'ganho', 'vinto'].includes(normalizedName)
+  ) {
+    return 'WON';
+  }
+  if (
+    stage.status === 'LOST' ||
+    ['lost', 'perdido', 'perdu', 'verloren', 'perso'].includes(normalizedName)
+  ) {
+    return 'LOST';
+  }
+  return 'OPEN';
+}
+
 export default function DealPage() {
   const params = useParams<{ dealId: string }>();
   const dealId = params?.dealId;
@@ -217,7 +238,19 @@ export default function DealPage() {
     } finally {
       setSaving(false);
     }
-  }, [api, deal, dealId, form.clientId, form.currency, form.expectedCloseDate, form.stageId, form.title, form.value]);
+  }, [
+    api,
+    deal,
+    dealId,
+    form.clientId,
+    form.currency,
+    form.expectedCloseDate,
+    form.probabilityPct,
+    form.stageId,
+    form.title,
+    form.value,
+    selectedStageProbabilityPct,
+  ]);
 
   const handleDuplicate = useCallback(async () => {
     if (!dealId || !deal) return;
@@ -240,7 +273,7 @@ export default function DealPage() {
   const handleMarkStatus = useCallback(
     async (status: 'WON' | 'LOST') => {
       if (!dealId || !deal) return;
-      const targetStage = stages.find((s) => s.status === status);
+      const targetStage = stages.find((s) => getEffectiveStageStatus(s) === status);
       if (!targetStage) {
         setError(`No ${status} stage available in this pipeline`);
         return;
@@ -322,7 +355,7 @@ export default function DealPage() {
                     {stages.length === 0 ? <option value={deal.stageId}>Current stage</option> : null}
                     {stages.map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.name} · {s.status} · {Math.round((s.probability ?? 0) * 100)}%
+                        {s.name} · {getEffectiveStageStatus(s)} · {Math.round((s.probability ?? 0) * 100)}%
                       </option>
                     ))}
                   </select>

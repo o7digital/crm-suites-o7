@@ -73,7 +73,7 @@ describe('DealsService', () => {
         tenantId: 'tenant-1',
         pipelineId: 'pipeline-new-sales',
       },
-      select: { id: true },
+      select: { id: true, status: true, name: true },
     });
     expect(tx.dealStageHistory.create).toHaveBeenCalledWith({
       data: {

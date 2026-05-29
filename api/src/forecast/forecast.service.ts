@@ -46,6 +46,30 @@ export class ForecastService {
     return (dbUser?.role as 'OWNER' | 'ADMIN' | 'MEMBER' | undefined) ?? 'MEMBER';
   }
 
+  private getEffectiveStageStatus(stage: {
+    name?: string | null;
+    status: 'OPEN' | 'WON' | 'LOST';
+  }): 'OPEN' | 'WON' | 'LOST' {
+    const normalizedName = (stage.name || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    if (
+      stage.status === 'WON' ||
+      ['won', 'gagne', 'ganado', 'gewonnen', 'ganho', 'vinto'].includes(normalizedName)
+    ) {
+      return 'WON';
+    }
+    if (
+      stage.status === 'LOST' ||
+      ['lost', 'perdido', 'perdu', 'verloren', 'perso'].includes(normalizedName)
+    ) {
+      return 'LOST';
+    }
+    return 'OPEN';
+  }
+
   async getForecast(pipelineId: string | undefined, user: RequestUser) {
     let pipeline = null as null | { id: string; name: string; isDefault: boolean };
 
@@ -100,8 +124,10 @@ export class ForecastService {
       },
     });
 
+    const openStages = stages.filter((stage) => this.getEffectiveStageStatus(stage) === 'OPEN');
+
     const stageMap = new Map<string, (typeof stages)[number]>(
-      stages.map((stage) => [stage.id, stage]),
+      openStages.map((stage) => [stage.id, stage]),
     );
 
     let total = 0;
@@ -115,10 +141,10 @@ export class ForecastService {
       total: number;
       weightedTotal: number;
       count: number;
-    }> = stages.map((stage) => ({
+    }> = openStages.map((stage) => ({
       stageId: stage.id,
       stageName: stage.name,
-      status: stage.status,
+      status: this.getEffectiveStageStatus(stage),
       probability: stage.probability ?? 0,
       total: 0,
       weightedTotal: 0,
@@ -137,17 +163,19 @@ export class ForecastService {
     }
 
     for (const deal of deals) {
+      const stage = stageMap.get(deal.stageId);
+      if (!stage) continue;
+
       const raw = Number(deal.value);
       if (!Number.isFinite(raw)) continue;
       const cur = (deal.currency || 'USD').toUpperCase();
       const amount = snapshot ? this.fx.toUsd(raw, cur, snapshot) ?? (cur === 'USD' ? raw : 0) : raw;
 
       total += amount;
-      const stage = stageMap.get(deal.stageId);
       const probability =
         hasProbability && deal.probability !== undefined && deal.probability !== null
           ? Number(deal.probability)
-          : stage?.probability ?? (stage?.status === 'WON' ? 1 : stage?.status === 'LOST' ? 0 : 0);
+          : stage.probability ?? 0;
       weightedTotal += amount * probability;
 
       const row = byStageIndex.get(deal.stageId);
