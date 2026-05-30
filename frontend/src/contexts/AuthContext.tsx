@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useAuth as useClerkAuth, useUser as useClerkUser } from '@clerk/nextjs';
 import type { Session } from '@supabase/supabase-js';
 import { getSupabaseClient } from '../lib/supabaseClient';
 import { apiBaseForRequests } from '../lib/apiBase';
@@ -41,10 +42,53 @@ function generateTenantId() {
   return `tenant-${Math.random().toString(36).slice(2)}-${Date.now()}`;
 }
 
+function ClerkSessionSync({
+  onSession,
+  onSignedOut,
+}: {
+  onSession: (payload: { token: string; user: User }) => void;
+  onSignedOut: () => void;
+}) {
+  const clerkAuth = useClerkAuth();
+  const clerkUser = useClerkUser();
+
+  useEffect(() => {
+    if (!clerkAuth.isLoaded || !clerkUser.isLoaded) return;
+    if (!clerkAuth.userId || !clerkUser.user) {
+      onSignedOut();
+      return;
+    }
+
+    const metadata = (clerkUser.user.publicMetadata ?? {}) as Record<string, unknown>;
+    const tenantId =
+      (metadata.tenant_id as string | undefined) ||
+      (metadata.tenantId as string | undefined) ||
+      clerkAuth.userId;
+    const tenantName =
+      (metadata.tenant_name as string | undefined) || (metadata.tenantName as string | undefined);
+
+    const mappedUser: User = {
+      id: clerkAuth.userId,
+      email: clerkUser.user.primaryEmailAddress?.emailAddress || '',
+      name: clerkUser.user.fullName || clerkUser.user.firstName || clerkUser.user.username || 'User',
+      tenantId,
+      tenantName,
+    };
+
+    void clerkAuth.getToken().then((jwt) => {
+      if (!jwt) return onSignedOut();
+      onSession({ token: jwt, user: mappedUser });
+    });
+  }, [clerkAuth, clerkUser, onSession, onSignedOut]);
+
+  return null;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
   const safeSupabase = useCallback(() => {
     try {
@@ -120,6 +164,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (hasClerk) {
+      setLoading(false);
+      return;
+    }
     let active = true;
     (async () => {
       const supabase = safeSupabase();
@@ -143,10 +191,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [bootstrapTenant, safeSupabase, syncSession]);
+  }, [bootstrapTenant, hasClerk, safeSupabase, syncSession]);
 
   const login = useCallback(
     async (email: string, password: string) => {
+      if (hasClerk) {
+        if (typeof window !== 'undefined') window.location.href = '/sign-in';
+        return;
+      }
       const supabase = mustSupabase();
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error || !data.session) {
@@ -155,7 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await bootstrapTenant(data.session.access_token);
       syncSession(data.session);
     },
-    [bootstrapTenant, mustSupabase, syncSession],
+    [bootstrapTenant, hasClerk, mustSupabase, syncSession],
   );
 
   const register = useCallback(
@@ -169,6 +221,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       legalCountry?: string;
       legalContractVersion?: string;
     }) => {
+      if (hasClerk) {
+        if (typeof window !== 'undefined') window.location.href = '/sign-up';
+        return 'confirm';
+      }
       const tenantId = payload.tenantId || generateTenantId();
       const supabase = mustSupabase();
       const emailRedirectTo = typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined;
@@ -214,7 +270,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       syncSession(data.session);
       return 'signed-in';
     },
-    [bootstrapTenant, mustSupabase, syncSession],
+    [bootstrapTenant, hasClerk, mustSupabase, syncSession],
   );
 
   const clearAuthStorage = useCallback(() => {
@@ -232,6 +288,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    if (hasClerk) {
+      if (typeof window !== 'undefined') window.location.href = '/sign-out';
+      setToken(null);
+      setUser(null);
+      clearAuthStorage();
+      return;
+    }
     const supabase = safeSupabase();
     try {
       await supabase?.auth.signOut();
@@ -241,9 +304,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
     setUser(null);
     clearAuthStorage();
-  }, [clearAuthStorage, safeSupabase]);
+  }, [clearAuthStorage, hasClerk, safeSupabase]);
 
   useEffect(() => {
+    if (hasClerk) return;
     const supabase = safeSupabase();
     if (!supabase) return;
 
@@ -266,7 +330,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [bootstrapTenant, clearAuthStorage, safeSupabase, syncSession]);
+  }, [bootstrapTenant, clearAuthStorage, hasClerk, safeSupabase, syncSession]);
 
   const value = useMemo(
     () => ({
@@ -280,7 +344,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [loading, login, logout, register, token, user],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {hasClerk ? (
+        <ClerkSessionSync
+          onSession={({ token: nextToken, user: nextUser }) => {
+            setToken(nextToken);
+            setUser(nextUser);
+            localStorage.setItem('token', nextToken);
+            localStorage.setItem('user', JSON.stringify(nextUser));
+            void bootstrapTenant(nextToken, { ignoreErrors: true });
+          }}
+          onSignedOut={() => {
+            setToken(null);
+            setUser(null);
+            clearAuthStorage();
+          }}
+        />
+      ) : null}
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
