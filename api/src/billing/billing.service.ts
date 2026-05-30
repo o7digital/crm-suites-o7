@@ -42,11 +42,11 @@ export class BillingService {
 
   async createCheckoutSession(dto: CreateCheckoutSessionDto, user: RequestUser) {
     const priceIdByPlan: Record<CreateCheckoutSessionDto['plan'], string | undefined> = {
-      PULSE_BASIC: process.env.STRIPE_PRICE_BASIC,
-      PULSE_STANDARD: process.env.STRIPE_PRICE_STANDARD,
-      PULSE_ADVANCED: process.env.STRIPE_PRICE_ADVANCED,
-      PULSE_ADVANCED_PLUS: process.env.STRIPE_PRICE_ADVANCED_PLUS,
-      PULSE_TEAM: process.env.STRIPE_PRICE_TEAM,
+      PULSE_BASIC: process.env.CRM_PULSE_BASIC_PRICE_ID,
+      PULSE_STANDARD: process.env.CRM_PULSE_STANDARD_PRICE_ID,
+      PULSE_ADVANCED: process.env.CRM_PULSE_ADVANCED_PRICE_ID,
+      PULSE_ADVANCED_PLUS: process.env.CRM_PULSE_ADVANCED_PLUS_PRICE_ID,
+      PULSE_TEAM: process.env.CRM_PULSE_TEAM_PRICE_ID,
     };
     const priceId = priceIdByPlan[dto.plan];
     if (!priceId) throw new BadRequestException(`Missing Stripe price ID for ${dto.plan}`);
