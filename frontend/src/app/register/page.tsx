@@ -44,6 +44,7 @@ export default function RegisterPage() {
 
 function RegisterPageContent() {
   const LEGAL_CONTRACT_VERSION = 'v1-en-2026-05-29';
+  const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
   const { register } = useAuth();
   const router = useRouter();
   const { t } = useI18n();
@@ -78,6 +79,11 @@ function RegisterPageContent() {
     if (legalRegion === 'MX') return t('register.legal.law.mx');
     return t('register.legal.law.intl');
   }, [legalRegion, t]);
+
+  useEffect(() => {
+    if (!hasClerk) return;
+    router.replace('/sign-up');
+  }, [hasClerk, router]);
 
   useEffect(() => {
     if (!isInvite) return;

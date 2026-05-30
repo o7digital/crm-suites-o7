@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 
 export default function LoginPage() {
+  const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
   const { login, token } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
@@ -16,8 +17,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (hasClerk) {
+      router.replace('/sign-in');
+      return;
+    }
     if (token) router.replace('/');
-  }, [token, router]);
+  }, [hasClerk, token, router]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
