@@ -4,7 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { SchemaUpgraderService } from './prisma/schema-upgrader.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const explicitOrigins = (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || '')
     .split(',')
     .map((x) => x.trim())

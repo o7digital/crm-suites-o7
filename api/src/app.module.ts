@@ -22,6 +22,7 @@ import { TenantModule } from './tenant/tenant.module';
 import { PostSalesModule } from './post-sales/post-sales.module';
 import { PublicLeadsModule } from './public-leads/public-leads.module';
 import { LegalModule } from './legal/legal.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { LegalModule } from './legal/legal.module';
     PostSalesModule,
     PublicLeadsModule,
     LegalModule,
+    BillingModule,
   ],
   controllers: [AppController],
   providers: [AppService],
