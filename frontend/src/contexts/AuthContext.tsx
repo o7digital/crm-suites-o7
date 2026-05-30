@@ -77,6 +77,24 @@ function ClerkSessionSync({
 
     void clerkAuth.getToken().then((jwt) => {
       if (!jwt) return onSignedOut();
+      const hasTenantMetadata = Boolean(
+        metadata.tenant_id ||
+          metadata.tenantId ||
+          metadata.tenant_name ||
+          metadata.tenantName,
+      );
+      if (!hasTenantMetadata) {
+        void fetch('/api/clerk/sync-metadata', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenantId,
+            tenantName: tenantName || undefined,
+          }),
+        }).catch(() => {
+          // Metadata sync is best-effort and should not block app session.
+        });
+      }
       onSession({ token: jwt, user: mappedUser });
     });
   }, [clerkAuth, clerkUser, onSession, onSignedOut]);
