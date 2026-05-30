@@ -89,6 +89,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             return done(new Error('JWT issuer missing'), undefined);
           }
 
+          const allowedIssuer = configService.get<string>('CLERK_JWT_ISSUER')?.trim();
+          if (allowedIssuer && issuer.replace(/\/$/, '') !== allowedIssuer.replace(/\/$/, '')) {
+            return done(new Error(`JWT issuer not allowed: ${issuer}`), undefined);
+          }
+
           if (!kid) {
             return done(new Error('JWT kid missing'), undefined);
           }
@@ -97,6 +102,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           const client = getJwksClient(jwksUri);
           const key = await client.getSigningKey(kid);
           const signingKey = key.getPublicKey();
+
+          const expectedAudience = configService.get<string>('CLERK_JWT_AUDIENCE')?.trim();
+          if (expectedAudience) {
+            try {
+              jwt.verify(rawJwtToken, signingKey, {
+                algorithms: ['RS256', 'RS384', 'RS512'],
+                issuer,
+                audience: expectedAudience,
+              });
+            } catch (err) {
+              return done(err as Error, undefined);
+            }
+          }
           return done(null, signingKey);
         } catch (err) {
           return done(err as Error, undefined);
