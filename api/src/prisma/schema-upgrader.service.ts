@@ -20,6 +20,7 @@ export class SchemaUpgraderService {
     await this.ensureClientCollaboratorsSchema();
     await this.ensureSubscriptionsSchema();
     await this.ensureSubscriptionTrialAlertFields();
+    await this.ensureSubscriptionStripeFields();
     await this.ensureTenantBrandingFields();
     await this.ensureTenantCrmSettingsFields();
     await this.ensureGoogleCalendarConnectionSchema();
@@ -540,6 +541,36 @@ export class SchemaUpgraderService {
         // Ignore if the constraint already exists under a different name.
       }
     }
+  }
+
+  private async ensureSubscriptionStripeFields() {
+    const columns: Array<{ name: string; type: string }> = [
+      { name: 'stripeCustomerId', type: 'TEXT' },
+      { name: 'stripeSubscriptionId', type: 'TEXT' },
+      { name: 'stripePriceId', type: 'TEXT' },
+      { name: 'billingEmail', type: 'TEXT' },
+      { name: 'currentPeriodEnd', type: 'TIMESTAMP(3)' },
+      { name: 'cancelAtPeriodEnd', type: 'BOOLEAN NOT NULL DEFAULT false' },
+    ];
+
+    for (const col of columns) {
+      const exists = await this.columnExists('Subscription', col.name);
+      if (exists) continue;
+      try {
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "Subscription" ADD COLUMN "${col.name}" ${col.type};`,
+        );
+      } catch {
+        // Ignore permissions / already-added races.
+      }
+    }
+
+    await this.prisma.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Subscription_stripeSubscriptionId_key" ON "Subscription"("stripeSubscriptionId");`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "Subscription_stripeCustomerId_idx" ON "Subscription"("stripeCustomerId");`,
+    );
   }
 
   private async ensureTenantBrandingFields() {

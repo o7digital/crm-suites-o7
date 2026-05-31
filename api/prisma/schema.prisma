@@ -117,6 +117,12 @@ model Subscription {
   seats            Int                @default(1)
   trialEndsAt      DateTime?
   trialAlertSentAt DateTime?
+  stripeCustomerId String?
+  stripeSubscriptionId String?        @unique
+  stripePriceId    String?
+  billingEmail     String?
+  currentPeriodEnd DateTime?
+  cancelAtPeriodEnd Boolean           @default(false)
   status           SubscriptionStatus @default(ACTIVE)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt

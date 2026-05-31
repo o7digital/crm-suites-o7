@@ -1,5 +1,5 @@
 import { Body, Controller, Headers, Post, Req, UseGuards } from '@nestjs/common';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { BillingService } from './billing.service';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
 import { CurrentUser } from '../common/user.decorator';
