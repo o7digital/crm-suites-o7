@@ -1,5 +1,5 @@
 import { Body, Controller, Headers, Ip, Post, Req } from '@nestjs/common';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { AcceptLegalDto } from './dto/accept-legal.dto';
 import { LegalService } from './legal.service';
 
