@@ -57,6 +57,7 @@ const CORE_MESSAGES = {
     "account.myAccount": "My Account",
     "account.myInformation": "My information",
     "account.companyDetail": "Company detail",
+    "account.billing": "Billing",
     "account.adjustments": "Adjustments",
 
     "account.language": "Language",
@@ -627,6 +628,7 @@ const CORE_MESSAGES = {
     "account.myAccount": "Mon compte",
     "account.myInformation": "Mes informations",
     "account.companyDetail": "Entreprise",
+    "account.billing": "Abonnement",
     "account.adjustments": "Ajustements",
 
     "account.language": "Langue",
@@ -1208,6 +1210,7 @@ const CORE_MESSAGES = {
     "account.myAccount": "Mi cuenta",
     "account.myInformation": "Mi informacion",
     "account.companyDetail": "Empresa",
+    "account.billing": "Suscripcion",
     "account.adjustments": "Ajustes",
 
     "account.language": "Idioma",

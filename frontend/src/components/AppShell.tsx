@@ -46,6 +46,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (typeof window === 'undefined') return;
     const saved = window.localStorage.getItem(themeStorageKey);
     if (saved === 'day' || saved === 'night') {
+      // Restore the client-only preference after hydration.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setThemeMode(saved);
     }
   }, []);
@@ -113,6 +115,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     () => [
       { href: '/account', labelKey: 'account.myInformation' },
       { href: '/account/company', labelKey: 'account.companyDetail' },
+      { href: '/account/billing', labelKey: 'account.billing' },
       { href: '/account/adjustments', labelKey: 'account.adjustments' },
     ],
     [],

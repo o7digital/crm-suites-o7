@@ -83,8 +83,8 @@ export class BillingService {
     if (!priceId) throw new BadRequestException(`Missing Stripe price ID for ${dto.plan}`);
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
-    const successUrl = dto.successUrl || `${appUrl}/account?billing=success&session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl = dto.cancelUrl || `${appUrl}/account?billing=canceled`;
+    const successUrl = dto.successUrl || `${appUrl}/account/billing?billing=success&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = dto.cancelUrl || `${appUrl}/account/billing?billing=canceled`;
 
     const session = await this.stripe.checkout.sessions.create({
       mode: 'subscription',
