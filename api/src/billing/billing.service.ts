@@ -5,14 +5,14 @@ import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 
 @Injectable()
 export class BillingService {
-  private readonly stripe: Stripe;
+  private readonly stripe: InstanceType<typeof Stripe>;
   private readonly webhookSecret: string;
 
   constructor() {
     const key = process.env.STRIPE_SECRET_KEY;
     if (!key) throw new Error('Missing STRIPE_SECRET_KEY');
     this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
-    this.stripe = new Stripe(key, { apiVersion: '2025-09-30.clover' });
+    this.stripe = new Stripe(key, { apiVersion: '2026-05-27.dahlia' });
   }
 
   constructEvent(rawBody: Buffer, signature: string | undefined): Stripe.Event {
