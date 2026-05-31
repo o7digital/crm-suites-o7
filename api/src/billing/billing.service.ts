@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import Stripe from 'stripe';
+import Stripe = require('stripe');
 import { RequestUser } from '../common/user.decorator';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 
@@ -15,7 +15,7 @@ export class BillingService {
     this.stripe = new Stripe(key, { apiVersion: '2026-05-27.dahlia' });
   }
 
-  constructEvent(rawBody: Buffer, signature: string | undefined): Stripe.Event {
+  constructEvent(rawBody: Buffer, signature: string | undefined) {
     if (!signature) throw new BadRequestException('Missing stripe-signature header');
     if (!this.webhookSecret) throw new BadRequestException('Missing STRIPE_WEBHOOK_SECRET');
     try {
@@ -25,7 +25,7 @@ export class BillingService {
     }
   }
 
-  async handleEvent(event: Stripe.Event) {
+  async handleEvent(event: ReturnType<InstanceType<typeof Stripe>['webhooks']['constructEvent']>) {
     switch (event.type) {
       case 'checkout.session.completed':
       case 'customer.subscription.updated':
