@@ -145,6 +145,10 @@ function toDateInputValue(value?: string | null) {
   return value.slice(0, 10);
 }
 
+function expirationDateInputId(subscriptionId: string) {
+  return `subscription-expiration-date-${subscriptionId}`;
+}
+
 function normalizeExpirationDate(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -491,6 +495,12 @@ export default function AdminSubscriptionsPage() {
   const saveSubscriptionLinkData = useCallback(
     async (sub: SubscriptionItem) => {
       const draft = getLinkDraft(sub);
+      const dateInput =
+        typeof document !== 'undefined'
+          ? document.getElementById(expirationDateInputId(sub.id))
+          : null;
+      const rawTrialEndsAt =
+        dateInput instanceof HTMLInputElement ? dateInput.value : draft.trialEndsAt;
       const nextCustomerName = draft.customerName.trim();
       if (!nextCustomerName) {
         setError(t('adminSubscriptions.customerNameRequired'));
@@ -504,7 +514,7 @@ export default function AdminSubscriptionsPage() {
         setError(t('adminSubscriptions.contactEmailInvalid'));
         return;
       }
-      const normalizedTrialEndsAt = normalizeExpirationDate(draft.trialEndsAt);
+      const normalizedTrialEndsAt = normalizeExpirationDate(rawTrialEndsAt);
       if (normalizedTrialEndsAt === undefined) {
         setError(t('adminSubscriptions.expirationDateInvalid'));
         return;
@@ -1423,9 +1433,11 @@ export default function AdminSubscriptionsPage() {
                               <label className="flex flex-col gap-1 text-xs text-slate-400">
                                 {t('adminSubscriptions.expirationDate')}
                                 <input
+                                  id={expirationDateInputId(sub.id)}
                                   className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                                   value={sub.draft.trialEndsAt}
-                                  onChange={(e) => updateLinkDraft(sub.id, { trialEndsAt: e.target.value })}
+                                  onChange={(e) => updateLinkDraft(sub.id, { trialEndsAt: e.currentTarget.value })}
+                                  onInput={(e) => updateLinkDraft(sub.id, { trialEndsAt: e.currentTarget.value })}
                                   type="date"
                                 />
                               </label>
