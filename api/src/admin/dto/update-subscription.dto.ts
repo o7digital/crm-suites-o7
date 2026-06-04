@@ -1,4 +1,4 @@
-import { IsDateString, IsEmail, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsEmail, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { IsIn } from 'class-validator';
 
 export class UpdateSubscriptionDto {
@@ -39,6 +39,7 @@ export class UpdateSubscriptionDto {
   seats?: number;
 
   @IsOptional()
-  @IsDateString()
+  @IsString()
+  @MaxLength(24)
   trialEndsAt?: string | null;
 }

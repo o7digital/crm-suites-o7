@@ -145,6 +145,36 @@ function toDateInputValue(value?: string | null) {
   return value.slice(0, 10);
 }
 
+function normalizeExpirationDate(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  const localMatch = trimmed.match(/^(\d{1,2})\D+(\d{1,2})\D+(\d{4})$/);
+  const parts = isoMatch
+    ? { year: Number(isoMatch[1]), month: Number(isoMatch[2]), day: Number(isoMatch[3]) }
+    : localMatch
+      ? { year: Number(localMatch[3]), month: Number(localMatch[2]), day: Number(localMatch[1]) }
+      : null;
+
+  if (!parts || parts.month < 1 || parts.month > 12 || parts.day < 1 || parts.day > 31) {
+    return undefined;
+  }
+
+  const parsed = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  if (
+    parsed.getUTCFullYear() !== parts.year ||
+    parsed.getUTCMonth() !== parts.month - 1 ||
+    parsed.getUTCDate() !== parts.day
+  ) {
+    return undefined;
+  }
+
+  return `${parts.year.toString().padStart(4, '0')}-${parts.month.toString().padStart(2, '0')}-${parts.day
+    .toString()
+    .padStart(2, '0')}`;
+}
+
 export default function AdminSubscriptionsPage() {
   const { token, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -474,6 +504,11 @@ export default function AdminSubscriptionsPage() {
         setError(t('adminSubscriptions.contactEmailInvalid'));
         return;
       }
+      const normalizedTrialEndsAt = normalizeExpirationDate(draft.trialEndsAt);
+      if (normalizedTrialEndsAt === undefined) {
+        setError(t('adminSubscriptions.expirationDateInvalid'));
+        return;
+      }
 
       setSavingSubscriptionId(sub.id);
       setError(null);
@@ -490,7 +525,7 @@ export default function AdminSubscriptionsPage() {
             contactLastName: draft.contactLastName.trim() || null,
             contactEmail: normalizeEmailValue(draft.contactEmail) || null,
             seats: draft.seats,
-            trialEndsAt: draft.trialEndsAt || null,
+            trialEndsAt: normalizedTrialEndsAt,
           }),
         });
 
@@ -1391,7 +1426,9 @@ export default function AdminSubscriptionsPage() {
                                   className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                                   value={sub.draft.trialEndsAt}
                                   onChange={(e) => updateLinkDraft(sub.id, { trialEndsAt: e.target.value })}
-                                  type="date"
+                                  inputMode="numeric"
+                                  placeholder="30/08/2026"
+                                  type="text"
                                 />
                               </label>
                             </div>

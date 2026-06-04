@@ -887,13 +887,38 @@ export class AdminService {
     if (dto.customerName !== undefined && !trimmedCustomerName) {
       throw new BadRequestException('Customer name is required');
     }
+    const parseTrialEndDate = (value: string) => {
+      const trimmed = value.trim();
+      const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      const localMatch = trimmed.match(/^(\d{1,2})\D+(\d{1,2})\D+(\d{4})$/);
+      const parts = isoMatch
+        ? { year: Number(isoMatch[1]), month: Number(isoMatch[2]), day: Number(isoMatch[3]) }
+        : localMatch
+          ? { year: Number(localMatch[3]), month: Number(localMatch[2]), day: Number(localMatch[1]) }
+          : null;
+
+      if (!parts || parts.month < 1 || parts.month > 12 || parts.day < 1 || parts.day > 31) {
+        return null;
+      }
+
+      const parsed = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, 23, 59, 59, 999));
+      if (
+        parsed.getUTCFullYear() !== parts.year ||
+        parsed.getUTCMonth() !== parts.month - 1 ||
+        parsed.getUTCDate() !== parts.day
+      ) {
+        return null;
+      }
+      return parsed;
+    };
+
     let trialEndsAt: Date | null | undefined;
     if (dto.trialEndsAt !== undefined) {
       if (dto.trialEndsAt === null || dto.trialEndsAt.trim() === '') {
         trialEndsAt = null;
       } else {
-        trialEndsAt = new Date(`${dto.trialEndsAt.slice(0, 10)}T23:59:59.999Z`);
-        if (Number.isNaN(trialEndsAt.getTime())) {
+        trialEndsAt = parseTrialEndDate(dto.trialEndsAt);
+        if (!trialEndsAt) {
           throw new BadRequestException('Invalid trial end date');
         }
       }
