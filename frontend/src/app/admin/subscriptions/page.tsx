@@ -37,6 +37,7 @@ type LinkDraft = {
   contactLastName: string;
   contactEmail: string;
   seats: number;
+  trialEndsAt: string;
 };
 
 type PendingInvite = {
@@ -137,6 +138,11 @@ function isSubscriptionActive(sub: Pick<SubscriptionItem, 'status'>) {
 
 function isSubscriptionPaused(sub: Pick<SubscriptionItem, 'status'>) {
   return sub.status === 'PAUSED';
+}
+
+function toDateInputValue(value?: string | null) {
+  if (!value) return '';
+  return value.slice(0, 10);
 }
 
 export default function AdminSubscriptionsPage() {
@@ -252,6 +258,7 @@ export default function AdminSubscriptionsPage() {
         contactLastName: sub.contactLastName || '',
         contactEmail: sub.contactEmail || '',
         seats: Math.min(30, Math.max(1, sub.seats || 1)),
+        trialEndsAt: toDateInputValue(sub.trialEndsAt),
       };
     },
     [language],
@@ -288,6 +295,7 @@ export default function AdminSubscriptionsPage() {
         contactLastName: '',
         contactEmail: '',
         seats: 1,
+        trialEndsAt: '',
       };
       return {
         ...prev,
@@ -482,6 +490,7 @@ export default function AdminSubscriptionsPage() {
             contactLastName: draft.contactLastName.trim() || null,
             contactEmail: normalizeEmailValue(draft.contactEmail) || null,
             seats: draft.seats,
+            trialEndsAt: draft.trialEndsAt || null,
           }),
         });
 
@@ -1376,6 +1385,15 @@ export default function AdminSubscriptionsPage() {
                                   </option>
                                 ))}
                               </select>
+                              <label className="flex flex-col gap-1 text-xs text-slate-400">
+                                {t('adminSubscriptions.expirationDate')}
+                                <input
+                                  className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                  value={sub.draft.trialEndsAt}
+                                  onChange={(e) => updateLinkDraft(sub.id, { trialEndsAt: e.target.value })}
+                                  type="date"
+                                />
+                              </label>
                             </div>
                             <div className="mt-3 rounded-lg bg-black/20 p-3 ring-1 ring-white/10">
                               <p className="text-xs font-semibold text-slate-100">{t('adminSubscriptions.editStatusTitle')}</p>

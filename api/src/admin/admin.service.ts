@@ -872,7 +872,8 @@ export class AdminService {
       dto.contactFirstName !== undefined ||
       dto.contactLastName !== undefined ||
       dto.contactEmail !== undefined ||
-      dto.seats !== undefined;
+      dto.seats !== undefined ||
+      dto.trialEndsAt !== undefined;
     if (!hasChanges) throw new BadRequestException('No fields provided');
 
     const normalize = (value: string | null | undefined) => {
@@ -885,6 +886,17 @@ export class AdminService {
     const trimmedCustomerName = dto.customerName?.trim();
     if (dto.customerName !== undefined && !trimmedCustomerName) {
       throw new BadRequestException('Customer name is required');
+    }
+    let trialEndsAt: Date | null | undefined;
+    if (dto.trialEndsAt !== undefined) {
+      if (dto.trialEndsAt === null || dto.trialEndsAt.trim() === '') {
+        trialEndsAt = null;
+      } else {
+        trialEndsAt = new Date(`${dto.trialEndsAt.slice(0, 10)}T23:59:59.999Z`);
+        if (Number.isNaN(trialEndsAt.getTime())) {
+          throw new BadRequestException('Invalid trial end date');
+        }
+      }
     }
 
     try {
@@ -915,6 +927,8 @@ export class AdminService {
               typeof dto.seats === 'number'
                 ? Math.min(30, Math.max(1, dto.seats))
                 : undefined,
+            trialEndsAt,
+            trialAlertSentAt: trialEndsAt !== undefined ? null : undefined,
           },
           select: {
             id: true,
