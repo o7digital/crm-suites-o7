@@ -1426,9 +1426,7 @@ export default function AdminSubscriptionsPage() {
                                   className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                                   value={sub.draft.trialEndsAt}
                                   onChange={(e) => updateLinkDraft(sub.id, { trialEndsAt: e.target.value })}
-                                  inputMode="numeric"
-                                  placeholder="30/08/2026"
-                                  type="text"
+                                  type="date"
                                 />
                               </label>
                             </div>
