@@ -25,6 +25,19 @@ type Task = {
   timeSpentHours?: number | string | null;
 };
 
+type Deal = {
+  id: string;
+  title: string;
+  value: number | string | null;
+  currency?: string | null;
+  expectedCloseDate?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  clientId?: string | null;
+  client?: Client | null;
+  stage?: { id: string; name: string; status: 'OPEN' | 'WON' | 'LOST' } | null;
+};
+
 type Granularity = 'month' | 'year';
 
 type ReportingTask = {
@@ -37,8 +50,20 @@ type ReportingTask = {
   hours: number;
 };
 
+type ReportingSale = {
+  id: string;
+  title: string;
+  clientId: string;
+  clientName: string;
+  dateIso: string;
+  amount: number;
+  currency: string;
+  stageName: string;
+};
+
 const HOURS = new Intl.NumberFormat(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const INT = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+const MONEY = new Intl.NumberFormat(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
 function toIsoDate(value?: string | null): string | null {
   if (!value || typeof value !== 'string') return null;
@@ -59,6 +84,16 @@ function parseHours(value: unknown): number {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   }
   return 0;
+}
+
+function parseAmount(value: unknown): number {
+  if (value === null || value === undefined || value === '') return 0;
+  const parsed = typeof value === 'number' ? value : Number(String(value).trim());
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function formatMoney(currency: string, amount: number): string {
+  return `${currency} ${MONEY.format(amount)}`;
 }
 
 function monthRangeUtc() {
@@ -97,6 +132,7 @@ export default function AdminReportingPage() {
   const api = useApi(token);
 
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,11 +145,13 @@ export default function AdminReportingPage() {
     setError(null);
     setLoading(true);
     try {
-      const [tasksData, clientsData] = await Promise.all([
+      const [tasksData, dealsData, clientsData] = await Promise.all([
         api<Task[]>('/tasks'),
+        api<Deal[]>('/deals'),
         api<Client[]>('/clients'),
       ]);
       setTasks(tasksData);
+      setDeals(dealsData);
       setClients(clientsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load reporting data');
@@ -159,6 +197,36 @@ export default function AdminReportingPage() {
       .filter((x): x is ReportingTask => Boolean(x));
   }, [clients, endDate, rangeValid, startDate, tasks]);
 
+  const filteredSales = useMemo<ReportingSale[]>(() => {
+    const clientsById = new Map(clients.map((c) => [c.id, c]));
+    return deals
+      .map((deal) => {
+        if (deal.stage?.status !== 'WON') return null;
+        const dateIso = toIsoDate(deal.expectedCloseDate) || toIsoDate(deal.updatedAt) || toIsoDate(deal.createdAt);
+        if (!dateIso) return null;
+        if (rangeValid && (dateIso < startDate || dateIso > endDate)) return null;
+
+        const fallbackClient = deal.clientId ? clientsById.get(deal.clientId) : null;
+        const clientName = deal.client
+          ? getClientDisplayName(deal.client)
+          : fallbackClient
+            ? getClientDisplayName(fallbackClient)
+            : 'No client';
+
+        return {
+          id: deal.id,
+          title: deal.title || 'Untitled sale',
+          clientId: deal.clientId || '__no_client__',
+          clientName,
+          dateIso,
+          amount: parseAmount(deal.value),
+          currency: String(deal.currency || 'USD').toUpperCase(),
+          stageName: deal.stage?.name || 'Won',
+        };
+      })
+      .filter((x): x is ReportingSale => Boolean(x));
+  }, [clients, deals, endDate, rangeValid, startDate]);
+
   const summary = useMemo(() => {
     const uniqueClients = new Set<string>();
     const uniqueDays = new Set<string>();
@@ -175,6 +243,70 @@ export default function AdminReportingPage() {
       totalHours,
     };
   }, [filteredTasks]);
+
+  const salesSummary = useMemo(() => {
+    const uniqueClients = new Set<string>();
+    const totalsByCurrency = new Map<string, { amount: number; sales: number }>();
+    for (const sale of filteredSales) {
+      uniqueClients.add(sale.clientId);
+      const currencyTotal = totalsByCurrency.get(sale.currency) || { amount: 0, sales: 0 };
+      currencyTotal.amount += sale.amount;
+      currencyTotal.sales += 1;
+      totalsByCurrency.set(sale.currency, currencyTotal);
+    }
+    const primaryCurrency = Array.from(totalsByCurrency.entries()).sort((a, b) => b[1].amount - a[1].amount)[0];
+    return {
+      sales: filteredSales.length,
+      clients: uniqueClients.size,
+      averageSale: primaryCurrency && primaryCurrency[1].sales > 0 ? primaryCurrency[1].amount / primaryCurrency[1].sales : 0,
+      primaryTotal: primaryCurrency ? formatMoney(primaryCurrency[0], primaryCurrency[1].amount) : '—',
+      totals: Array.from(totalsByCurrency.entries())
+        .sort((a, b) => b[1].amount - a[1].amount)
+        .map(([currency, total]) => ({ currency, amount: total.amount, sales: total.sales })),
+    };
+  }, [filteredSales]);
+
+  const salesByClient = useMemo(() => {
+    const map = new Map<
+      string,
+      { clientId: string; clientName: string; currency: string; sales: number; amount: number }
+    >();
+    for (const sale of filteredSales) {
+      const key = `${sale.clientId}::${sale.currency}`;
+      const row = map.get(key) || {
+        clientId: sale.clientId,
+        clientName: sale.clientName,
+        currency: sale.currency,
+        sales: 0,
+        amount: 0,
+      };
+      row.sales += 1;
+      row.amount += sale.amount;
+      map.set(key, row);
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => b.amount - a.amount || b.sales - a.sales || a.clientName.localeCompare(b.clientName),
+    );
+  }, [filteredSales]);
+
+  const salesByPeriod = useMemo(() => {
+    const map = new Map<string, { period: string; currency: string; sales: number; amount: number }>();
+    for (const sale of filteredSales) {
+      const period = periodKey(sale.dateIso, granularity);
+      const key = `${period}::${sale.currency}`;
+      const row = map.get(key) || { period, currency: sale.currency, sales: 0, amount: 0 };
+      row.sales += 1;
+      row.amount += sale.amount;
+      map.set(key, row);
+    }
+    return Array.from(map.values())
+      .map((row) => ({ ...row, periodLabel: periodLabel(row.period, granularity) }))
+      .sort((a, b) => b.period.localeCompare(a.period) || b.amount - a.amount);
+  }, [filteredSales, granularity]);
+
+  const saleRows = useMemo(() => {
+    return [...filteredSales].sort((a, b) => b.dateIso.localeCompare(a.dateIso) || b.amount - a.amount).slice(0, 60);
+  }, [filteredSales]);
 
   const byClient = useMemo(() => {
     const map = new Map<
@@ -266,7 +398,7 @@ export default function AdminReportingPage() {
             <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Admin</p>
             <h1 className="text-3xl font-semibold">Reporting</h1>
             <p className="mt-2 text-sm text-slate-400">
-              Post-Sales reports: hours per client/task, active days, and month/year breakdowns.
+              Sales and Post-Sales reports by selected period.
             </p>
           </div>
           <div className="flex gap-2">
@@ -331,6 +463,132 @@ export default function AdminReportingPage() {
 
         {!loading && rangeValid ? (
           <div className="space-y-6">
+            <div className="card p-4">
+              <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Sales report</h2>
+                  <p className="text-xs text-slate-400">Won deals from {startDate} to {endDate}</p>
+                </div>
+                <p className="text-xs text-slate-400">{salesSummary.sales} sale(s)</p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-lg bg-white/5 p-4 ring-1 ring-white/10">
+                  <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Revenue</p>
+                  <p className="mt-2 text-2xl font-semibold">{salesSummary.primaryTotal}</p>
+                </div>
+                <div className="rounded-lg bg-white/5 p-4 ring-1 ring-white/10">
+                  <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Sales</p>
+                  <p className="mt-2 text-2xl font-semibold">{INT.format(salesSummary.sales)}</p>
+                </div>
+                <div className="rounded-lg bg-white/5 p-4 ring-1 ring-white/10">
+                  <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Clients</p>
+                  <p className="mt-2 text-2xl font-semibold">{INT.format(salesSummary.clients)}</p>
+                </div>
+                <div className="rounded-lg bg-white/5 p-4 ring-1 ring-white/10">
+                  <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Average sale</p>
+                  <p className="mt-2 text-2xl font-semibold">
+                    {salesSummary.totals[0] ? formatMoney(salesSummary.totals[0].currency, salesSummary.averageSale) : '—'}
+                  </p>
+                </div>
+              </div>
+
+              {salesSummary.totals.length > 1 ? (
+                <p className="mt-3 text-xs text-slate-400">
+                  Totals by currency:{' '}
+                  {salesSummary.totals.map((row) => formatMoney(row.currency, row.amount)).join(' · ')}
+                </p>
+              ) : null}
+
+              <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                <div className="overflow-x-auto">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-200">Sales by client</h3>
+                    <p className="text-xs text-slate-400">{salesByClient.length} row(s)</p>
+                  </div>
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase tracking-[0.12em] text-slate-400">
+                        <th className="px-3 py-2">Client</th>
+                        <th className="px-3 py-2">Revenue</th>
+                        <th className="px-3 py-2">Sales</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {salesByClient.map((row) => (
+                        <tr key={`${row.clientId}-${row.currency}`} className="border-t border-white/10">
+                          <td className="px-3 py-2">{row.clientName}</td>
+                          <td className="px-3 py-2">{formatMoney(row.currency, row.amount)}</td>
+                          <td className="px-3 py-2">{INT.format(row.sales)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {salesByClient.length === 0 ? (
+                    <p className="px-3 py-4 text-sm text-slate-400">No won sales in this period.</p>
+                  ) : null}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-200">Sales by {granularity}</h3>
+                    <p className="text-xs text-slate-400">{salesByPeriod.length} row(s)</p>
+                  </div>
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs uppercase tracking-[0.12em] text-slate-400">
+                        <th className="px-3 py-2">Period</th>
+                        <th className="px-3 py-2">Revenue</th>
+                        <th className="px-3 py-2">Sales</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {salesByPeriod.map((row) => (
+                        <tr key={`${row.period}-${row.currency}`} className="border-t border-white/10">
+                          <td className="px-3 py-2">{row.periodLabel}</td>
+                          <td className="px-3 py-2">{formatMoney(row.currency, row.amount)}</td>
+                          <td className="px-3 py-2">{INT.format(row.sales)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {salesByPeriod.length === 0 ? (
+                    <p className="px-3 py-4 text-sm text-slate-400">No won sales in this period.</p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="mt-5 overflow-x-auto">
+                <div className="mb-2 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-200">Sales detail</h3>
+                  <p className="text-xs text-slate-400">Top {Math.min(saleRows.length, 60)} sales</p>
+                </div>
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-[0.12em] text-slate-400">
+                      <th className="px-3 py-2">Date</th>
+                      <th className="px-3 py-2">Deal</th>
+                      <th className="px-3 py-2">Client</th>
+                      <th className="px-3 py-2">Stage</th>
+                      <th className="px-3 py-2">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {saleRows.map((row) => (
+                      <tr key={row.id} className="border-t border-white/10">
+                        <td className="px-3 py-2">{row.dateIso}</td>
+                        <td className="px-3 py-2">{row.title}</td>
+                        <td className="px-3 py-2">{row.clientName}</td>
+                        <td className="px-3 py-2">{row.stageName}</td>
+                        <td className="px-3 py-2">{formatMoney(row.currency, row.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {saleRows.length === 0 ? <p className="px-3 py-4 text-sm text-slate-400">No won sales in this period.</p> : null}
+              </div>
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="card p-4">
                 <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Tasks</p>
