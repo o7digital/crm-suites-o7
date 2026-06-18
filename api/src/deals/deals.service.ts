@@ -23,6 +23,20 @@ const DEAL_BASE_SELECT = {
   createdAt: true,
   updatedAt: true,
   stage: true,
+  history: {
+    select: {
+      id: true,
+      movedAt: true,
+      toStage: {
+        select: {
+          id: true,
+          name: true,
+          status: true,
+        },
+      },
+    },
+    orderBy: { movedAt: 'desc' },
+  },
 } as const;
 
 type DealSchemaCaps = {

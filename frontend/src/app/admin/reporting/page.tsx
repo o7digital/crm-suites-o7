@@ -36,6 +36,11 @@ type Deal = {
   clientId?: string | null;
   client?: Client | null;
   stage?: { id: string; name: string; status: 'OPEN' | 'WON' | 'LOST' } | null;
+  history?: Array<{
+    id: string;
+    movedAt?: string | null;
+    toStage?: { id: string; name: string; status: 'OPEN' | 'WON' | 'LOST' } | null;
+  }>;
 };
 
 type Granularity = 'month' | 'year';
@@ -127,6 +132,14 @@ function periodLabel(key: string, granularity: Granularity): string {
   return new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(date);
 }
 
+function getWonDateIso(deal: Deal): string | null {
+  const wonMove = (deal.history || [])
+    .filter((row) => row.toStage?.status === 'WON')
+    .sort((a, b) => String(b.movedAt || '').localeCompare(String(a.movedAt || '')))[0];
+
+  return toIsoDate(wonMove?.movedAt) || toIsoDate(deal.updatedAt) || toIsoDate(deal.createdAt);
+}
+
 export default function AdminReportingPage() {
   const { token } = useAuth();
   const api = useApi(token);
@@ -202,7 +215,7 @@ export default function AdminReportingPage() {
     return deals
       .map((deal) => {
         if (deal.stage?.status !== 'WON') return null;
-        const dateIso = toIsoDate(deal.expectedCloseDate) || toIsoDate(deal.updatedAt) || toIsoDate(deal.createdAt);
+        const dateIso = getWonDateIso(deal);
         if (!dateIso) return null;
         if (rangeValid && (dateIso < startDate || dateIso > endDate)) return null;
 
@@ -390,6 +403,11 @@ export default function AdminReportingPage() {
     setGranularity('year');
   }, []);
 
+  const printReport = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.print();
+  }, []);
+
   return (
     <Guard>
       <AppShell>
@@ -401,7 +419,7 @@ export default function AdminReportingPage() {
               Sales and Post-Sales reports by selected period.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="no-print flex flex-wrap gap-2">
             <button type="button" className="btn-secondary text-sm" onClick={setThisMonth}>
               This month
             </button>
@@ -411,10 +429,13 @@ export default function AdminReportingPage() {
             <button type="button" className="btn-secondary text-sm" onClick={() => void loadData()}>
               Refresh
             </button>
+            <button type="button" className="btn-primary text-sm" onClick={printReport}>
+              Imprimir / PDF
+            </button>
           </div>
         </div>
 
-        <div className="card mb-6 p-4">
+        <div className="card no-print mb-6 p-4">
           <div className="grid gap-3 md:grid-cols-4">
             <div>
               <label className="text-sm text-slate-300">Start date</label>
@@ -462,12 +483,12 @@ export default function AdminReportingPage() {
         {loading ? <div className="card p-6 text-slate-300">Loading reporting data...</div> : null}
 
         {!loading && rangeValid ? (
-          <div className="space-y-6">
+          <div className="report-print-area space-y-6">
             <div className="card p-4">
               <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Sales report</h2>
-                  <p className="text-xs text-slate-400">Won deals from {startDate} to {endDate}</p>
+                  <p className="text-xs text-slate-400">Won deals moved to a won stage from {startDate} to {endDate}</p>
                 </div>
                 <p className="text-xs text-slate-400">{salesSummary.sales} sale(s)</p>
               </div>
