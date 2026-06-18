@@ -45,7 +45,7 @@ export default function RegisterPage() {
 function RegisterPageContent() {
   const LEGAL_CONTRACT_VERSION = 'v1-en-2026-05-29';
   const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
-  const { register } = useAuth();
+  const { register, token, loading: authLoading } = useAuth();
   const router = useRouter();
   const { t } = useI18n();
   const searchParams = useSearchParams();
@@ -84,6 +84,11 @@ function RegisterPageContent() {
     if (!hasClerk) return;
     router.replace('/sign-up');
   }, [hasClerk, router]);
+
+  useEffect(() => {
+    if (hasClerk || authLoading || !token) return;
+    router.replace('/');
+  }, [authLoading, hasClerk, router, token]);
 
   useEffect(() => {
     if (!isInvite) return;
