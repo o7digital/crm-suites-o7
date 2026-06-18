@@ -716,6 +716,10 @@ export default function CrmPage() {
     return filteredDeals.reduce((sum, deal) => (stageStatusById[deal.stageId] === 'OPEN' ? sum + 1 : sum), 0);
   }, [filteredDeals, stageStatusById]);
 
+  const openDeals = useMemo(() => {
+    return filteredDeals.filter((deal) => stageStatusById[deal.stageId] === 'OPEN');
+  }, [filteredDeals, stageStatusById]);
+
   const wonDeals = useMemo(() => {
     return filteredDeals.filter((deal) => stageStatusById[deal.stageId] === 'WON');
   }, [filteredDeals, stageStatusById]);
@@ -731,6 +735,21 @@ export default function CrmPage() {
   const lostTotalLabel = useMemo(() => {
     return formatDealsTotalInCurrency(lostDeals, crmDisplayCurrency, fx, fxLoading);
   }, [crmDisplayCurrency, fx, fxLoading, lostDeals]);
+
+  const openTotalLabel = useMemo(() => {
+    return formatDealsTotalInCurrency(openDeals, crmDisplayCurrency, fx, fxLoading);
+  }, [crmDisplayCurrency, fx, fxLoading, openDeals]);
+
+  const avgProbability = useMemo(() => {
+    const probabilities = openDeals
+      .map((deal) => {
+        const raw = Number(deal.probability ?? stages.find((stage) => stage.id === deal.stageId)?.probability ?? 0);
+        return Number.isFinite(raw) ? raw : 0;
+      })
+      .filter((value) => value > 0);
+    if (probabilities.length === 0) return 0;
+    return Math.round((probabilities.reduce((sum, value) => sum + value, 0) / probabilities.length) * 100);
+  }, [openDeals, stages]);
 
   const showStatusDropZones = statusFilter === 'ALL' || statusFilter === 'OPEN';
   const summaryStatuses = useMemo(() => {
@@ -1932,9 +1951,9 @@ export default function CrmPage() {
                     key={mode}
                     type="button"
                     onClick={() => setViewMode(mode)}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition ${
+                    className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition ${
                       isActive
-                        ? 'border-cyan-300/60 bg-cyan-400/15 text-cyan-100'
+                        ? 'border-violet-300/60 bg-violet-400/15 text-violet-100'
                         : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10'
                     }`}
                   >
@@ -1950,9 +1969,9 @@ export default function CrmPage() {
                     key={filterValue}
                     type="button"
                     onClick={() => setStatusFilter(filterValue)}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition ${
+                    className={`rounded-md border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] transition ${
                       isActive
-                        ? 'border-cyan-300/60 bg-cyan-400/15 text-cyan-100'
+                        ? 'border-violet-300/60 bg-violet-400/15 text-violet-100'
                         : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10'
                     }`}
                   >
@@ -1981,6 +2000,39 @@ export default function CrmPage() {
           <p className="text-red-300">
             {t('common.error')}: {error}
           </p>
+        )}
+
+        {!loading && (
+          <div className="mb-5 grid gap-4 lg:grid-cols-12">
+            <CrmMetricCard
+              className="lg:col-span-3"
+              label={t('dashboard.openLeads')}
+              value={openLeadsCount}
+              hint={`${t('crm.total')} ${crmDisplayCurrency}: ${openTotalLabel}`}
+              tone="teal"
+            />
+            <CrmMetricCard
+              className="lg:col-span-3"
+              label={t('stageStatus.WON')}
+              value={wonDeals.length}
+              hint={`${t('crm.total')} ${crmDisplayCurrency}: ${wonTotalLabel}`}
+              tone="green"
+            />
+            <CrmMetricCard
+              className="lg:col-span-3"
+              label={t('stageStatus.LOST')}
+              value={lostDeals.length}
+              hint={`${t('crm.total')} ${crmDisplayCurrency}: ${lostTotalLabel}`}
+              tone="rose"
+            />
+            <CrmMetricCard
+              className="lg:col-span-3"
+              label="Conversion"
+              value={`${avgProbability}%`}
+              hint={`${filteredDeals.length} ${t('crm.deals')} · ${selectedPipeline?.name || t('nav.crm')}`}
+              tone="violet"
+            />
+          </div>
         )}
 
         {!loading && sortedStages.length === 0 && (
@@ -2172,7 +2224,7 @@ export default function CrmPage() {
                     >
                       <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{label}</p>
                       <p className="mt-1 text-sm text-slate-300">Deals: {monthDeals.length}</p>
-                      <p className="text-sm text-cyan-200">Total: {totalLabel}</p>
+                      <p className="text-sm text-amber-200">Total: {totalLabel}</p>
                       <div className="mt-3 space-y-2">
                         {monthDeals.map((deal) => (
                           <button
@@ -2225,7 +2277,7 @@ export default function CrmPage() {
                 className={`rounded-xl border px-4 py-3 transition ${
                   targetStage
                     ? isHover
-                      ? 'border-cyan-300/60 bg-cyan-400/10'
+                      ? 'border-amber-300/60 bg-amber-400/10'
                       : 'border-white/15 bg-white/5'
                     : 'border-white/10 bg-white/[0.03] opacity-70'
                 }`}
@@ -2294,7 +2346,7 @@ export default function CrmPage() {
                         <div className="mt-2 flex justify-end">
                           <Link
                             href={`/ia-pulse?dealId=${deal.id}`}
-                            className="inline-flex items-center rounded-md border border-cyan-300/30 bg-cyan-400/10 px-2 py-1 text-[11px] font-medium text-cyan-100 transition hover:bg-cyan-400/20"
+                            className="inline-flex items-center rounded-md border border-violet-300/30 bg-violet-400/10 px-2 py-1 text-[11px] font-medium text-violet-100 transition hover:bg-violet-400/20"
                             onClick={(event) => event.stopPropagation()}
                           >
                             IA Pulse
@@ -2333,7 +2385,7 @@ export default function CrmPage() {
                   <button
                     className={`rounded-full px-3 py-1.5 text-sm transition ${
                       !workflowIsCreateMode
-                        ? 'bg-cyan-500/20 text-cyan-100'
+                        ? 'bg-violet-500/20 text-violet-100'
                         : 'bg-white/5 text-slate-300 hover:bg-white/10'
                     }`}
                     type="button"
@@ -2345,7 +2397,7 @@ export default function CrmPage() {
                   <button
                     className={`rounded-full px-3 py-1.5 text-sm transition ${
                       workflowIsCreateMode
-                        ? 'bg-cyan-500/20 text-cyan-100'
+                        ? 'bg-violet-500/20 text-violet-100'
                         : 'bg-white/5 text-slate-300 hover:bg-white/10'
                     }`}
                     type="button"
@@ -2376,7 +2428,7 @@ export default function CrmPage() {
                         key={draft.id}
                         className={`relative grid gap-2 rounded-lg border bg-white/5 p-3 transition md:grid-cols-[44px_1fr_150px_130px_44px] ${
                           workflowDraggedStageId === draft.id
-                            ? 'border-cyan-300/40 bg-cyan-400/10 opacity-70'
+                            ? 'border-violet-300/40 bg-violet-400/10 opacity-70'
                             : 'border-white/10'
                         }`}
                         onDragOver={(event) => updateWorkflowStageDropTarget(event, draft.id)}
@@ -2389,11 +2441,11 @@ export default function CrmPage() {
                       >
                         {workflowStageDropTarget?.stageId === draft.id &&
                         workflowStageDropTarget.placement === 'before' ? (
-                          <div className="pointer-events-none absolute inset-x-3 top-0 h-0.5 rounded-full bg-cyan-300" />
+                          <div className="pointer-events-none absolute inset-x-3 top-0 h-0.5 rounded-full bg-violet-300" />
                         ) : null}
                         {workflowStageDropTarget?.stageId === draft.id &&
                         workflowStageDropTarget.placement === 'after' ? (
-                          <div className="pointer-events-none absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-cyan-300" />
+                          <div className="pointer-events-none absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-violet-300" />
                         ) : null}
                         <div
                           draggable
@@ -2767,7 +2819,7 @@ export default function CrmPage() {
                     <div className="mt-2 flex items-center gap-4 text-xs">
                       <button
                         type="button"
-                        className="text-cyan-200 hover:underline"
+                        className="text-amber-200 hover:underline"
                         onClick={() => {
                           setShowClientCreate(true);
                           setClientDraftError(null);
@@ -2917,7 +2969,7 @@ export default function CrmPage() {
                               <label key={p.id} className="flex items-center gap-2 text-sm text-slate-200">
                                 <input
                                   type="checkbox"
-                                  className="h-4 w-4 accent-cyan-400"
+                                  className="h-4 w-4 accent-violet-400"
                                   checked={checked}
                                   onChange={(e) => {
                                     setForm((prev) => {
@@ -3033,6 +3085,35 @@ export default function CrmPage() {
         )}
       </AppShell>
     </Guard>
+  );
+}
+
+function CrmMetricCard({
+  label,
+  value,
+  hint,
+  tone,
+  className = '',
+}: {
+  label: string;
+  value: string | number;
+  hint: string;
+  tone: 'teal' | 'green' | 'rose' | 'violet';
+  className?: string;
+}) {
+  const toneClass = {
+    teal: 'from-teal-300/15 to-teal-600/5 text-teal-100',
+    green: 'from-emerald-300/15 to-emerald-600/5 text-emerald-100',
+    rose: 'from-rose-300/15 to-rose-600/5 text-rose-100',
+    violet: 'from-violet-300/15 to-violet-600/5 text-violet-100',
+  }[tone];
+
+  return (
+    <div className={`card bg-gradient-to-br ${toneClass} p-5 ${className}`}>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p>
+      <p className="mt-2 text-3xl font-semibold">{value}</p>
+      <p className="mt-2 text-xs text-slate-400">{hint}</p>
+    </div>
   );
 }
 
@@ -3198,7 +3279,7 @@ function StageColumn({
     <div
       id={`stage-${stage.id}`}
       className={`card w-[260px] shrink-0 p-4 ${
-        highlighted ? 'ring-2 ring-cyan-400/40 shadow-lg shadow-cyan-500/10' : ''
+        highlighted ? 'ring-2 ring-violet-400/40 shadow-lg shadow-violet-500/10' : ''
       }`}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
@@ -3217,7 +3298,7 @@ function StageColumn({
             <span className="text-xs text-slate-500">{Math.round((stage.probability ?? 0) * 100)}%</span>
             <button
               type="button"
-              className="rounded-full border border-white/15 px-2 py-0.5 text-xs text-slate-300 transition hover:border-cyan-300/60 hover:text-cyan-200"
+              className="rounded-full border border-white/15 px-2 py-0.5 text-xs text-slate-300 transition hover:border-violet-300/60 hover:text-violet-200"
               title={`+ ${t('crm.stage')}`}
               onClick={() => onRequestAddStageAfter(stage)}
             >
@@ -3278,14 +3359,14 @@ function StageColumn({
                 onOpenDeal(deal);
               }
             }}
-            className="cursor-pointer rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-cyan-400/40"
+            className="cursor-pointer rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-sm transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-violet-400/40"
           >
             {(() => {
               const dealProbabilityPct = Math.round(getEffectiveDealProbability(deal) * 100);
               return (
             <div className="flex items-start justify-between gap-3">
               <p className="font-semibold">{deal.title}</p>
-              <span className="mt-0.5 rounded-full bg-cyan-400/10 px-2 py-0.5 text-[11px] font-semibold text-cyan-100">
+              <span className="mt-0.5 rounded-full bg-amber-400/10 px-2 py-0.5 text-[11px] font-semibold text-amber-100">
                 {dealProbabilityPct}%
               </span>
             </div>
@@ -3317,7 +3398,7 @@ function StageColumn({
             <div className="mt-1 flex justify-end">
               <Link
                 href={`/ia-pulse?dealId=${deal.id}`}
-                className="inline-flex items-center rounded-md border border-cyan-300/30 bg-cyan-400/10 px-2 py-1 text-[11px] font-medium text-cyan-100 transition hover:bg-cyan-400/20"
+                className="inline-flex items-center rounded-md border border-violet-300/30 bg-violet-400/10 px-2 py-1 text-[11px] font-medium text-violet-100 transition hover:bg-violet-400/20"
                 onClick={(event) => event.stopPropagation()}
               >
                 IA Pulse

@@ -63,13 +63,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (themeMode === 'day') {
       root.style.colorScheme = 'light';
       root.dataset.themeMode = 'day';
-      setVar('--background', '#dbeafe');
-      setVar('--surface', '#f8fbff');
+      setVar('--background', '#f3f0e8');
+      setVar('--surface', '#fbfaf7');
       setVar('--card', '#ffffff');
-      setVar('--foreground', '#0b1220');
-      setVar('--muted', '#334155');
-      setVar('--accent', branding.accentColor || '#2563eb');
-      setVar('--accent-2', branding.accentColor2 || '#0ea5e9');
+      setVar('--foreground', '#14110f');
+      setVar('--muted', '#605b50');
+      setVar('--accent', branding.accentColor || '#7c3aed');
+      setVar('--accent-2', branding.accentColor2 || '#c4872f');
       return;
     }
 
@@ -129,15 +129,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
             {branding.logoDataUrl ? (
-              <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
+              <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/10">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={branding.logoDataUrl} alt="Logo" className="h-full w-full object-contain p-1" />
               </div>
             ) : (
-              <div className="brand-mark flex h-28 w-28 items-center justify-center rounded-xl">
+              <div className="brand-mark flex h-16 w-16 items-center justify-center rounded-lg">
                 <div className="text-center leading-[0.95]">
-                  <div className="text-[30px] font-extrabold">o7</div>
-                  <div className="text-[24px] font-semibold">Pulse</div>
+                  <div className="text-[20px] font-extrabold">o7</div>
+                  <div className="text-[14px] font-semibold">Pulse</div>
                 </div>
               </div>
             )}
@@ -253,7 +253,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="mx-auto max-w-7xl px-6 py-8">
         {showAdminBackToTop ? (
           <div className="mb-4 flex items-center justify-end">
             <Link href="/admin" className="btn-secondary text-sm">

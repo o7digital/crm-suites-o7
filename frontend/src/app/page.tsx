@@ -271,28 +271,32 @@ export default function DashboardPage() {
         )}
 
         {data && (
-          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-6 lg:grid-cols-12">
             <MetricCard
               title={t('nav.clients')}
               value={INT.format(data.clients)}
               hint={t('dashboard.prospectsHint', {
                 prospects: INT.format(data.prospects ?? 0),
               })}
+              tone="violet"
             />
             <MetricCard
               title={t('dashboard.openTasks')}
               value={INT.format(data.tasks['PENDING'] || 0)}
               hint={t('dashboard.openTasksHint')}
+              tone="amber"
             />
             <MetricCard
               title={t('dashboard.openLeads')}
               value={INT.format(data.leads.open ?? 0)}
               hint={t('dashboard.openLeadsHint')}
+              tone="teal"
             />
             <MetricCard
               title={t('dashboard.totalLeads')}
               value={INT.format(data.leads.total ?? 0)}
               hint={t('dashboard.totalLeadsHint')}
+              tone="green"
             />
             <PipelineTotalsCard
               title={t('dashboard.openPipelineValue')}
@@ -307,7 +311,7 @@ export default function DashboardPage() {
             <div className="card p-5">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-slate-400">{t('nav.tasks')}</p>
-                <Link href="/tasks" className="text-xs text-cyan-300 underline">
+                <Link href="/tasks" className="text-xs text-amber-300 underline">
                   {t('common.manage')}
                 </Link>
               </div>
@@ -323,7 +327,7 @@ export default function DashboardPage() {
             <div className="card p-5">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-slate-400">{t('dashboard.recentInvoices')}</p>
-                <Link href="/admin/ocr-scan" className="text-xs text-cyan-300 underline">
+                <Link href="/admin/ocr-scan" className="text-xs text-amber-300 underline">
                   {t('common.viewAll')}
                 </Link>
               </div>
@@ -356,14 +360,23 @@ function MetricCard({
   value,
   hint,
   valueClassName,
+  tone = 'violet',
 }: {
   title: string;
   value: string | number;
   hint: string;
   valueClassName?: string;
+  tone?: 'violet' | 'amber' | 'teal' | 'green';
 }) {
+  const toneClass = {
+    violet: 'from-violet-400/15 to-violet-500/5 text-violet-100',
+    amber: 'from-amber-300/15 to-amber-500/5 text-amber-100',
+    teal: 'from-teal-300/15 to-teal-500/5 text-teal-100',
+    green: 'from-emerald-300/15 to-emerald-500/5 text-emerald-100',
+  }[tone];
+
   return (
-    <div className="card p-5">
+    <div className={`card bg-gradient-to-br ${toneClass} p-5 md:col-span-3 lg:col-span-2`}>
       <p className="text-sm text-slate-400">{title}</p>
       <p className={valueClassName ?? 'mt-2 text-3xl font-semibold'}>{value}</p>
       <p className="text-xs text-slate-500">{hint}</p>
@@ -381,7 +394,7 @@ function PipelineTotalsCard({
   hint: string;
 }) {
   return (
-    <div className="card p-5">
+    <div className="card p-5 md:col-span-6 lg:col-span-4">
       <p className="text-sm text-slate-400">{title}</p>
       <div className="mt-4 space-y-3">
         {totals.length === 0 ? (
