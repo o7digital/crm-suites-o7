@@ -44,6 +44,12 @@ type PipelineTotal = {
   weightedOpenValueUsd: number;
 };
 
+type DealStatusStats = {
+  open: { count: number; valueUsd: number };
+  won: { count: number; valueUsd: number };
+  lost: { count: number; valueUsd: number };
+};
+
 type DashboardApiPayload = {
   clients: number;
   prospects?: number;
@@ -67,6 +73,7 @@ type DashboardApiPayload = {
 
 type DashboardPayload = DashboardApiPayload & {
   pipelineTotals: PipelineTotal[];
+  dealStatusStats: DealStatusStats;
 };
 
 type InvoiceSummary = {
@@ -88,6 +95,49 @@ function clampProbability(value?: number | null) {
   if (raw < 0) return 0;
   if (raw > 1) return 1;
   return raw;
+}
+
+function convertDealValueToUsd(deal: Deal, fx: FxRatesSnapshot | null) {
+  const value = Number(deal.value);
+  if (!Number.isFinite(value)) return 0;
+
+  const currency = (deal.currency || 'USD').toUpperCase();
+  if (currency === 'USD') return value;
+  if (!fx) return 0;
+
+  const converted = convertCurrency(value, currency, 'USD', fx);
+  return converted === null ? 0 : converted;
+}
+
+function buildDealStatusStats(stages: Stage[], deals: Deal[], fx: FxRatesSnapshot | null): DealStatusStats {
+  const stageById = new Map(stages.map((stage) => [stage.id, stage]));
+  const stats: DealStatusStats = {
+    open: { count: 0, valueUsd: 0 },
+    won: { count: 0, valueUsd: 0 },
+    lost: { count: 0, valueUsd: 0 },
+  };
+
+  for (const deal of deals) {
+    const stage = stageById.get(deal.stageId);
+    if (!stage) continue;
+
+    const valueUsd = convertDealValueToUsd(deal, fx);
+    if (stage.status === 'WON') {
+      stats.won.count += 1;
+      stats.won.valueUsd += valueUsd;
+      continue;
+    }
+    if (stage.status === 'LOST') {
+      stats.lost.count += 1;
+      stats.lost.valueUsd += valueUsd;
+      continue;
+    }
+
+    stats.open.count += 1;
+    stats.open.valueUsd += valueUsd;
+  }
+
+  return stats;
 }
 
 function buildPipelineTotals(
@@ -207,10 +257,23 @@ export default function DashboardPage() {
                 { tenantName: user?.tenantName },
               )
             : [];
+        const dealStatusStats =
+          stagesResult.status === 'fulfilled' && dealsResult.status === 'fulfilled'
+            ? buildDealStatusStats(
+                stagesResult.value,
+                dealsResult.value,
+                fxResult.status === 'fulfilled' ? fxResult.value : null,
+              )
+            : {
+                open: { count: dashboardResult.value.leads.open ?? 0, valueUsd: dashboardResult.value.leads.openUsd ?? 0 },
+                won: { count: 0, valueUsd: 0 },
+                lost: { count: 0, valueUsd: 0 },
+              };
 
         const next: DashboardPayload = {
           ...dashboardResult.value,
           pipelineTotals,
+          dealStatusStats,
         };
 
         if (!active) return;
@@ -234,14 +297,20 @@ export default function DashboardPage() {
   }, [api, token, user?.tenantName]);
 
   const primaryPipelineTotals = data?.pipelineTotals ?? [];
+  const activePipelineTotals = primaryPipelineTotals.filter(
+    (pipeline) => pipeline.weightedOpenValueUsd > 0 || pipeline.open > 0,
+  );
   const weightedPipelineTotal = primaryPipelineTotals.reduce(
     (sum, pipeline) => sum + pipeline.weightedOpenValueUsd,
     0,
   );
-  const strongestPipeline = primaryPipelineTotals.reduce<PipelineTotal | null>((best, pipeline) => {
+  const strongestPipeline = activePipelineTotals.reduce<PipelineTotal | null>((best, pipeline) => {
     if (!best) return pipeline;
     return pipeline.weightedOpenValueUsd > best.weightedOpenValueUsd ? pipeline : best;
   }, null);
+  const closedDealsCount = (data?.dealStatusStats.won.count ?? 0) + (data?.dealStatusStats.lost.count ?? 0);
+  const conversionRate =
+    closedDealsCount > 0 ? Math.round(((data?.dealStatusStats.won.count ?? 0) / closedDealsCount) * 100) : 0;
 
   const pipelineTotalsHint = data
     ? data.leads.fx?.error
@@ -280,37 +349,43 @@ export default function DashboardPage() {
         )}
 
         {data && (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <MetricCard
-              title={t('nav.clients')}
-              value={INT.format(data.clients)}
-              hint={`Prospectos: ${INT.format(data.prospects ?? 0)}`}
+              title="Leads abiertos"
+              value={INT.format(data.leads.open ?? data.dealStatusStats.open.count)}
+              hint={`Total leads: ${INT.format(data.leads.total ?? 0)}`}
               tone="violet"
             />
             <MetricCard
-              title={t('dashboard.openTasks')}
-              value={INT.format(data.tasks['PENDING'] || 0)}
-              hint="Pendientes en los clientes"
-              tone="amber"
-            />
-            <MetricCard
-              title={t('dashboard.openLeads')}
-              value={INT.format(data.leads.open ?? 0)}
-              hint="Deals en curso"
+              title="En negociacion"
+              value={INT.format(data.dealStatusStats.open.count)}
+              hint={`Valor: ${USD.format(data.dealStatusStats.open.valueUsd)}`}
               tone="teal"
             />
             <MetricCard
-              title={t('dashboard.totalLeads')}
-              value={INT.format(data.leads.total ?? 0)}
-              hint="Open + won + lost"
+              title="Ganados"
+              value={INT.format(data.dealStatusStats.won.count)}
+              hint={`Total valor: ${USD.format(data.dealStatusStats.won.valueUsd)}`}
               tone="green"
+            />
+            <MetricCard
+              title="Perdidos"
+              value={INT.format(data.dealStatusStats.lost.count)}
+              hint={`Total valor: ${USD.format(data.dealStatusStats.lost.valueUsd)}`}
+              tone="rose"
+            />
+            <MetricCard
+              title="Conversion general"
+              value={`${conversionRate}%`}
+              hint={`${INT.format(data.dealStatusStats.won.count)} won / ${INT.format(closedDealsCount)} cerrados`}
+              tone="violet"
             />
             <MetricCard
               title="Valor total ponderado"
               value={USD.format(weightedPipelineTotal)}
               hint={strongestPipeline ? strongestPipeline.name : 'Sin pipeline activo'}
               tone="violet"
-              bars={primaryPipelineTotals.slice(0, 8).map((pipeline) => pipeline.weightedOpenValueUsd)}
+              bars={activePipelineTotals.slice(0, 8).map((pipeline) => pipeline.weightedOpenValueUsd)}
             />
           </div>
         )}
@@ -319,9 +394,10 @@ export default function DashboardPage() {
           <div className="mt-4 grid gap-4 lg:grid-cols-12">
             <div className="space-y-4 lg:col-span-9">
               <PipelineTotalsCard
-                totals={primaryPipelineTotals}
+                totals={activePipelineTotals}
                 total={weightedPipelineTotal}
                 hint={pipelineTotalsHint}
+                hiddenCount={primaryPipelineTotals.length - activePipelineTotals.length}
               />
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -351,7 +427,7 @@ function MetricCard({
   title: string;
   value: string | number;
   hint: string;
-  tone?: 'violet' | 'amber' | 'teal' | 'green';
+  tone?: 'violet' | 'amber' | 'teal' | 'green' | 'rose';
   bars?: number[];
 }) {
   const toneClass = {
@@ -359,6 +435,7 @@ function MetricCard({
     amber: 'from-amber-300/15 to-amber-500/5 text-amber-100',
     teal: 'from-teal-300/15 to-teal-500/5 text-teal-100',
     green: 'from-emerald-300/15 to-emerald-500/5 text-emerald-100',
+    rose: 'from-rose-300/15 to-rose-500/5 text-rose-100',
   }[tone];
   const maxBar = Math.max(...(bars ?? [0]), 1);
 
@@ -386,10 +463,12 @@ function PipelineTotalsCard({
   totals,
   total,
   hint,
+  hiddenCount,
 }: {
   totals: PipelineTotal[];
   total: number;
   hint: string;
+  hiddenCount: number;
 }) {
   const maxValue = Math.max(...totals.map((pipeline) => pipeline.weightedOpenValueUsd), 1);
 
@@ -409,8 +488,8 @@ function PipelineTotalsCard({
       <div className="mt-5 space-y-3">
         {totals.length === 0 ? (
           <EmptyState
-            title="Sin pipelines ponderados"
-            body="Los valores apareceran aqui cuando haya deals abiertos con probabilidad."
+            title="Sin pipelines activos"
+            body="Los pipelines sin valor o sin deals abiertos no se muestran en el resumen principal."
           />
         ) : (
           totals.map((pipeline) => (
@@ -447,7 +526,10 @@ function PipelineTotalsCard({
           ))
         )}
       </div>
-      <p className="mt-3 text-xs text-slate-500">{hint}</p>
+      <div className="mt-3 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+        <p>{hint}</p>
+        {hiddenCount > 0 ? <p>{hiddenCount} pipelines sin valor ocultos</p> : null}
+      </div>
     </div>
   );
 }
