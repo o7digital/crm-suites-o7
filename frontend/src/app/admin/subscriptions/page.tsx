@@ -20,9 +20,15 @@ type SubscriptionItem = {
   plan?: string | null;
   seats?: number | null;
   trialEndsAt?: string | null;
+  stripeSubscriptionId?: string | null;
+  billingEmail?: string | null;
+  currentPeriodEnd?: string | null;
+  cancelAtPeriodEnd?: boolean | null;
   status: 'ACTIVE' | 'PAUSED' | 'CANCELED';
   activatedUsersCount: number;
   activatedAt?: string | null;
+  firstAccessAt?: string | null;
+  lastAccessAt?: string | null;
   pendingInvitesCount: number;
   canSuspend: boolean;
   createdAt: string;
@@ -36,6 +42,7 @@ type LinkDraft = {
   contactFirstName: string;
   contactLastName: string;
   contactEmail: string;
+  plan: SubscriptionPlan;
   seats: number;
   trialEndsAt: string;
 };
@@ -56,6 +63,8 @@ type CustomerWorkspaceUser = {
   email: string;
   name: string;
   role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  firstLoginAt?: string | null;
+  lastLoginAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -145,6 +154,11 @@ function toDateInputValue(value?: string | null) {
   return value.slice(0, 10);
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return null;
+  return new Date(value).toLocaleString();
+}
+
 function normalizeExpirationDate(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -189,6 +203,7 @@ export default function AdminSubscriptionsPage() {
   const [savingSubscriptionId, setSavingSubscriptionId] = useState<string | null>(null);
   const [editingSubscriptionId, setEditingSubscriptionId] = useState<string | null>(null);
   const [changingStatusSubscriptionId, setChangingStatusSubscriptionId] = useState<string | null>(null);
+  const [checkoutSubscriptionId, setCheckoutSubscriptionId] = useState<string | null>(null);
   const [linkDraftsById, setLinkDraftsById] = useState<Record<string, LinkDraft>>({});
   const [inviteDraftsById, setInviteDraftsById] = useState<Record<string, InviteDraft>>({});
   const [pendingInvitesById, setPendingInvitesById] = useState<Record<string, PendingInvite[]>>({});
@@ -287,6 +302,7 @@ export default function AdminSubscriptionsPage() {
         contactFirstName: sub.contactFirstName || '',
         contactLastName: sub.contactLastName || '',
         contactEmail: sub.contactEmail || '',
+        plan: (sub.plan as SubscriptionPlan) || 'TRIAL',
         seats: Math.min(30, Math.max(1, sub.seats || 1)),
         trialEndsAt: toDateInputValue(sub.trialEndsAt),
       };
@@ -324,6 +340,7 @@ export default function AdminSubscriptionsPage() {
         contactFirstName: '',
         contactLastName: '',
         contactEmail: '',
+        plan: 'TRIAL',
         seats: 1,
         trialEndsAt: '',
       };
@@ -524,6 +541,7 @@ export default function AdminSubscriptionsPage() {
             contactFirstName: draft.contactFirstName.trim() || null,
             contactLastName: draft.contactLastName.trim() || null,
             contactEmail: normalizeEmailValue(draft.contactEmail) || null,
+            plan: draft.plan,
             seats: draft.seats,
             trialEndsAt: normalizedTrialEndsAt,
           }),
@@ -939,6 +957,27 @@ export default function AdminSubscriptionsPage() {
     [api, t],
   );
 
+  const startSubscriptionCheckout = useCallback(
+    async (sub: SubscriptionItem) => {
+      setCheckoutSubscriptionId(sub.id);
+      setError(null);
+      setInfo(null);
+      try {
+        const session = await api<{ url?: string | null }>(`/admin/subscriptions/${sub.id}/checkout`, {
+          method: 'POST',
+        });
+        if (!session.url) throw new Error('Stripe did not return a checkout URL');
+        window.location.href = session.url;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to create payment checkout';
+        setError(message);
+      } finally {
+        setCheckoutSubscriptionId((prev) => (prev === sub.id ? null : prev));
+      }
+    },
+    [api],
+  );
+
   const rows = useMemo(
     () =>
       items.map((sub) => ({
@@ -1284,6 +1323,20 @@ export default function AdminSubscriptionsPage() {
                                 })}
                               </p>
                             ) : null}
+                            {sub.firstAccessAt ? (
+                              <p className="mt-1 text-xs text-slate-400">
+                                {t('adminSubscriptions.activity.firstAccessAt', {
+                                  date: formatDateTime(sub.firstAccessAt) || '—',
+                                })}
+                              </p>
+                            ) : null}
+                            {sub.lastAccessAt ? (
+                              <p className="mt-1 text-xs text-slate-400">
+                                {t('adminSubscriptions.activity.lastAccessAt', {
+                                  date: formatDateTime(sub.lastAccessAt) || '—',
+                                })}
+                              </p>
+                            ) : null}
                           </>
                         ) : (
                           <p className="mt-2 text-xs text-amber-200">{t('adminSubscriptions.activity.notConnected')}</p>
@@ -1316,6 +1369,18 @@ export default function AdminSubscriptionsPage() {
                             })}
                           </p>
                         ) : null}
+                        {sub.currentPeriodEnd ? (
+                          <p className="mt-1 text-xs text-emerald-200">
+                            {t('adminSubscriptions.payment.currentPeriodEnd', {
+                              date: new Date(sub.currentPeriodEnd).toLocaleDateString(),
+                            })}
+                          </p>
+                        ) : null}
+                        {sub.stripeSubscriptionId ? (
+                          <p className="mt-1 text-xs text-slate-400">{t('adminSubscriptions.payment.active')}</p>
+                        ) : (
+                          <p className="mt-1 text-xs text-amber-200">{t('adminSubscriptions.payment.notSet')}</p>
+                        )}
                       </td>
                       <td className="py-3">
                         <div className="flex flex-wrap gap-2">
@@ -1352,6 +1417,18 @@ export default function AdminSubscriptionsPage() {
                               }}
                             >
                               {t('adminSubscriptions.invites.addAdminButton')}
+                            </button>
+                          ) : null}
+                          {!sub.isEditing && isSubscriptionActive(sub) && sub.plan !== 'TRIAL' ? (
+                            <button
+                              type="button"
+                              className="rounded-lg bg-cyan-500/20 px-3 py-2 text-xs font-semibold text-cyan-100 ring-1 ring-cyan-300/40 hover:bg-cyan-500/30 disabled:opacity-50"
+                              onClick={() => void startSubscriptionCheckout(sub)}
+                              disabled={checkoutSubscriptionId === sub.id}
+                            >
+                              {checkoutSubscriptionId === sub.id
+                                ? t('adminSubscriptions.payment.creating')
+                                : t('adminSubscriptions.payment.setup')}
                             </button>
                           ) : null}
                         </div>
@@ -1408,6 +1485,25 @@ export default function AdminSubscriptionsPage() {
                                 onChange={(e) => updateLinkDraft(sub.id, { contactLastName: e.target.value })}
                                 placeholder={t('adminSubscriptions.contactLastNamePlaceholder')}
                               />
+                              <select
+                                className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                                value={sub.draft.plan}
+                                onChange={(e) => {
+                                  const nextPlan = e.target.value as SubscriptionPlan;
+                                  updateLinkDraft(sub.id, {
+                                    plan: nextPlan,
+                                    seats: DEFAULT_SEATS_BY_PLAN[nextPlan],
+                                  });
+                                }}
+                                aria-label={t('adminSubscriptions.plan')}
+                              >
+                                <option value="TRIAL">{t('adminSubscriptions.planTrial')}</option>
+                                <option value="PULSE_BASIC">{t('adminSubscriptions.planBasic')}</option>
+                                <option value="PULSE_STANDARD">{t('adminSubscriptions.planStandard')}</option>
+                                <option value="PULSE_ADVANCED">{t('adminSubscriptions.planAdvanced')}</option>
+                                <option value="PULSE_ADVANCED_PLUS">{t('adminSubscriptions.planAdvancedPlus')}</option>
+                                <option value="PULSE_TEAM">{t('adminSubscriptions.planTeam')}</option>
+                              </select>
                               <select
                                 className="w-full rounded-lg bg-black/20 px-2 py-1.5 text-xs text-slate-200 outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
                                 value={sub.draft.seats}
@@ -1487,6 +1583,16 @@ export default function AdminSubscriptionsPage() {
                                           <div>
                                             <p className="text-slate-100">{workspaceUser.name || 'User'}</p>
                                             <p className="mt-1 text-slate-400">{workspaceUser.email}</p>
+                                            <p className="mt-1 text-slate-500">
+                                              {t('adminSubscriptions.users.firstLogin', {
+                                                date: formatDateTime(workspaceUser.firstLoginAt) || '—',
+                                              })}
+                                            </p>
+                                            <p className="mt-1 text-slate-500">
+                                              {t('adminSubscriptions.users.lastLogin', {
+                                                date: formatDateTime(workspaceUser.lastLoginAt) || '—',
+                                              })}
+                                            </p>
                                           </div>
                                           <div className="flex flex-wrap items-center gap-2">
                                             {isOwner ? (

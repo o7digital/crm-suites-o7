@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import nodemailer from 'nodemailer';
+import Stripe = require('stripe');
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
 import { InviteStatus, Prisma } from '@prisma/client';
@@ -16,7 +17,12 @@ import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  private readonly stripe: InstanceType<typeof Stripe> | null;
+
+  constructor(private prisma: PrismaService) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    this.stripe = key ? new Stripe(key, { apiVersion: '2026-05-27.dahlia' }) : null;
+  }
   private readonly trialAlertTo = 'osteineur@o7digital.com';
   private readonly trialAlertCc = 'olivier.steineur@icloud.com';
   private readonly inviteSchemaPendingMessage =
@@ -273,8 +279,13 @@ export class AdminService {
       ),
     ] as string[];
 
-    let userRows: Array<{ tenantId: string; email: string; createdAt: Date }> =
-      [];
+    let userRows: Array<{
+      tenantId: string;
+      email: string;
+      createdAt: Date;
+      firstLoginAt: Date | null;
+      lastLoginAt: Date | null;
+    }> = [];
     try {
       userRows = await this.prisma.user.findMany({
         where: {
@@ -289,6 +300,8 @@ export class AdminService {
           tenantId: true,
           email: true,
           createdAt: true,
+          firstLoginAt: true,
+          lastLoginAt: true,
         },
         orderBy: { createdAt: 'asc' },
       });
@@ -321,7 +334,12 @@ export class AdminService {
 
     const userMetricsByTenant = new Map<
       string,
-      { activatedUsersCount: number; activatedAt: Date | null }
+      {
+        activatedUsersCount: number;
+        activatedAt: Date | null;
+        firstAccessAt: Date | null;
+        lastAccessAt: Date | null;
+      }
     >();
     const contactAccountCreatedAtByEmail = new Map<string, Date>();
 
@@ -333,14 +351,27 @@ export class AdminService {
 
       if (!customerTenantIdSet.has(row.tenantId)) continue;
       const current = userMetricsByTenant.get(row.tenantId);
+      const firstAccessAt = row.firstLoginAt ?? row.createdAt;
+      const lastAccessAt = row.lastLoginAt ?? row.firstLoginAt ?? null;
       if (!current) {
         userMetricsByTenant.set(row.tenantId, {
           activatedUsersCount: 1,
           activatedAt: row.createdAt,
+          firstAccessAt,
+          lastAccessAt,
         });
         continue;
       }
       current.activatedUsersCount += 1;
+      if (!current.activatedAt || row.createdAt < current.activatedAt) {
+        current.activatedAt = row.createdAt;
+      }
+      if (!current.firstAccessAt || firstAccessAt < current.firstAccessAt) {
+        current.firstAccessAt = firstAccessAt;
+      }
+      if (lastAccessAt && (!current.lastAccessAt || lastAccessAt > current.lastAccessAt)) {
+        current.lastAccessAt = lastAccessAt;
+      }
     }
 
     const inviteMetricsByTenant = new Map<
@@ -379,6 +410,10 @@ export class AdminService {
         userMetricsByTenant.get(sub.customerTenantId)?.activatedUsersCount ?? 0;
       let activatedAt =
         userMetricsByTenant.get(sub.customerTenantId)?.activatedAt ?? null;
+      let firstAccessAt =
+        userMetricsByTenant.get(sub.customerTenantId)?.firstAccessAt ?? null;
+      let lastAccessAt =
+        userMetricsByTenant.get(sub.customerTenantId)?.lastAccessAt ?? null;
       const inviteMetrics = inviteMetricsByTenant.get(sub.customerTenantId);
       const pendingInvitesCount = inviteMetrics?.pendingInvitesCount ?? 0;
       const acceptedInvitesCount = inviteMetrics?.acceptedInvitesCount ?? 0;
@@ -396,12 +431,16 @@ export class AdminService {
           contactAccountCreatedAt ? 1 : 0,
         );
         activatedAt = firstAcceptedAt ?? contactAccountCreatedAt ?? null;
+        firstAccessAt = activatedAt;
+        lastAccessAt = activatedAt;
       }
 
       return {
         ...sub,
         activatedUsersCount,
         activatedAt,
+        firstAccessAt,
+        lastAccessAt,
         pendingInvitesCount,
         canSuspend: sub.status === 'ACTIVE',
       };
@@ -571,6 +610,11 @@ export class AdminService {
           seats: true,
           trialEndsAt: true,
           trialAlertSentAt: true,
+          stripeSubscriptionId: true,
+          stripePriceId: true,
+          billingEmail: true,
+          currentPeriodEnd: true,
+          cancelAtPeriodEnd: true,
           status: true,
           createdAt: true,
           updatedAt: true,
@@ -656,6 +700,8 @@ export class AdminService {
           email: true,
           name: true,
           role: true,
+          firstLoginAt: true,
+          lastLoginAt: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -843,6 +889,11 @@ export class AdminService {
             seats: true,
             trialEndsAt: true,
             trialAlertSentAt: true,
+            stripeSubscriptionId: true,
+            stripePriceId: true,
+            billingEmail: true,
+            currentPeriodEnd: true,
+            cancelAtPeriodEnd: true,
             status: true,
             createdAt: true,
             updatedAt: true,
@@ -872,6 +923,7 @@ export class AdminService {
       dto.contactFirstName !== undefined ||
       dto.contactLastName !== undefined ||
       dto.contactEmail !== undefined ||
+      dto.plan !== undefined ||
       dto.seats !== undefined ||
       dto.trialEndsAt !== undefined;
     if (!hasChanges) throw new BadRequestException('No fields provided');
@@ -948,6 +1000,7 @@ export class AdminService {
             contactFirstName: normalize(dto.contactFirstName),
             contactLastName: normalize(dto.contactLastName),
             contactEmail: normalize(dto.contactEmail),
+            plan: dto.plan,
             seats:
               typeof dto.seats === 'number'
                 ? Math.min(30, Math.max(1, dto.seats))
@@ -968,6 +1021,11 @@ export class AdminService {
             seats: true,
             trialEndsAt: true,
             trialAlertSentAt: true,
+            stripeSubscriptionId: true,
+            stripePriceId: true,
+            billingEmail: true,
+            currentPeriodEnd: true,
+            cancelAtPeriodEnd: true,
             status: true,
             createdAt: true,
             updatedAt: true,
@@ -1014,6 +1072,11 @@ export class AdminService {
             seats: true,
             trialEndsAt: true,
             trialAlertSentAt: true,
+            stripeSubscriptionId: true,
+            stripePriceId: true,
+            billingEmail: true,
+            currentPeriodEnd: true,
+            cancelAtPeriodEnd: true,
             status: true,
             createdAt: true,
             updatedAt: true,
@@ -1060,6 +1123,11 @@ export class AdminService {
           seats: true,
           trialEndsAt: true,
           trialAlertSentAt: true,
+          stripeSubscriptionId: true,
+          stripePriceId: true,
+          billingEmail: true,
+          currentPeriodEnd: true,
+          cancelAtPeriodEnd: true,
           status: true,
           createdAt: true,
           updatedAt: true,
@@ -1077,6 +1145,75 @@ export class AdminService {
 
   async cancelSubscription(id: string, user: RequestUser) {
     return this.suspendSubscription(id, user);
+  }
+
+  async createSubscriptionCheckout(id: string, user: RequestUser) {
+    await this.ensureSubscriptionManager(user);
+    if (!this.stripe) {
+      throw new ServiceUnavailableException('Stripe is not configured');
+    }
+
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: {
+        id: true,
+        customerTenantId: true,
+        contactEmail: true,
+        plan: true,
+        status: true,
+      },
+    });
+    if (!subscription) throw new NotFoundException('Subscription not found');
+    if (subscription.status === 'CANCELED') {
+      throw new BadRequestException('Canceled subscriptions cannot be paid');
+    }
+
+    const plan =
+      subscription.plan === 'PULSE_BASIC' ||
+      subscription.plan === 'PULSE_STANDARD' ||
+      subscription.plan === 'PULSE_ADVANCED' ||
+      subscription.plan === 'PULSE_ADVANCED_PLUS' ||
+      subscription.plan === 'PULSE_TEAM'
+        ? subscription.plan
+        : null;
+    if (!plan) {
+      throw new BadRequestException('Choose a paid plan before creating payment');
+    }
+
+    const priceIdByPlan: Record<string, string | undefined> = {
+      PULSE_BASIC: process.env.CRM_PULSE_BASIC_PRICE_ID,
+      PULSE_STANDARD: process.env.CRM_PULSE_STANDARD_PRICE_ID,
+      PULSE_ADVANCED: process.env.CRM_PULSE_ADVANCED_PRICE_ID,
+      PULSE_ADVANCED_PLUS: process.env.CRM_PULSE_ADVANCED_PLUS_PRICE_ID,
+      PULSE_TEAM: process.env.CRM_PULSE_TEAM_PRICE_ID,
+    };
+    const priceId = priceIdByPlan[plan];
+    if (!priceId) throw new BadRequestException(`Missing Stripe price ID for ${plan}`);
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+    const session = await this.stripe.checkout.sessions.create({
+      mode: 'subscription',
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${appUrl}/admin/subscriptions?billing=success&subscriptionId=${subscription.id}`,
+      cancel_url: `${appUrl}/admin/subscriptions?billing=canceled&subscriptionId=${subscription.id}`,
+      customer_email: subscription.contactEmail || undefined,
+      metadata: {
+        tenantId: subscription.customerTenantId,
+        ownerTenantId: user.tenantId,
+        subscriptionId: subscription.id,
+        plan,
+      },
+      subscription_data: {
+        metadata: {
+          tenantId: subscription.customerTenantId,
+          ownerTenantId: user.tenantId,
+          subscriptionId: subscription.id,
+          plan,
+        },
+      },
+    });
+
+    return { url: session.url, id: session.id };
   }
 
   private async sendTrialExpiredAlerts(ownerTenantId: string) {

@@ -289,7 +289,7 @@ export default function CrmPage() {
   const { t, stageName } = useI18n();
   const lastDragAtRef = useRef<number>(0);
   const proposalRef = useRef<HTMLInputElement | null>(null);
-  const [crmDisplayCurrency, setCrmDisplayCurrency] = useState<DealCurrency>('USD');
+  const [crmDisplayCurrency, setCrmDisplayCurrency] = useState<DealCurrency>('MXN');
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState<string>('');
   const [stages, setStages] = useState<Stage[]>([]);
@@ -350,7 +350,7 @@ export default function CrmPage() {
   }>({
     title: '',
     value: '',
-    currency: 'USD',
+    currency: 'MXN',
     probabilityPct: '',
     probabilityOverridesStage: false,
     expectedCloseDate: '',
@@ -443,7 +443,7 @@ export default function CrmPage() {
       setForm({
         title: '',
         value: '',
-        currency: 'USD',
+        currency: 'MXN',
         probabilityPct: '',
         probabilityOverridesStage: false,
         expectedCloseDate: '',
@@ -524,10 +524,10 @@ export default function CrmPage() {
       .then(([settingsResult, pipelinesResult]) => {
         const rawCurrency =
           settingsResult.status === 'fulfilled'
-            ? String(settingsResult.value.settings?.crmDisplayCurrency || 'USD').toUpperCase()
-            : 'USD';
+            ? String(settingsResult.value.settings?.crmDisplayCurrency || 'MXN').toUpperCase()
+            : 'MXN';
         setCrmDisplayCurrency(
-          DEAL_CURRENCIES.includes(rawCurrency as DealCurrency) ? (rawCurrency as DealCurrency) : 'USD',
+          DEAL_CURRENCIES.includes(rawCurrency as DealCurrency) ? (rawCurrency as DealCurrency) : 'MXN',
         );
 
         const data = pipelinesResult.status === 'fulfilled' ? pipelinesResult.value : [];
@@ -1023,7 +1023,7 @@ export default function CrmPage() {
     setForm({
       title: '',
       value: '',
-      currency: 'USD',
+      currency: crmDisplayCurrency,
       probabilityPct: toProbabilityPct(defaultStage?.probability),
       probabilityOverridesStage: false,
       expectedCloseDate: '',
@@ -1046,7 +1046,7 @@ export default function CrmPage() {
     setForm({
       title: deal.title ?? '',
       value: deal.value === null || deal.value === undefined ? '' : String(deal.value),
-      currency: (String(deal.currency || 'USD').toUpperCase() as DealCurrency) || 'USD',
+      currency: (String(deal.currency || 'MXN').toUpperCase() as DealCurrency) || 'MXN',
       probabilityPct: toProbabilityPct(deal.probability ?? deal.stage?.probability),
       probabilityOverridesStage: deal.probability !== undefined && deal.probability !== null,
       expectedCloseDate: toDateInputValue(deal.expectedCloseDate),

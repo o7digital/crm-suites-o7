@@ -33,6 +33,11 @@ export class UpdateSubscriptionDto {
   contactEmail?: string | null;
 
   @IsOptional()
+  @IsString()
+  @IsIn(['TRIAL', 'PULSE_BASIC', 'PULSE_STANDARD', 'PULSE_ADVANCED', 'PULSE_ADVANCED_PLUS', 'PULSE_TEAM'])
+  plan?: 'TRIAL' | 'PULSE_BASIC' | 'PULSE_STANDARD' | 'PULSE_ADVANCED' | 'PULSE_ADVANCED_PLUS' | 'PULSE_TEAM';
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(30)

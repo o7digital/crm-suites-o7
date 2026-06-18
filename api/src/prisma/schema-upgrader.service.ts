@@ -224,7 +224,7 @@ export class SchemaUpgraderService {
           "name" TEXT NOT NULL,
           "description" TEXT,
           "price" DECIMAL(12,2),
-          "currency" TEXT NOT NULL DEFAULT 'USD',
+          "currency" TEXT NOT NULL DEFAULT 'MXN',
           "isActive" BOOLEAN NOT NULL DEFAULT true,
           "tenantId" TEXT NOT NULL,
           "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -601,7 +601,7 @@ export class SchemaUpgraderService {
   private async ensureTenantCrmSettingsFields() {
     const columns: Array<{ name: string; type: string }> = [
       { name: 'crmMode', type: `TEXT NOT NULL DEFAULT 'B2B'` },
-      { name: 'crmDisplayCurrency', type: `TEXT NOT NULL DEFAULT 'USD'` },
+      { name: 'crmDisplayCurrency', type: `TEXT NOT NULL DEFAULT 'MXN'` },
       { name: 'industry', type: 'TEXT' },
       { name: 'contractSetup', type: 'JSONB' },
       { name: 'marketingSetup', type: 'JSONB' },

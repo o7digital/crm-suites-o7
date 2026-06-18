@@ -518,10 +518,10 @@ export class TenantService {
         },
       });
       if (!tenant) throw new NotFoundException('Tenant not found');
-      const currency = String(tenant.crmDisplayCurrency || 'USD').toUpperCase();
+      const currency = String(tenant.crmDisplayCurrency || 'MXN').toUpperCase();
       const crmDisplayCurrency = this.crmDisplayCurrencies.includes(currency as (typeof this.crmDisplayCurrencies)[number])
         ? (currency as (typeof this.crmDisplayCurrencies)[number])
-        : 'USD';
+        : 'MXN';
       const contractSetup = this.sanitizeContractSetup(tenant.contractSetup);
       const marketingSetup = this.sanitizeMarketingSetup(tenant.marketingSetup);
       return {
@@ -599,10 +599,10 @@ export class TenantService {
       // Keep pipeline default aligned with the tenant mode when possible.
       await this.enforceDefaultPipeline(updated.id, updated.crmMode || 'B2B');
 
-      const currency = String(updated.crmDisplayCurrency || 'USD').toUpperCase();
+      const currency = String(updated.crmDisplayCurrency || 'MXN').toUpperCase();
       const crmDisplayCurrency = this.crmDisplayCurrencies.includes(currency as (typeof this.crmDisplayCurrencies)[number])
         ? (currency as (typeof this.crmDisplayCurrencies)[number])
-        : 'USD';
+        : 'MXN';
       const contractSetup = this.sanitizeContractSetup(updated.contractSetup);
       const marketingSetup = this.sanitizeMarketingSetup(updated.marketingSetup);
 

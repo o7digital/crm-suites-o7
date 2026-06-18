@@ -7,15 +7,14 @@ import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 
-const USD = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 0,
-});
 const INT = new Intl.NumberFormat('en-US');
 
-function formatUsdAmount(value: number) {
-  return `${USD.format(value)} USD`;
+function formatMoneyAmount(value: number, currency: string) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 type Pipeline = {
@@ -26,6 +25,7 @@ type Pipeline = {
 
 type ForecastPayload = {
   pipeline: Pipeline | null;
+  currency?: string;
   total: number;
   weightedTotal: number;
   byStage: Array<{
@@ -124,9 +124,11 @@ export default function ForecastPage() {
           <div className="space-y-6">
             <div className="grid gap-4">
               <div className="card p-5">
-                <p className="text-sm text-slate-400">{t('forecast.weightedTotal')} (USD)</p>
+                <p className="text-sm text-slate-400">
+                  {t('forecast.weightedTotal')} ({forecast.currency || 'MXN'})
+                </p>
                 <p className="mt-2 text-3xl font-semibold">
-                  {formatUsdAmount(forecast.weightedTotal)}
+                  {formatMoneyAmount(forecast.weightedTotal, forecast.currency || 'MXN')}
                 </p>
               </div>
             </div>
@@ -146,8 +148,12 @@ export default function ForecastPage() {
                       <th className="pb-2 text-left">{t('forecast.table.status')}</th>
                       <th className="pb-2 text-right">{t('forecast.table.deals')}</th>
                       <th className="pb-2 text-right">{t('forecast.table.probability')}</th>
-                      <th className="pb-2 text-right">{t('forecast.table.total')} (USD)</th>
-                      <th className="pb-2 text-right">{t('forecast.table.weighted')} (USD)</th>
+                      <th className="pb-2 text-right">
+                        {t('forecast.table.total')} ({forecast.currency || 'MXN'})
+                      </th>
+                      <th className="pb-2 text-right">
+                        {t('forecast.table.weighted')} ({forecast.currency || 'MXN'})
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -168,8 +174,12 @@ export default function ForecastPage() {
                         </td>
                         <td className="py-2 text-right">{INT.format(row.count)}</td>
                         <td className="py-2 text-right">{Math.round(row.probability * 100)}%</td>
-                        <td className="py-2 text-right">{formatUsdAmount(row.total)}</td>
-                        <td className="py-2 text-right">{formatUsdAmount(row.weightedTotal)}</td>
+                        <td className="py-2 text-right">
+                          {formatMoneyAmount(row.total, forecast.currency || 'MXN')}
+                        </td>
+                        <td className="py-2 text-right">
+                          {formatMoneyAmount(row.weightedTotal, forecast.currency || 'MXN')}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

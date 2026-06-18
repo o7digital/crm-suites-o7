@@ -70,8 +70,26 @@ export class ForecastService {
     return 'OPEN';
   }
 
+  private async getDisplayCurrency(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { crmDisplayCurrency: true },
+    });
+    const currency = String(tenant?.crmDisplayCurrency || 'MXN').toUpperCase();
+    return ['USD', 'EUR', 'MXN', 'CAD'].includes(currency) ? currency : 'MXN';
+  }
+
+  private convertFromUsd(amountUsd: number, currency: string, snapshot: Awaited<ReturnType<FxService['getUsdRates']>>) {
+    const target = (currency || 'MXN').toUpperCase();
+    if (target === 'USD') return amountUsd;
+    const rate = snapshot.rates[target];
+    if (!Number.isFinite(rate) || rate <= 0) return null;
+    return amountUsd * rate;
+  }
+
   async getForecast(pipelineId: string | undefined, user: RequestUser) {
     let pipeline = null as null | { id: string; name: string; isDefault: boolean };
+    const displayCurrency = await this.getDisplayCurrency(user.tenantId);
 
     if (pipelineId) {
       pipeline = await this.prisma.pipeline.findFirst({
@@ -95,6 +113,7 @@ export class ForecastService {
     if (!pipeline) {
       return {
         pipeline: null,
+        currency: displayCurrency,
         total: 0,
         weightedTotal: 0,
         byStage: [],
@@ -169,7 +188,11 @@ export class ForecastService {
       const raw = Number(deal.value);
       if (!Number.isFinite(raw)) continue;
       const cur = (deal.currency || 'USD').toUpperCase();
-      const amount = snapshot ? this.fx.toUsd(raw, cur, snapshot) ?? (cur === 'USD' ? raw : 0) : raw;
+      const amountUsd = snapshot ? this.fx.toUsd(raw, cur, snapshot) ?? (cur === 'USD' ? raw : 0) : raw;
+      const amount =
+        snapshot && displayCurrency !== 'USD'
+          ? this.convertFromUsd(amountUsd, displayCurrency, snapshot) ?? 0
+          : amountUsd;
 
       total += amount;
       const probability =
@@ -194,6 +217,7 @@ export class ForecastService {
 
     return {
       pipeline,
+      currency: displayCurrency,
       total,
       weightedTotal,
       byStage,

@@ -73,6 +73,11 @@ export class AdminController {
     return this.adminService.cancelSubscription(id, user);
   }
 
+  @Post('subscriptions/:id/checkout')
+  createSubscriptionCheckout(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    return this.adminService.createSubscriptionCheckout(id, user);
+  }
+
   @Get('subscriptions/:id/user-invites')
   listSubscriptionUserInvites(@Param('id') id: string, @CurrentUser() user: RequestUser) {
     return this.adminService.listSubscriptionUserInvites(id, user);

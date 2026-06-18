@@ -515,6 +515,8 @@ const CORE_MESSAGES = {
       "Enter a valid customer email. You can also paste Name <email>.",
     "adminSubscriptions.activity.connectedUsers": "{count} connected users",
     "adminSubscriptions.activity.activatedAt": "Activated on {date}",
+    "adminSubscriptions.activity.firstAccessAt": "First access: {date}",
+    "adminSubscriptions.activity.lastAccessAt": "Last access: {date}",
     "adminSubscriptions.activity.notConnected": "No customer login yet",
     "adminSubscriptions.activity.pendingInvites": "{count} pending invites",
     "adminSubscriptions.activity.suspended": "Suspended account",
@@ -551,6 +553,13 @@ const CORE_MESSAGES = {
     "adminSubscriptions.users.roleSaved": "User role updated.",
     "adminSubscriptions.users.removeConfirm":
       "Remove {name} from this customer workspace?",
+    "adminSubscriptions.users.firstLogin": "First login: {date}",
+    "adminSubscriptions.users.lastLogin": "Last access: {date}",
+    "adminSubscriptions.payment.setup": "Set up payment",
+    "adminSubscriptions.payment.creating": "Creating payment…",
+    "adminSubscriptions.payment.active": "Stripe payment active",
+    "adminSubscriptions.payment.notSet": "Payment not set",
+    "adminSubscriptions.payment.currentPeriodEnd": "Paid until {date}",
     "adminSubscriptions.createInvites.title": "Users to invite now",
     "adminSubscriptions.createInvites.subtitle":
       "Add several users with their role before creating the workspace.",
@@ -1095,6 +1104,8 @@ const CORE_MESSAGES = {
     "adminSubscriptions.activity.connectedUsers":
       "{count} utilisateurs connectes",
     "adminSubscriptions.activity.activatedAt": "Active le {date}",
+    "adminSubscriptions.activity.firstAccessAt": "Premier acces : {date}",
+    "adminSubscriptions.activity.lastAccessAt": "Dernier acces : {date}",
     "adminSubscriptions.activity.notConnected":
       "Aucune connexion client pour le moment",
     "adminSubscriptions.activity.pendingInvites":
@@ -1133,6 +1144,13 @@ const CORE_MESSAGES = {
     "adminSubscriptions.users.roleSaved": "Role utilisateur mis a jour.",
     "adminSubscriptions.users.removeConfirm":
       "Supprimer {name} de cet espace client ?",
+    "adminSubscriptions.users.firstLogin": "Premiere connexion : {date}",
+    "adminSubscriptions.users.lastLogin": "Dernier acces : {date}",
+    "adminSubscriptions.payment.setup": "Mettre en paiement",
+    "adminSubscriptions.payment.creating": "Creation du paiement…",
+    "adminSubscriptions.payment.active": "Paiement Stripe actif",
+    "adminSubscriptions.payment.notSet": "Paiement non configure",
+    "adminSubscriptions.payment.currentPeriodEnd": "Paye jusqu'au {date}",
     "adminSubscriptions.createInvites.title":
       "Utilisateurs a inviter maintenant",
     "adminSubscriptions.createInvites.subtitle":
@@ -1674,6 +1692,8 @@ const CORE_MESSAGES = {
     "adminSubscriptions.activity.connectedUsers":
       "{count} usuarios conectados",
     "adminSubscriptions.activity.activatedAt": "Activado el {date}",
+    "adminSubscriptions.activity.firstAccessAt": "Primer acceso: {date}",
+    "adminSubscriptions.activity.lastAccessAt": "Ultimo acceso: {date}",
     "adminSubscriptions.activity.notConnected":
       "Todavia no hay acceso del cliente",
     "adminSubscriptions.activity.pendingInvites":
@@ -1712,6 +1732,13 @@ const CORE_MESSAGES = {
     "adminSubscriptions.users.roleSaved": "Rol de usuario actualizado.",
     "adminSubscriptions.users.removeConfirm":
       "Eliminar a {name} de este espacio cliente?",
+    "adminSubscriptions.users.firstLogin": "Primera conexion: {date}",
+    "adminSubscriptions.users.lastLogin": "Ultimo acceso: {date}",
+    "adminSubscriptions.payment.setup": "Configurar pago",
+    "adminSubscriptions.payment.creating": "Creando pago…",
+    "adminSubscriptions.payment.active": "Pago Stripe activo",
+    "adminSubscriptions.payment.notSet": "Pago no configurado",
+    "adminSubscriptions.payment.currentPeriodEnd": "Pagado hasta {date}",
     "adminSubscriptions.createInvites.title": "Usuarios a invitar ahora",
     "adminSubscriptions.createInvites.subtitle":
       "Agrega varios usuarios con su rol antes de crear el espacio.",

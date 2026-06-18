@@ -24,7 +24,7 @@ export default function AdminCrmParametersPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [crmMode, setCrmMode] = useState<TenantSettings['crmMode']>('B2B');
-  const [crmDisplayCurrency, setCrmDisplayCurrency] = useState<CrmDisplayCurrency>('USD');
+  const [crmDisplayCurrency, setCrmDisplayCurrency] = useState<CrmDisplayCurrency>('MXN');
   const [crmModeLocked, setCrmModeLocked] = useState(false);
   const [industryId, setIndustryId] = useState('');
   const [industryOther, setIndustryOther] = useState('');
@@ -38,11 +38,11 @@ export default function AdminCrmParametersPage() {
     api<{ settings: TenantSettings }>('/tenant/settings', { method: 'GET' })
       .then((data) => {
         setCrmMode(data.settings?.crmMode === 'B2C' ? 'B2C' : 'B2B');
-        const rawCurrency = String(data.settings?.crmDisplayCurrency || 'USD').toUpperCase();
+        const rawCurrency = String(data.settings?.crmDisplayCurrency || 'MXN').toUpperCase();
         setCrmDisplayCurrency(
           CRM_DISPLAY_CURRENCIES.includes(rawCurrency as CrmDisplayCurrency)
             ? (rawCurrency as CrmDisplayCurrency)
-            : 'USD',
+            : 'MXN',
         );
         setCrmModeLocked(false);
 

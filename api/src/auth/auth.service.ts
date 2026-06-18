@@ -15,14 +15,18 @@ export class AuthService {
       throw new BadRequestException('Email already registered');
     }
 
+    const now = new Date();
     const tenant = await this.prisma.tenant.create({
       data: {
         name: data.tenantName,
+        crmDisplayCurrency: 'MXN',
         users: {
           create: {
             email: data.email,
             name: data.name,
             password: await this.hashPassword(data.password),
+            firstLoginAt: now,
+            lastLoginAt: now,
           },
         },
       },
@@ -45,8 +49,17 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const token = this.signUser(user.id, user.tenantId, user.email);
-    return { token, user: this.exposeUser(user) };
+    const now = new Date();
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        firstLoginAt: user.firstLoginAt || now,
+        lastLoginAt: now,
+      },
+    });
+
+    const token = this.signUser(updated.id, updated.tenantId, updated.email);
+    return { token, user: this.exposeUser(updated) };
   }
 
   private signUser(userId: string, tenantId: string, email: string) {

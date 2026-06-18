@@ -167,6 +167,7 @@ export class BootstrapService {
     });
 
     const hasDefault = pipelines.some((p) => p.isDefault);
+    const shouldSeedInitialPipelines = pipelines.length === 0;
 
     const find = (name: string) => pipelines.find((p) => p.name === name);
 
@@ -181,9 +182,10 @@ export class BootstrapService {
       pipelines.splice(pipelines.indexOf(legacySales), 1, { ...legacySales, name: 'New Sales' });
     }
 
-    // Ensure New Sales pipeline exists (default when nothing else is default).
+    // Seed New Sales only for a new/empty workspace. If the user deletes it later,
+    // bootstrap must respect that deletion.
     let newSales = find('New Sales');
-    if (!newSales) {
+    if (!newSales && shouldSeedInitialPipelines) {
       const created = await this.prisma.pipeline.create({
         data: {
           tenantId,
@@ -217,9 +219,9 @@ export class BootstrapService {
       });
     }
 
-    // Ensure Post Sales pipeline exists.
+    // Seed Post Sales only during the first workspace bootstrap.
     let postSales = find('Post Sales');
-    if (!postSales) {
+    if (!postSales && shouldSeedInitialPipelines) {
       const created = await this.prisma.pipeline.create({
         data: {
           tenantId,
@@ -243,9 +245,9 @@ export class BootstrapService {
       });
     }
 
-    // Ensure B2C pipeline exists (Business-to-Consumer).
+    // Seed B2C only during the first workspace bootstrap.
     let b2c = find('B2C');
-    if (!b2c) {
+    if (!b2c && shouldSeedInitialPipelines) {
       const created = await this.prisma.pipeline.create({
         data: {
           tenantId,
@@ -278,12 +280,15 @@ export class BootstrapService {
       await this.ensureNewSalesExtraStages(tenantId, newSales.id);
     }
 
-    // Safety: ensure at least one default pipeline exists.
+    // Safety: ensure at least one default pipeline exists without recreating
+    // pipelines the user intentionally deleted.
     const desired = crmMode === 'B2C' ? b2c : newSales;
-    if (desired) {
+    if (!hasDefault && desired) {
       await this.prisma.pipeline.updateMany({ where: { tenantId }, data: { isDefault: false } });
       await this.prisma.pipeline.update({ where: { id: desired.id }, data: { isDefault: true } });
-    } else if (newSales) {
+    } else if (!hasDefault && pipelines.length > 0) {
+      await this.prisma.pipeline.update({ where: { id: pipelines[0].id }, data: { isDefault: true } });
+    } else if (!hasDefault && newSales) {
       const defaultCount = await this.prisma.pipeline.count({ where: { tenantId, isDefault: true } });
       if (defaultCount === 0) {
         await this.prisma.pipeline.update({ where: { id: newSales.id }, data: { isDefault: true } });

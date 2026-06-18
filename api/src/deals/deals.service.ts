@@ -269,7 +269,7 @@ export class DealsService {
         data: {
           title: dto.title,
           value: dto.value,
-          currency: (dto.currency ?? 'USD').toUpperCase(),
+          currency: (dto.currency ?? 'MXN').toUpperCase(),
           expectedCloseDate: dto.expectedCloseDate
             ? new Date(dto.expectedCloseDate)
             : undefined,
