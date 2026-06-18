@@ -234,6 +234,14 @@ export default function DashboardPage() {
   }, [api, token, user?.tenantName]);
 
   const primaryPipelineTotals = data?.pipelineTotals ?? [];
+  const weightedPipelineTotal = primaryPipelineTotals.reduce(
+    (sum, pipeline) => sum + pipeline.weightedOpenValueUsd,
+    0,
+  );
+  const strongestPipeline = primaryPipelineTotals.reduce<PipelineTotal | null>((best, pipeline) => {
+    if (!best) return pipeline;
+    return pipeline.weightedOpenValueUsd > best.weightedOpenValueUsd ? pipeline : best;
+  }, null);
 
   const pipelineTotalsHint = data
     ? data.leads.fx?.error
@@ -248,10 +256,11 @@ export default function DashboardPage() {
   return (
     <Guard>
       <AppShell>
-        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.15em] text-slate-400">{t('dashboard.section')}</p>
-            <h1 className="text-3xl font-semibold">{t('nav.dashboard')}</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-200">Overview</p>
+            <h1 className="mt-1 text-3xl font-semibold">{t('nav.dashboard')}</h1>
+            <p className="mt-1 text-sm text-slate-400">Resumen comercial y operativo en tiempo real</p>
           </div>
           <div className="flex gap-3">
             <Link href="/clients" className="btn-secondary">
@@ -271,83 +280,60 @@ export default function DashboardPage() {
         )}
 
         {data && (
-          <div className="grid gap-4 md:grid-cols-6 lg:grid-cols-12">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <MetricCard
               title={t('nav.clients')}
               value={INT.format(data.clients)}
-              hint={t('dashboard.prospectsHint', {
-                prospects: INT.format(data.prospects ?? 0),
-              })}
+              hint={`Prospectos: ${INT.format(data.prospects ?? 0)}`}
               tone="violet"
             />
             <MetricCard
               title={t('dashboard.openTasks')}
               value={INT.format(data.tasks['PENDING'] || 0)}
-              hint={t('dashboard.openTasksHint')}
+              hint="Pendientes en los clientes"
               tone="amber"
             />
             <MetricCard
               title={t('dashboard.openLeads')}
               value={INT.format(data.leads.open ?? 0)}
-              hint={t('dashboard.openLeadsHint')}
+              hint="Deals en curso"
               tone="teal"
             />
             <MetricCard
               title={t('dashboard.totalLeads')}
               value={INT.format(data.leads.total ?? 0)}
-              hint={t('dashboard.totalLeadsHint')}
+              hint="Open + won + lost"
               tone="green"
             />
-            <PipelineTotalsCard
-              title={t('dashboard.openPipelineValue')}
-              totals={primaryPipelineTotals}
-              hint={pipelineTotalsHint}
+            <MetricCard
+              title="Valor total ponderado"
+              value={USD.format(weightedPipelineTotal)}
+              hint={strongestPipeline ? strongestPipeline.name : 'Sin pipeline activo'}
+              tone="violet"
+              bars={primaryPipelineTotals.slice(0, 8).map((pipeline) => pipeline.weightedOpenValueUsd)}
             />
           </div>
         )}
 
         {data && (
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
-            <div className="card p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-400">{t('nav.tasks')}</p>
-                <Link href="/tasks" className="text-xs text-amber-300 underline">
-                  {t('common.manage')}
-                </Link>
-              </div>
-              <div className="mt-4 space-y-2">
-                {Object.entries(data.tasks).map(([status, count]) => (
-                  <div key={status} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2">
-                    <span className="text-sm text-slate-300">{status}</span>
-                    <span className="text-lg font-semibold">{count}</span>
-                  </div>
-                ))}
+          <div className="mt-4 grid gap-4 lg:grid-cols-12">
+            <div className="space-y-4 lg:col-span-9">
+              <PipelineTotalsCard
+                totals={primaryPipelineTotals}
+                total={weightedPipelineTotal}
+                hint={pipelineTotalsHint}
+              />
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <TasksCard tasks={data.tasks} />
+                <InvoicesCard invoices={data.invoices.recent} />
               </div>
             </div>
-            <div className="card p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-slate-400">{t('dashboard.recentInvoices')}</p>
-                <Link href="/admin/ocr-scan" className="text-xs text-amber-300 underline">
-                  {t('common.viewAll')}
-                </Link>
-              </div>
-              <div className="mt-4 space-y-3">
-                {data.invoices.recent.length === 0 && (
-                  <p className="text-slate-400 text-sm">{t('dashboard.noInvoices')}</p>
-                )}
-                {data.invoices.recent.map((inv) => (
-                  <div key={inv.id} className="flex items-center justify-between rounded-lg bg-white/5 px-4 py-3">
-                    <div>
-                      <p className="text-sm font-semibold">{inv.currency} {Number(inv.amount).toFixed(2)}</p>
-                      <p className="text-xs text-slate-400">{new Date(inv.createdAt).toLocaleDateString()}</p>
-                    </div>
-                    <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs text-emerald-200">
-                      {inv.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+
+            <aside className="space-y-4 lg:col-span-3">
+              <IAPulseCard />
+              <ActivityCard />
+            </aside>
           </div>
         )}
       </AppShell>
@@ -359,14 +345,14 @@ function MetricCard({
   title,
   value,
   hint,
-  valueClassName,
   tone = 'violet',
+  bars,
 }: {
   title: string;
   value: string | number;
   hint: string;
-  valueClassName?: string;
   tone?: 'violet' | 'amber' | 'teal' | 'green';
+  bars?: number[];
 }) {
   const toneClass = {
     violet: 'from-violet-400/15 to-violet-500/5 text-violet-100',
@@ -374,44 +360,220 @@ function MetricCard({
     teal: 'from-teal-300/15 to-teal-500/5 text-teal-100',
     green: 'from-emerald-300/15 to-emerald-500/5 text-emerald-100',
   }[tone];
+  const maxBar = Math.max(...(bars ?? [0]), 1);
 
   return (
-    <div className={`card bg-gradient-to-br ${toneClass} p-5 md:col-span-3 lg:col-span-2`}>
-      <p className="text-sm text-slate-400">{title}</p>
-      <p className={valueClassName ?? 'mt-2 text-3xl font-semibold'}>{value}</p>
-      <p className="text-xs text-slate-500">{hint}</p>
+    <div className={`card min-h-[132px] bg-gradient-to-br ${toneClass} p-4`}>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{title}</p>
+      <p className="mt-2 text-2xl font-semibold leading-none">{value}</p>
+      <p className="mt-2 text-xs text-slate-400">{hint}</p>
+      {bars && bars.length > 0 ? (
+        <div className="mt-3 flex h-8 items-end gap-1.5">
+          {bars.map((bar, index) => (
+            <span
+              key={`${bar}-${index}`}
+              className="w-full rounded-t-sm bg-violet-300/70"
+              style={{ height: `${Math.max(10, Math.round((bar / maxBar) * 100))}%`, opacity: bar > 0 ? 1 : 0.25 }}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function PipelineTotalsCard({
-  title,
   totals,
+  total,
   hint,
 }: {
-  title: string;
   totals: PipelineTotal[];
+  total: number;
   hint: string;
 }) {
+  const maxValue = Math.max(...totals.map((pipeline) => pipeline.weightedOpenValueUsd), 1);
+
   return (
-    <div className="card p-5 md:col-span-6 lg:col-span-4">
-      <p className="text-sm text-slate-400">{title}</p>
-      <div className="mt-4 space-y-3">
+    <div className="card p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">CRM</p>
+          <h2 className="mt-1 text-2xl font-semibold">Pipelines ponderados</h2>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-right">
+          <p className="text-xs text-slate-400">Valor total pipeline</p>
+          <p className="text-xl font-semibold">{USD.format(total)}</p>
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-3">
         {totals.length === 0 ? (
-          <p className="text-3xl font-semibold">—</p>
+          <EmptyState
+            title="Sin pipelines ponderados"
+            body="Los valores apareceran aqui cuando haya deals abiertos con probabilidad."
+          />
         ) : (
           totals.map((pipeline) => (
             <div
               key={pipeline.pipelineId}
-              className="flex items-center justify-between gap-3 rounded-lg bg-white/5 px-3 py-3"
+              className={`rounded-lg border px-3 py-3 ${
+                pipeline.weightedOpenValueUsd > 0
+                  ? 'border-violet-300/20 bg-violet-400/[0.08]'
+                  : 'border-white/10 bg-white/[0.035] opacity-75'
+              }`}
             >
-              <p className="text-sm font-semibold text-slate-100">{pipeline.name}</p>
-              <p className="text-lg font-semibold">{USD.format(pipeline.weightedOpenValueUsd)}</p>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-100">{pipeline.name}</p>
+                  <p className="text-xs text-slate-500">
+                    {pipeline.open} {pipeline.open === 1 ? 'deal abierto' : 'deals abiertos'}
+                  </p>
+                </div>
+                <p className="text-lg font-semibold">{USD.format(pipeline.weightedOpenValueUsd)}</p>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.07]">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-violet-400 via-amber-300 to-emerald-300"
+                  style={{
+                    width:
+                      pipeline.weightedOpenValueUsd > 0
+                        ? `${Math.max(4, Math.round((pipeline.weightedOpenValueUsd / maxValue) * 100))}%`
+                        : '2%',
+                    opacity: pipeline.weightedOpenValueUsd > 0 ? 1 : 0.25,
+                  }}
+                />
+              </div>
             </div>
           ))
         )}
       </div>
       <p className="mt-3 text-xs text-slate-500">{hint}</p>
+    </div>
+  );
+}
+
+function TasksCard({ tasks }: { tasks: Record<string, number> }) {
+  const entries = Object.entries(tasks);
+  const pending = tasks['PENDING'] || 0;
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Operaciones</p>
+          <h2 className="mt-1 text-lg font-semibold">Tareas</h2>
+        </div>
+        <Link href="/tasks" className="text-xs font-semibold text-amber-300 hover:text-amber-200">
+          Gestionar
+        </Link>
+      </div>
+      <div className="mt-4 rounded-lg border border-amber-300/15 bg-amber-300/[0.08] p-4">
+        <p className="text-3xl font-semibold text-amber-100">{INT.format(pending)}</p>
+        <p className="mt-1 text-xs text-slate-400">Tareas pending</p>
+      </div>
+      <div className="mt-3 space-y-2">
+        {entries.length === 0 ? (
+          <EmptyState title="Sin tareas activas" body="Las tareas pendientes apareceran aqui." />
+        ) : (
+          entries.map(([status, count]) => (
+            <div key={status} className="flex items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
+              <span className="text-sm text-slate-300">{status}</span>
+              <span className="text-sm font-semibold">{INT.format(count)}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InvoicesCard({ invoices }: { invoices: InvoiceSummary[] }) {
+  return (
+    <div className="card p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Finanzas</p>
+          <h2 className="mt-1 text-lg font-semibold">Facturas recientes</h2>
+        </div>
+        <Link href="/admin/ocr-scan" className="text-xs font-semibold text-amber-300 hover:text-amber-200">
+          Ver todo
+        </Link>
+      </div>
+      <div className="mt-4 space-y-3">
+        {invoices.length === 0 ? (
+          <EmptyState
+            title="No hay facturas recientes"
+            body="Las facturas apareceran aqui cuando se generen."
+          />
+        ) : (
+          invoices.map((inv) => (
+            <div key={inv.id} className="flex items-center justify-between rounded-lg bg-white/[0.04] px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold">
+                  {inv.currency} {Number(inv.amount).toFixed(2)}
+                </p>
+                <p className="text-xs text-slate-400">{new Date(inv.createdAt).toLocaleDateString()}</p>
+              </div>
+              <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs text-emerald-200">
+                {inv.status}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function IAPulseCard() {
+  const capabilities = ['Seguimientos inteligentes', 'Prioridad de leads', 'Riesgo de oportunidad perdida'];
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">O7 IA Pulse</h2>
+        <span className="rounded-full bg-violet-400/15 px-2 py-1 text-[11px] font-semibold text-violet-100">
+          Olivia
+        </span>
+      </div>
+      <EmptyState
+        className="mt-4"
+        title="Sin recomendaciones activas por ahora."
+        body="Cuando haya suficiente actividad comercial, Olivia podra sugerir seguimientos, prioridades y proximos pasos."
+      />
+      <div className="mt-4 space-y-2">
+        {capabilities.map((item) => (
+          <div key={item} className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2">
+            <span className="h-2 w-2 rounded-full bg-violet-300" />
+            <span className="text-sm text-slate-200">{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ActivityCard() {
+  return (
+    <div className="card p-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Actividad reciente</h2>
+        <span className="text-xs text-slate-500">Live</span>
+      </div>
+      <EmptyState
+        className="mt-4"
+        title="Sin actividad reciente."
+        body="Las acciones de clientes, tareas y deals apareceran aqui."
+      />
+    </div>
+  );
+}
+
+function EmptyState({ title, body, className = '' }: { title: string; body: string; className?: string }) {
+  return (
+    <div className={`rounded-lg border border-dashed border-white/[0.12] bg-white/[0.025] p-4 ${className}`}>
+      <p className="text-sm font-semibold text-slate-200">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{body}</p>
     </div>
   );
 }
