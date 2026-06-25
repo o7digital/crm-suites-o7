@@ -327,16 +327,16 @@ export default function DashboardPage() {
       <AppShell>
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-200">Overview</p>
-            <h1 className="mt-1 text-3xl font-semibold">{t('nav.dashboard')}</h1>
-            <p className="mt-1 text-sm text-slate-400">Resumen comercial y operativo en tiempo real</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-rose-200">Vue client 360°</p>
+            <h1 className="mt-1 text-3xl font-semibold">Bonjour, voici votre activité B2C</h1>
+            <p className="mt-1 text-sm text-slate-400">Clients, commandes et fidélisation en temps réel</p>
           </div>
           <div className="flex gap-3">
             <Link href="/clients" className="btn-secondary">
-              {t('dashboard.newClient')}
+              Voir les clients
             </Link>
-            <Link href="/admin/ocr-scan" className="btn-primary">
-              {t('dashboard.uploadInvoice')}
+            <Link href="/clients" className="btn-primary">
+              + Nouveau client
             </Link>
           </div>
         </div>
@@ -351,40 +351,40 @@ export default function DashboardPage() {
         {data && (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <MetricCard
-              title="Leads abiertos"
-              value={INT.format(data.leads.open ?? data.dealStatusStats.open.count)}
-              hint={`Total leads: ${INT.format(data.leads.total ?? 0)}`}
-              tone="violet"
-            />
-            <MetricCard
-              title="En negociacion"
-              value={INT.format(data.dealStatusStats.open.count)}
-              hint={`Valor: ${USD.format(data.dealStatusStats.open.valueUsd)}`}
-              tone="teal"
-            />
-            <MetricCard
-              title="Ganados"
-              value={INT.format(data.dealStatusStats.won.count)}
-              hint={`Total valor: ${USD.format(data.dealStatusStats.won.valueUsd)}`}
-              tone="green"
-            />
-            <MetricCard
-              title="Perdidos"
-              value={INT.format(data.dealStatusStats.lost.count)}
-              hint={`Total valor: ${USD.format(data.dealStatusStats.lost.valueUsd)}`}
+              title="Clients actifs"
+              value={INT.format(data.clients ?? 0)}
+              hint={`${INT.format(data.prospects ?? 0)} prospects à convertir`}
               tone="rose"
             />
             <MetricCard
-              title="Conversion general"
+              title="Paniers en cours"
+              value={INT.format(data.dealStatusStats.open.count)}
+              hint={`Potentiel : ${USD.format(data.dealStatusStats.open.valueUsd)}`}
+              tone="teal"
+            />
+            <MetricCard
+              title="Commandes"
+              value={INT.format(data.dealStatusStats.won.count)}
+              hint={`Revenu : ${USD.format(data.dealStatusStats.won.valueUsd)}`}
+              tone="green"
+            />
+            <MetricCard
+              title="Paniers abandonnés"
+              value={INT.format(data.dealStatusStats.lost.count)}
+              hint={`À relancer : ${USD.format(data.dealStatusStats.lost.valueUsd)}`}
+              tone="rose"
+            />
+            <MetricCard
+              title="Taux de conversion"
               value={`${conversionRate}%`}
-              hint={`${INT.format(data.dealStatusStats.won.count)} won / ${INT.format(closedDealsCount)} cerrados`}
+              hint={`${INT.format(data.dealStatusStats.won.count)} achats sur ${INT.format(closedDealsCount)} parcours`}
               tone="violet"
             />
             <MetricCard
-              title="Valor total ponderado"
+              title="Valeur potentielle"
               value={USD.format(weightedPipelineTotal)}
-              hint={strongestPipeline ? strongestPipeline.name : 'Sin pipeline activo'}
-              tone="violet"
+              hint={strongestPipeline ? `Meilleur segment : ${strongestPipeline.name}` : 'Aucun parcours actif'}
+              tone="amber"
               bars={activePipelineTotals.slice(0, 8).map((pipeline) => pipeline.weightedOpenValueUsd)}
             />
           </div>
@@ -476,11 +476,12 @@ function PipelineTotalsCard({
     <div className="card p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">CRM</p>
-          <h2 className="mt-1 text-2xl font-semibold">Pipelines ponderados</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-200">Parcours client</p>
+          <h2 className="mt-1 text-2xl font-semibold">Segments d’achat actifs</h2>
+          <p className="mt-1 text-sm text-slate-400">Suivez la valeur et le volume de chaque parcours B2C.</p>
         </div>
         <div className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-right">
-          <p className="text-xs text-slate-400">Valor total pipeline</p>
+          <p className="text-xs text-slate-400">Valeur potentielle totale</p>
           <p className="text-xl font-semibold">{USD.format(total)}</p>
         </div>
       </div>
@@ -488,8 +489,8 @@ function PipelineTotalsCard({
       <div className="mt-5 space-y-3">
         {totals.length === 0 ? (
           <EmptyState
-            title="Sin pipelines activos"
-            body="Los pipelines sin valor o sin deals abiertos no se muestran en el resumen principal."
+            title="Aucun parcours actif"
+            body="Les segments sans panier ou commande en cours ne sont pas affichés."
           />
         ) : (
           totals.map((pipeline) => (
@@ -505,7 +506,7 @@ function PipelineTotalsCard({
                 <div>
                   <p className="text-sm font-semibold text-slate-100">{pipeline.name}</p>
                   <p className="text-xs text-slate-500">
-                    {pipeline.open} {pipeline.open === 1 ? 'deal abierto' : 'deals abiertos'}
+                    {pipeline.open} {pipeline.open === 1 ? 'client actif' : 'clients actifs'}
                   </p>
                 </div>
                 <p className="text-lg font-semibold">{USD.format(pipeline.weightedOpenValueUsd)}</p>
@@ -528,7 +529,7 @@ function PipelineTotalsCard({
       </div>
       <div className="mt-3 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
         <p>{hint}</p>
-        {hiddenCount > 0 ? <p>{hiddenCount} pipelines sin valor ocultos</p> : null}
+        {hiddenCount > 0 ? <p>{hiddenCount} segments inactifs masqués</p> : null}
       </div>
     </div>
   );
@@ -542,20 +543,20 @@ function TasksCard({ tasks }: { tasks: Record<string, number> }) {
     <div className="card p-5">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Operaciones</p>
-          <h2 className="mt-1 text-lg font-semibold">Tareas</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Relation client</p>
+          <h2 className="mt-1 text-lg font-semibold">Actions à traiter</h2>
         </div>
         <Link href="/tasks" className="text-xs font-semibold text-amber-300 hover:text-amber-200">
-          Gestionar
+          Gérer
         </Link>
       </div>
       <div className="mt-4 rounded-lg border border-amber-300/15 bg-amber-300/[0.08] p-4">
         <p className="text-3xl font-semibold text-amber-100">{INT.format(pending)}</p>
-        <p className="mt-1 text-xs text-slate-400">Tareas pending</p>
+        <p className="mt-1 text-xs text-slate-400">actions en attente</p>
       </div>
       <div className="mt-3 space-y-2">
         {entries.length === 0 ? (
-          <EmptyState title="Sin tareas activas" body="Las tareas pendientes apareceran aqui." />
+          <EmptyState title="Aucune action urgente" body="Les relances et demandes clients apparaîtront ici." />
         ) : (
           entries.map(([status, count]) => (
             <div key={status} className="flex items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
@@ -574,18 +575,18 @@ function InvoicesCard({ invoices }: { invoices: InvoiceSummary[] }) {
     <div className="card p-5">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Finanzas</p>
-          <h2 className="mt-1 text-lg font-semibold">Facturas recientes</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Achats</p>
+          <h2 className="mt-1 text-lg font-semibold">Dernières transactions</h2>
         </div>
         <Link href="/admin/ocr-scan" className="text-xs font-semibold text-amber-300 hover:text-amber-200">
-          Ver todo
+          Tout voir
         </Link>
       </div>
       <div className="mt-4 space-y-3">
         {invoices.length === 0 ? (
           <EmptyState
-            title="No hay facturas recientes"
-            body="Las facturas apareceran aqui cuando se generen."
+            title="Aucune transaction récente"
+            body="Les derniers achats de vos clients apparaîtront ici."
           />
         ) : (
           invoices.map((inv) => (
@@ -608,7 +609,7 @@ function InvoicesCard({ invoices }: { invoices: InvoiceSummary[] }) {
 }
 
 function IAPulseCard() {
-  const capabilities = ['Seguimientos inteligentes', 'Prioridad de leads', 'Riesgo de oportunidad perdida'];
+  const capabilities = ['Relances personnalisées', 'Clients à fort potentiel', 'Risque de désengagement'];
 
   return (
     <div className="card p-5">
@@ -620,8 +621,8 @@ function IAPulseCard() {
       </div>
       <EmptyState
         className="mt-4"
-        title="Sin recomendaciones activas por ahora."
-        body="Cuando haya suficiente actividad comercial, Olivia podra sugerir seguimientos, prioridades y proximos pasos."
+        title="Aucune recommandation active."
+        body="Olivia analysera les achats et interactions pour proposer la prochaine meilleure action."
       />
       <div className="mt-4 space-y-2">
         {capabilities.map((item) => (
@@ -639,13 +640,13 @@ function ActivityCard() {
   return (
     <div className="card p-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Actividad reciente</h2>
-        <span className="text-xs text-slate-500">Live</span>
+        <h2 className="text-lg font-semibold">Activité client</h2>
+        <span className="text-xs text-slate-500">Temps réel</span>
       </div>
       <EmptyState
         className="mt-4"
-        title="Sin actividad reciente."
-        body="Las acciones de clientes, tareas y deals apareceran aqui."
+        title="Aucune activité récente"
+        body="Les achats, messages et changements de profil apparaîtront ici."
       />
     </div>
   );

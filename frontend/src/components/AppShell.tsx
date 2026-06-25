@@ -8,16 +8,16 @@ import { useI18n } from '../contexts/I18nContext';
 import { useBranding } from '../contexts/BrandingContext';
 
 const nav = [
-  { href: '/', labelKey: 'nav.dashboard' },
-  { href: '/clients', labelKey: 'nav.clients' },
-  { href: '/tasks', labelKey: 'nav.tasks' },
-  { href: '/crm', labelKey: 'nav.crm' },
-  { href: '/post-sales', labelKey: 'nav.postSales' },
-  { href: '/orders', labelKey: 'nav.orders' },
-  { href: '/ia-pulse', labelKey: 'nav.iaPulse' },
-  { href: '/forecast', labelKey: 'nav.forecast' },
-  { href: '/export', labelKey: 'nav.export' },
-  { href: '/admin', labelKey: 'nav.admin' },
+  { href: '/', labelKey: 'nav.dashboard', b2cLabel: 'Accueil' },
+  { href: '/clients', labelKey: 'nav.clients', b2cLabel: 'Clients' },
+  { href: '/crm', labelKey: 'nav.crm', b2cLabel: 'Parcours' },
+  { href: '/orders', labelKey: 'nav.orders', b2cLabel: 'Commandes' },
+  { href: '/post-sales', labelKey: 'nav.postSales', b2cLabel: 'Service client' },
+  { href: '/tasks', labelKey: 'nav.tasks', b2cLabel: 'Tâches' },
+  { href: '/ia-pulse', labelKey: 'nav.iaPulse', b2cLabel: 'IA Pulse' },
+  { href: '/forecast', labelKey: 'nav.forecast', b2cLabel: 'Segments' },
+  { href: '/export', labelKey: 'nav.export', b2cLabel: 'Rapports' },
+  { href: '/admin', labelKey: 'nav.admin', b2cLabel: 'Réglages' },
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -142,8 +142,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             )}
             <div>
-              <p className="text-lg font-semibold">{user?.tenantName || 'o7 PulseCRM'}</p>
-              <p className="text-xs text-slate-400">{t('app.tagline')}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-lg font-semibold">{user?.tenantName || 'o7 PulseCRM'}</p>
+                <span className="rounded-full border border-rose-300/20 bg-rose-300/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-rose-200">
+                  B2C
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">Relation client & fidélisation</p>
             </div>
           </div>
           <nav className="hidden items-center gap-3 text-sm font-medium text-slate-200 md:flex">
@@ -155,7 +160,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   href={item.href}
                   className={`nav-link ${active ? 'nav-link-active' : 'text-slate-300 hover:bg-white/5'}`}
                 >
-                  {t(item.labelKey)}
+                  {item.b2cLabel}
                 </Link>
               );
             })}
@@ -246,7 +251,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   href={item.href}
                   className={`nav-link ${active ? 'nav-link-active' : 'text-slate-300 hover:bg-white/5'}`}
                 >
-                  {t(item.labelKey)}
+                  {item.b2cLabel}
                 </Link>
               );
             })}
