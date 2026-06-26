@@ -3,15 +3,22 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 type PublicLeadPayload = {
+  tenantId?: string;
+  tenantName?: string;
   firstName?: string;
   lastName?: string;
   email?: string;
   phone?: string;
+  industry?: string;
   message?: string;
   source?: string;
   language?: string;
   siteCode?: string;
   pipelineId?: string;
+  packageTitle?: string;
+  packagePrice?: number | string;
+  packageTotal?: number | string;
+  currency?: string;
 };
 
 @Injectable()
@@ -19,14 +26,28 @@ export class PublicLeadsService {
   constructor(private prisma: PrismaService) {}
 
   async createO7Lead(payload: PublicLeadPayload) {
-    const ownerEmail = 'olivier.steineur@gmail.com';
-    const owner = await this.prisma.user.findUnique({
-      where: { email: ownerEmail },
-      select: { id: true, tenantId: true },
-    });
+    const requestedTenantId = this.clean(payload.tenantId);
+    const owner = requestedTenantId
+      ? await this.prisma.user.findFirst({
+          where: {
+            tenantId: requestedTenantId,
+            role: { in: ['OWNER', 'ADMIN'] },
+          },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, tenantId: true },
+        }) ||
+        (await this.prisma.user.findFirst({
+          where: { tenantId: requestedTenantId },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, tenantId: true },
+        }))
+      : await this.prisma.user.findUnique({
+          where: { email: 'olivier.steineur@gmail.com' },
+          select: { id: true, tenantId: true },
+        });
 
     if (!owner) {
-      throw new NotFoundException('O7 CRM owner not found');
+      throw new NotFoundException('CRM owner not found');
     }
 
     const firstName = this.clean(payload.firstName);
@@ -37,11 +58,23 @@ export class PublicLeadsService {
     const siteCode = this.clean(payload.siteCode) || 'o7digital';
     const language = this.clean(payload.language) || 'fr';
     const message = this.clean(payload.message);
+    const industry = this.clean(payload.industry);
+    const tenantName = this.clean(payload.tenantName);
+    const packageTitle = this.clean(payload.packageTitle);
+    const packagePrice = this.clean(payload.packagePrice);
+    const packageTotal = this.clean(payload.packageTotal);
+    const currency = this.clean(payload.currency) || 'MXN';
+    const dealValue = this.toDecimal(packageTotal || packagePrice);
 
     const notes = [
       `Source: ${source}`,
       `Site code: ${siteCode}`,
       `Langue: ${language}`,
+      tenantName ? `Tenant: ${tenantName}` : null,
+      industry ? `Industrie: ${industry}` : null,
+      packageTitle ? `Forfait: ${packageTitle}` : null,
+      packagePrice ? `Prix affiché: ${packagePrice} ${currency}` : null,
+      packageTotal ? `Total estimé: ${packageTotal} ${currency}` : null,
       message ? `Message:\n${message}` : null,
     ]
       .filter(Boolean)
@@ -65,6 +98,7 @@ export class PublicLeadsService {
               firstName,
               name: lastName,
               phone,
+              companySector: industry,
               notes,
               clientStatus: 'PROSPECT',
               ownerUserId: owner.id,
@@ -76,6 +110,7 @@ export class PublicLeadsService {
               name: lastName,
               email,
               phone,
+              companySector: industry,
               notes,
               clientStatus: 'PROSPECT',
               ownerUserId: owner.id,
@@ -111,9 +146,14 @@ export class PublicLeadsService {
         pipeline && stage
           ? await tx.deal.create({
               data: {
-                title: `Lead chat O7 - ${[firstName, lastName].filter(Boolean).join(' ')}`,
-                value: new Prisma.Decimal(0),
-                currency: 'EUR',
+                title: [
+                  packageTitle ? `Cotización ${packageTitle}` : 'Lead web',
+                  [firstName, lastName].filter(Boolean).join(' '),
+                ]
+                  .filter(Boolean)
+                  .join(' - '),
+                value: dealValue,
+                currency,
                 tenantId: owner.tenantId,
                 pipelineId: pipeline.id,
                 stageId: stage.id,
@@ -128,6 +168,14 @@ export class PublicLeadsService {
   }
 
   private clean(value: unknown) {
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+
+  private toDecimal(value: string | undefined) {
+    if (!value) return new Prisma.Decimal(0);
+    const normalized = value.replace(/[^\d.]/g, '');
+    const parsed = Number(normalized);
+    return new Prisma.Decimal(Number.isFinite(parsed) ? parsed : 0);
   }
 }
