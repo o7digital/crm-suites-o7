@@ -19,6 +19,10 @@ type SubscriptionItem = {
   contactEmail?: string | null;
   plan?: string | null;
   seats?: number | null;
+  conciergeEnabled?: boolean;
+  conciergeClientCode?: string | null;
+  conciergeSiteUrl?: string | null;
+  conciergeInboxUrl?: string | null;
   trialEndsAt?: string | null;
   stripeSubscriptionId?: string | null;
   billingEmail?: string | null;
@@ -231,6 +235,12 @@ export default function AdminSubscriptionsPage() {
   const [industryOther, setIndustryOther] = useState('');
   const [plan, setPlan] = useState<SubscriptionPlan>('TRIAL');
   const [seats, setSeats] = useState(DEFAULT_SEATS_BY_PLAN.TRIAL);
+  const [conciergeEnabled, setConciergeEnabled] = useState(false);
+  const [conciergeClientCode, setConciergeClientCode] = useState('');
+  const [conciergeSiteUrl, setConciergeSiteUrl] = useState('');
+  const [conciergeInboxUrl, setConciergeInboxUrl] = useState(
+    process.env.NEXT_PUBLIC_CONCIERGE_INBOX_URL || '',
+  );
   const [createInviteRows, setCreateInviteRows] = useState<CreateInviteRow[]>(() => [createInviteRow('ADMIN')]);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -623,6 +633,10 @@ export default function AdminSubscriptionsPage() {
           industry: industryValue,
           plan,
           seats,
+          conciergeEnabled,
+          conciergeClientCode: conciergeClientCode.trim() || undefined,
+          conciergeSiteUrl: conciergeSiteUrl.trim() || undefined,
+          conciergeInboxUrl: conciergeInboxUrl.trim() || undefined,
         }),
       });
 
@@ -687,6 +701,10 @@ export default function AdminSubscriptionsPage() {
       setCrmModeLocked(false);
       setPlan('TRIAL');
       setSeats(DEFAULT_SEATS_BY_PLAN.TRIAL);
+      setConciergeEnabled(false);
+      setConciergeClientCode('');
+      setConciergeSiteUrl('');
+      setConciergeInboxUrl(process.env.NEXT_PUBLIC_CONCIERGE_INBOX_URL || '');
       setCreateInviteRows([createInviteRow('ADMIN')]);
 
       if (inviteSuccessCount === 0) {
@@ -729,6 +747,10 @@ export default function AdminSubscriptionsPage() {
     industryOther,
     language,
     crmMode,
+    conciergeClientCode,
+    conciergeEnabled,
+    conciergeInboxUrl,
+    conciergeSiteUrl,
     plan,
     seats,
     t,
@@ -1136,6 +1158,62 @@ export default function AdminSubscriptionsPage() {
               </div>
             </div>
 
+            <div className={`rounded-xl p-4 ring-1 ${conciergeEnabled ? 'bg-cyan-500/10 ring-cyan-300/30' : 'bg-white/5 ring-white/10'}`}>
+              <label className="flex cursor-pointer items-start justify-between gap-4">
+                <span>
+                  <span className="block text-sm font-semibold text-slate-100">Module IA Concierge</span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-400">
+                    Active le widget, l’Inbox dédiée et le suivi des conversations pour ce client.
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={conciergeEnabled}
+                  onChange={(event) => setConciergeEnabled(event.target.checked)}
+                  className="mt-1 h-5 w-5 accent-cyan-400"
+                />
+              </label>
+              {conciergeEnabled ? (
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <div>
+                    <label className="text-xs text-slate-300">Site du client</label>
+                    <input
+                      type="url"
+                      value={conciergeSiteUrl}
+                      onChange={(event) => setConciergeSiteUrl(event.target.value)}
+                      placeholder="https://hotel.example"
+                      className="mt-1 w-full rounded-lg bg-black/20 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-300">Client code</label>
+                    <input
+                      value={conciergeClientCode}
+                      onChange={(event) =>
+                        setConciergeClientCode(
+                          event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''),
+                        )
+                      }
+                      placeholder="Généré automatiquement"
+                      className="mt-1 w-full rounded-lg bg-black/20 px-3 py-2 font-mono text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-300">URL de l’Inbox</label>
+                    <input
+                      type="url"
+                      value={conciergeInboxUrl}
+                      onChange={(event) => setConciergeInboxUrl(event.target.value)}
+                      placeholder="https://inbox.o7digital.com/inbox"
+                      className="mt-1 w-full rounded-lg bg-black/20 px-3 py-2 text-sm outline-none ring-1 ring-white/10 focus:ring-2 focus:ring-cyan-400"
+                      required
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             <div className="grid gap-3 lg:grid-cols-[1.2fr_180px_220px_1fr_auto] lg:items-end">
               <div>
                 <label className="text-sm text-slate-300">{t('adminSubscriptions.plan')}</label>
@@ -1290,6 +1368,16 @@ export default function AdminSubscriptionsPage() {
                             {sub.contactEmail ? ` · ${sub.contactEmail}` : ''}
                           </p>
                         ) : null}
+                        {sub.conciergeEnabled ? (
+                          <div className="mt-2">
+                            <span className="inline-flex rounded-full bg-cyan-500/15 px-2 py-1 text-xs font-semibold text-cyan-100 ring-1 ring-cyan-300/30">
+                              IA Concierge · {sub.conciergeClientCode || 'configuré'}
+                            </span>
+                            {sub.conciergeSiteUrl ? (
+                              <p className="mt-1 max-w-xs truncate text-xs text-slate-400">{sub.conciergeSiteUrl}</p>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="py-3 text-slate-300">
                         <span
@@ -1384,6 +1472,16 @@ export default function AdminSubscriptionsPage() {
                       </td>
                       <td className="py-3">
                         <div className="flex flex-wrap gap-2">
+                          {sub.conciergeEnabled && sub.conciergeInboxUrl ? (
+                            <a
+                              href={`${sub.conciergeInboxUrl}${sub.conciergeInboxUrl.includes('?') ? '&' : '?'}client=${encodeURIComponent(sub.conciergeClientCode || sub.customerTenantId)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded-lg bg-cyan-500/20 px-3 py-2 text-xs font-semibold text-cyan-100 ring-1 ring-cyan-300/40 hover:bg-cyan-500/30"
+                            >
+                              Ouvrir l’Inbox IA
+                            </a>
+                          ) : null}
                           <button
                             type="button"
                             className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10 disabled:opacity-50"

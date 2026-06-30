@@ -608,6 +608,10 @@ export class AdminService {
           contactEmail: true,
           plan: true,
           seats: true,
+          conciergeEnabled: true,
+          conciergeClientCode: true,
+          conciergeSiteUrl: true,
+          conciergeInboxUrl: true,
           trialEndsAt: true,
           trialAlertSentAt: true,
           stripeSubscriptionId: true,
@@ -841,6 +845,14 @@ export class AdminService {
         };
 
         const seats = deriveSeats();
+        const requestedClientCode = normalize(dto.conciergeClientCode);
+        const generatedClientCode = `${trimmed
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 48) || 'client'}-${customerTenantId.slice(0, 8)}`;
         const trialEndsAt =
           plan === 'TRIAL'
             ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
@@ -874,6 +886,13 @@ export class AdminService {
             contactEmail: normalize(dto.contactEmail),
             plan,
             seats,
+            conciergeEnabled: dto.conciergeEnabled === true,
+            conciergeClientCode:
+              dto.conciergeEnabled === true
+                ? requestedClientCode || generatedClientCode
+                : null,
+            conciergeSiteUrl: normalize(dto.conciergeSiteUrl),
+            conciergeInboxUrl: normalize(dto.conciergeInboxUrl),
             trialEndsAt,
           },
           select: {
@@ -887,6 +906,10 @@ export class AdminService {
             contactEmail: true,
             plan: true,
             seats: true,
+            conciergeEnabled: true,
+            conciergeClientCode: true,
+            conciergeSiteUrl: true,
+            conciergeInboxUrl: true,
             trialEndsAt: true,
             trialAlertSentAt: true,
             stripeSubscriptionId: true,
@@ -925,6 +948,10 @@ export class AdminService {
       dto.contactEmail !== undefined ||
       dto.plan !== undefined ||
       dto.seats !== undefined ||
+      dto.conciergeEnabled !== undefined ||
+      dto.conciergeClientCode !== undefined ||
+      dto.conciergeSiteUrl !== undefined ||
+      dto.conciergeInboxUrl !== undefined ||
       dto.trialEndsAt !== undefined;
     if (!hasChanges) throw new BadRequestException('No fields provided');
 
@@ -1005,6 +1032,10 @@ export class AdminService {
               typeof dto.seats === 'number'
                 ? Math.min(30, Math.max(1, dto.seats))
                 : undefined,
+            conciergeEnabled: dto.conciergeEnabled,
+            conciergeClientCode: normalize(dto.conciergeClientCode),
+            conciergeSiteUrl: normalize(dto.conciergeSiteUrl),
+            conciergeInboxUrl: normalize(dto.conciergeInboxUrl),
             trialEndsAt,
             trialAlertSentAt: trialEndsAt !== undefined ? null : undefined,
           },
@@ -1019,6 +1050,10 @@ export class AdminService {
             contactEmail: true,
             plan: true,
             seats: true,
+            conciergeEnabled: true,
+            conciergeClientCode: true,
+            conciergeSiteUrl: true,
+            conciergeInboxUrl: true,
             trialEndsAt: true,
             trialAlertSentAt: true,
             stripeSubscriptionId: true,
@@ -1070,6 +1105,10 @@ export class AdminService {
             contactEmail: true,
             plan: true,
             seats: true,
+            conciergeEnabled: true,
+            conciergeClientCode: true,
+            conciergeSiteUrl: true,
+            conciergeInboxUrl: true,
             trialEndsAt: true,
             trialAlertSentAt: true,
             stripeSubscriptionId: true,
@@ -1121,6 +1160,10 @@ export class AdminService {
           contactEmail: true,
           plan: true,
           seats: true,
+          conciergeEnabled: true,
+          conciergeClientCode: true,
+          conciergeSiteUrl: true,
+          conciergeInboxUrl: true,
           trialEndsAt: true,
           trialAlertSentAt: true,
           stripeSubscriptionId: true,

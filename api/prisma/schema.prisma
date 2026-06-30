@@ -65,16 +65,16 @@ enum InviteStatus {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  name      String
-  role      UserRole @default(MEMBER)
-  tenantId  String
+  id           String    @id @default(uuid())
+  email        String    @unique
+  password     String
+  name         String
+  role         UserRole  @default(MEMBER)
+  tenantId     String
   firstLoginAt DateTime?
   lastLoginAt  DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   tenant                   Tenant                    @relation(fields: [tenantId], references: [id])
   deals                    Deal[]                    @relation("DealOwner")
@@ -106,28 +106,32 @@ model LegalAcceptance {
 }
 
 model Subscription {
-  id               String             @id @default(uuid())
-  tenantId         String
-  customerTenantId String             @unique
-  customerName     String
-  customerCountry  String?
-  customerAddress  String?
-  contactFirstName String?
-  contactLastName  String?
-  contactEmail     String?
-  plan             String             @default("TRIAL")
-  seats            Int                @default(1)
-  trialEndsAt      DateTime?
-  trialAlertSentAt DateTime?
-  stripeCustomerId String?
-  stripeSubscriptionId String?        @unique
-  stripePriceId    String?
-  billingEmail     String?
-  currentPeriodEnd DateTime?
-  cancelAtPeriodEnd Boolean           @default(false)
-  status           SubscriptionStatus @default(ACTIVE)
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  id                   String             @id @default(uuid())
+  tenantId             String
+  customerTenantId     String             @unique
+  customerName         String
+  customerCountry      String?
+  customerAddress      String?
+  contactFirstName     String?
+  contactLastName      String?
+  contactEmail         String?
+  plan                 String             @default("TRIAL")
+  seats                Int                @default(1)
+  conciergeEnabled     Boolean            @default(false)
+  conciergeClientCode  String?            @unique
+  conciergeSiteUrl     String?
+  conciergeInboxUrl    String?
+  trialEndsAt          DateTime?
+  trialAlertSentAt     DateTime?
+  stripeCustomerId     String?
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+  billingEmail         String?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  status               SubscriptionStatus @default(ACTIVE)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -174,13 +178,13 @@ model Client {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  tenant        Tenant               @relation(fields: [tenantId], references: [id])
-  owner         User?                @relation("ClientOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  tasks         Task[]
-  invoices      Invoice[]
-  deals         Deal[]
+  tenant         Tenant               @relation(fields: [tenantId], references: [id])
+  owner          User?                @relation("ClientOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  tasks          Task[]
+  invoices       Invoice[]
+  deals          Deal[]
   postSalesCases PostSalesCase[]
-  collaborators ClientCollaborator[]
+  collaborators  ClientCollaborator[]
 
   @@index([ownerUserId])
 }
@@ -207,18 +211,18 @@ model ClientCollaborator {
 }
 
 model Task {
-  id             String     @id @default(uuid())
-  title          String
-  status         TaskStatus @default(PENDING)
-  dueDate        DateTime?
-  timeSpentHours Decimal?   @db.Decimal(8, 2)
-  amount         Decimal?   @db.Decimal(12, 2)
-  currency       String     @default("USD")
-  tenantId       String
-  clientId       String
+  id              String     @id @default(uuid())
+  title           String
+  status          TaskStatus @default(PENDING)
+  dueDate         DateTime?
+  timeSpentHours  Decimal?   @db.Decimal(8, 2)
+  amount          Decimal?   @db.Decimal(12, 2)
+  currency        String     @default("USD")
+  tenantId        String
+  clientId        String
   postSalesCaseId String?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   client        Client         @relation(fields: [clientId], references: [id])
@@ -309,13 +313,13 @@ model Deal {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  tenant   Tenant             @relation(fields: [tenantId], references: [id])
-  client   Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  owner    User?              @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  pipeline Pipeline           @relation(fields: [pipelineId], references: [id])
-  stage    Stage              @relation(fields: [stageId], references: [id])
-  history  DealStageHistory[]
-  items    DealItem[]
+  tenant        Tenant             @relation(fields: [tenantId], references: [id])
+  client        Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  owner         User?              @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  pipeline      Pipeline           @relation(fields: [pipelineId], references: [id])
+  stage         Stage              @relation(fields: [stageId], references: [id])
+  history       DealStageHistory[]
+  items         DealItem[]
   postSalesCase PostSalesCase?
 
   @@index([ownerId])
@@ -334,11 +338,11 @@ model PostSalesCase {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   client Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  deal Deal? @relation(fields: [dealId], references: [id], onDelete: SetNull)
-  owner User? @relation("PostSalesCaseOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  tasks Task[]
+  deal   Deal?   @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  owner  User?   @relation("PostSalesCaseOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  tasks  Task[]
 
   @@index([tenantId])
   @@index([tenantId, status])

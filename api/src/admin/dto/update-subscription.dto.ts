@@ -1,4 +1,4 @@
-import { IsEmail, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsEmail, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { IsIn } from 'class-validator';
 
 export class UpdateSubscriptionDto {
@@ -47,4 +47,23 @@ export class UpdateSubscriptionDto {
   @IsString()
   @MaxLength(24)
   trialEndsAt?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  conciergeEnabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  conciergeClientCode?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  conciergeSiteUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  conciergeInboxUrl?: string | null;
 }

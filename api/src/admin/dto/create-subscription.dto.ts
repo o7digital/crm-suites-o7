@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class CreateSubscriptionDto {
   @IsString()
@@ -52,4 +52,23 @@ export class CreateSubscriptionDto {
   @IsString()
   @MaxLength(120)
   industry?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  conciergeEnabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  conciergeClientCode?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  conciergeSiteUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  conciergeInboxUrl?: string | null;
 }
