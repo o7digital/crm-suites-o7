@@ -12,17 +12,9 @@ const configuredExternalApiBase = fromRoot || fromLegacy;
 const fallbackLocalApiBase = 'http://localhost:4000/api';
 
 export function apiBaseForRequests(): string {
-  // In the browser, prefer the Next.js `/api` rewrite so requests stay same-origin.
-  // This avoids brittle CORS/origin issues across Vercel, Railway, previews, and custom domains.
-  if (typeof window !== 'undefined' && configuredExternalApiBase) {
-    return '/api';
-  }
   return configuredExternalApiBase || fallbackLocalApiBase;
 }
 
 export function apiBaseForDisplay(): string {
-  if (typeof window !== 'undefined' && configuredExternalApiBase) {
-    return `${window.location.origin}/api`;
-  }
   return configuredExternalApiBase || fallbackLocalApiBase;
 }
