@@ -5,6 +5,7 @@ import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useApi, useAuth } from '../../contexts/AuthContext';
 import { getClientDisplayName } from '@/lib/clients';
+import { apiBaseForRequests } from '@/lib/apiBase';
 import { CalendarSyncCard } from '@/components/CalendarSyncCard';
 import { TaskCalendarActions } from '@/components/TaskCalendarActions';
 import { WindowControls } from '@/components/WindowControls';
@@ -624,8 +625,9 @@ export default function PostSalesPage() {
       setDownloadingDocKey(key);
       setError(null);
       try {
-        const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:4000/api';
-        const response = await fetch(`${API_BASE}${endpoint}`, { headers: { Authorization: `Bearer ${token}` } });
+        const response = await fetch(`${apiBaseForRequests()}${endpoint}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!response.ok) throw new Error('Download failed');
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
