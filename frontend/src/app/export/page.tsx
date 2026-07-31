@@ -21,6 +21,18 @@ export default function ExportPage() {
     URL.revokeObjectURL(url);
   };
 
+  const downloadBackup = async () => {
+    const backup = await api('/export/backup');
+    const stamp = new Date().toISOString().slice(0, 10);
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `o7-backup-${stamp}.json`);
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Guard>
       <AppShell>
@@ -31,6 +43,13 @@ export default function ExportPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
+          <div className="card p-5">
+            <h3 className="text-lg font-semibold">Backup workspace</h3>
+            <p className="text-sm text-slate-400">Download a JSON backup of CRM, clients, tasks, invoices, products and pipeline data.</p>
+            <button className="btn-primary mt-4" onClick={() => downloadBackup()}>
+              Download backup
+            </button>
+          </div>
           <div className="card p-5">
             <h3 className="text-lg font-semibold">{t('export.clients.title')}</h3>
             <p className="text-sm text-slate-400">{t('export.clients.description')}</p>

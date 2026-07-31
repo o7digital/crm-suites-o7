@@ -20,4 +20,11 @@ export class ExportController {
   invoices(@CurrentUser() user: RequestUser) {
     return this.exportService.invoices(user);
   }
+
+  @Get('backup')
+  @Header('Content-Type', 'application/json')
+  @Header('Content-Disposition', 'attachment; filename="o7-backup.json"')
+  backup(@CurrentUser() user: RequestUser) {
+    return this.exportService.backup(user);
+  }
 }

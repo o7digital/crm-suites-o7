@@ -16,6 +16,7 @@ const tiles = [
   { href: '/admin/benchmarking', title: 'Benchmarking', description: 'Connect providers, build audiences, and send newsletters.' },
   { href: '/admin/reporting', title: 'Reporting', description: 'Sales charts and KPI dashboards.' },
   { href: '/admin/goals', title: 'Objectives', description: 'Targets, quotas, and goal tracking.' },
+  { href: '/export', title: 'Backup', description: 'Download a full workspace JSON backup.' },
   { href: '/admin/contracts', title: 'Documents to sign', description: 'LOI, NDA, Contract, Proposal and custom document types.' },
 ] as const;
 

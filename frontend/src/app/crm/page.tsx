@@ -701,8 +701,12 @@ export default function CrmPage() {
   }, [sortedStages, statusFilter]);
 
   const visiblePipelineStages = useMemo(() => {
-    return visibleStages.filter((stage) => getEffectiveStageStatus(stage) !== 'LOST');
-  }, [visibleStages]);
+    return visibleStages.filter((stage) => {
+      const effectiveStatus = getEffectiveStageStatus(stage);
+      if (statusFilter === 'WON' || statusFilter === 'LOST') return effectiveStatus === statusFilter;
+      return effectiveStatus === 'OPEN';
+    });
+  }, [statusFilter, visibleStages]);
 
   const firstWonStage = useMemo(() => {
     return sortedStages.find((stage) => getEffectiveStageStatus(stage) === 'WON') || null;
@@ -1413,6 +1417,7 @@ export default function CrmPage() {
         setEditingDeal(merged);
         setForm((prev) => ({ ...prev, stageId: targetStage.id }));
         setDeals((prev) => prev.map((d) => (d.id === editingDeal.id ? { ...d, ...merged } : d)));
+        setShowModal(false);
       } catch (err) {
         const message = err instanceof Error ? err.message : `Unable to mark ${status}`;
         setError(message);
