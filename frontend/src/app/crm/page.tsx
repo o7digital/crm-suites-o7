@@ -8,6 +8,7 @@ import { useApi, useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { CLIENT_FUNCTION_OPTIONS, getClientDisplayName } from '@/lib/clients';
 import { convertCurrency, formatCurrencyTotal, type FxRatesSnapshot } from '@/lib/fx';
+import { useIA, type LeadAnalysisResult } from '@/hooks/useIA';
 import { useI18n } from '../../contexts/I18nContext';
 import { WindowControls } from '../../components/WindowControls';
 
@@ -287,6 +288,13 @@ export default function CrmPage() {
   const api = useApi(token);
   const router = useRouter();
   const { t, stageName } = useI18n();
+  const {
+    analyzeCrmLead,
+    leadAnalysis: crmLeadAnalysis,
+    loadingLeadAnalysis: crmAiLoading,
+    errorLeadAnalysis: crmAiError,
+    reset: resetIaState,
+  } = useIA();
   const lastDragAtRef = useRef<number>(0);
   const proposalRef = useRef<HTMLInputElement | null>(null);
   const [crmDisplayCurrency, setCrmDisplayCurrency] = useState<DealCurrency>('MXN');
@@ -436,6 +444,7 @@ export default function CrmPage() {
       setClientDraftError(null);
       setClientDraftSaving(false);
       setEditingDeal(null);
+      resetIaState();
       setProposalFile(null);
       setProposalFileName('');
       setProposalError(null);
@@ -454,7 +463,7 @@ export default function CrmPage() {
         ownerId: '',
       });
     }
-  }, [showModal]);
+  }, [resetIaState, showModal]);
 
   useEffect(() => {
     if (!showWorkflowModal) {
@@ -1427,6 +1436,39 @@ export default function CrmPage() {
     },
     [api, editingDeal, modalSortedStages],
   );
+
+  const handleAnalyzeEditingDeal = useCallback(async () => {
+    if (!editingDeal) return;
+
+    const selectedClient = clients.find((client) => client.id === form.clientId) || editingDeal.client || null;
+    const selectedProducts = products
+      .filter((product) => form.productIds.includes(product.id))
+      .map((product) => product.name)
+      .filter(Boolean);
+    const context = [
+      `Deal: ${form.title || editingDeal.title}`,
+      selectedClient ? `Client: ${getClientDisplayName(selectedClient)}` : 'Client: not linked',
+      selectedClient?.company ? `Company: ${selectedClient.company}` : '',
+      `Amount: ${form.currency} ${form.value || editingDeal.value || 0}`,
+      form.expectedCloseDate ? `Close date: ${form.expectedCloseDate}` : '',
+      selectedProducts.length ? `Products: ${selectedProducts.join(', ')}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    await analyzeCrmLead(editingDeal.id, context);
+  }, [
+    analyzeCrmLead,
+    clients,
+    editingDeal,
+    form.clientId,
+    form.currency,
+    form.expectedCloseDate,
+    form.productIds,
+    form.title,
+    form.value,
+    products,
+  ]);
 
   const handleDropDealToStatus = async (dealId: string, status: Stage['status']) => {
     const targetStage = status === 'WON' ? firstWonStage : firstLostStage;
@@ -3046,6 +3088,23 @@ export default function CrmPage() {
                   <p className="mt-1 text-xs text-slate-500">{t('crm.proposalPdfHint')}</p>
                   {proposalError ? <p className="mt-2 text-xs text-red-200">{proposalError}</p> : null}
                 </div>
+
+                {editingDeal ? (
+                  <CrmAiPanel
+                    analysis={crmLeadAnalysis}
+                    loading={crmAiLoading}
+                    error={crmAiError}
+                    dealId={editingDeal.id}
+                    onAnalyze={() => void handleAnalyzeEditingDeal()}
+                  />
+                ) : (
+                  <div className="rounded-lg border border-violet-300/20 bg-violet-500/10 p-4">
+                    <p className="text-sm font-semibold text-violet-100">IA CRM</p>
+                    <p className="mt-1 text-xs text-violet-100/75">
+                      Save the deal first to unlock score, risks and recommended next actions.
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
                 {editingDeal ? (
@@ -3118,6 +3177,97 @@ function CrmMetricCard({
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</p>
       <p className="mt-2 text-3xl font-semibold">{value}</p>
       <p className="mt-2 text-xs text-slate-400">{hint}</p>
+    </div>
+  );
+}
+
+function CrmAiPanel({
+  analysis,
+  loading,
+  error,
+  dealId,
+  onAnalyze,
+}: {
+  analysis: LeadAnalysisResult | null;
+  loading: boolean;
+  error: string | null;
+  dealId: string;
+  onAnalyze: () => void;
+}) {
+  const result = analysis?.lead.dealId === dealId ? analysis : null;
+  const riskTone =
+    result?.analysis.lossRisk === 'HIGH'
+      ? 'text-rose-100 bg-rose-500/15 border-rose-300/30'
+      : result?.analysis.lossRisk === 'MEDIUM'
+        ? 'text-amber-100 bg-amber-500/15 border-amber-300/30'
+        : 'text-emerald-100 bg-emerald-500/15 border-emerald-300/30';
+
+  return (
+    <div className="rounded-lg border border-violet-300/20 bg-violet-500/10 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-violet-100">IA CRM</p>
+          <p className="mt-1 text-xs text-violet-100/75">Score, risks and next actions for this deal.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href={`/ia-pulse?dealId=${dealId}`}
+            className="rounded-lg border border-violet-300/30 bg-violet-400/10 px-3 py-2 text-xs font-semibold text-violet-100 transition hover:bg-violet-400/20"
+          >
+            IA Pulse
+          </Link>
+          <button
+            type="button"
+            className="btn-primary text-sm"
+            onClick={onAnalyze}
+            disabled={loading}
+          >
+            {loading ? 'Analyzing...' : result ? 'Refresh IA' : 'Analyze'}
+          </button>
+        </div>
+      </div>
+
+      {error ? <p className="mt-3 text-xs text-red-200">{error}</p> : null}
+
+      {result ? (
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          <div className="rounded-lg border border-white/10 bg-black/15 p-3">
+            <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Score</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-100">{result.analysis.score}</p>
+            <p className="text-xs text-slate-400">{Math.round(result.analysis.winProbability * 100)}% win probability</p>
+          </div>
+          <div className={`rounded-lg border p-3 ${riskTone}`}>
+            <p className="text-xs uppercase tracking-[0.12em] opacity-75">Risk</p>
+            <p className="mt-1 text-xl font-semibold">{result.analysis.lossRisk}</p>
+            <p className="text-xs opacity-75">{result.analysis.recommendedOutcome}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-black/15 p-3">
+            <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Stage</p>
+            <p className="mt-1 text-sm font-semibold text-slate-100">{result.lead.stageName}</p>
+            <p className="text-xs text-slate-400">{result.lead.daysInStage} days in stage</p>
+          </div>
+          <div className="lg:col-span-3 grid gap-3 md:grid-cols-2">
+            <div className="rounded-lg border border-white/10 bg-black/15 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Risks</p>
+              <ul className="mt-2 space-y-1 text-xs text-slate-300">
+                {(result.analysis.risks.length ? result.analysis.risks : ['No major risk detected.']).map((item) => (
+                  <li key={item}>- {item}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-black/15 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Next actions</p>
+              <ul className="mt-2 space-y-1 text-xs text-slate-300">
+                {result.analysis.nextBestActions.slice(0, 4).map((item) => (
+                  <li key={item}>- {item}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-slate-400">Run an IA analysis to see recommendations inside the CRM.</p>
+      )}
     </div>
   );
 }
