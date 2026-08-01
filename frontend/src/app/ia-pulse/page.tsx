@@ -1145,11 +1145,6 @@ function IaPulsePageContent() {
 
   useEffect(() => {
     if (!token) return;
-    void fetchDiagnostics().catch(() => undefined);
-  }, [fetchDiagnostics, token]);
-
-  useEffect(() => {
-    if (!token) return;
     let active = true;
     api<{ settings?: { contractSetup?: ContractSetup | null } }>('/tenant/settings', { method: 'GET' })
       .then((data) => {
@@ -1779,6 +1774,38 @@ function IaPulsePageContent() {
                 ) : null}
               </Card.Body>
             </Card.Root>
+
+            <PulseCommandCenter
+              locale={locale}
+              selectedDeal={selectedDeal}
+              selectedStageName={selectedDealStage?.name || null}
+              selectedStageStatus={selectedDealStage?.status || null}
+              displayCrm360={displayCrm360}
+              leadAnalysis={leadAnalysis}
+              crmActionPlan={crmActionPlan}
+              crmEmailDraft={crmEmailDraft}
+              crmWhatsappDraft={crmWhatsappDraft}
+              loadingLeadAnalysis={loadingLeadAnalysis}
+              canAnalyzeCrmLead={canAnalyzeCrmLead}
+              canApplyRecommendation={canApplyRecommendation}
+              applyingRecommendation={applyingRecommendation}
+              creatingTaskLabel={creatingTaskLabel}
+              applyInfo={applyInfo}
+              applyError={applyError}
+              shareInfo={shareInfo}
+              taskActionInfo={taskActionInfo}
+              onAnalyze={() => void handleAnalyzeSelectedLead()}
+              onApplyRecommendation={() => void applyRecommendedStage()}
+              onUse360Context={useCrm360AsContext}
+              onCopy360Brief={() => void copyCrm360Brief()}
+              onCopyEmail={() => {
+                if (!crmEmailDraft) return;
+                void copyToClipboard(`${locale.subject}: ${crmEmailDraft.subject}\n\n${crmEmailDraft.body}`, locale.emailLabel);
+              }}
+              onCopyWhatsapp={() => void copyToClipboard(crmWhatsappDraft, locale.whatsappLabel)}
+              onOpenWhatsapp={openWhatsApp}
+              onCreateTask={(label, dueInDays) => void createActionTask(label, dueInDays)}
+            />
 
             {(dealId || displayCrm360) ? (
               <SimpleGrid columns={{ base: 1, xl: 2 }} gap={4}>
@@ -2529,16 +2556,21 @@ function IaPulsePageContent() {
             ) : null}
 
             {diagnostics ? (
-              <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
-                <Card.Body>
-                  <Heading size="sm" mb={2}>
-                    {locale.runtimeDiagnostics}
-                  </Heading>
-                  <Box as="pre" fontSize="xs" whiteSpace="pre-wrap">
-                    {JSON.stringify(diagnostics, null, 2)}
-                  </Box>
-                </Card.Body>
-              </Card.Root>
+              <Box
+                as="details"
+                bg="whiteAlpha.50"
+                borderWidth="1px"
+                borderColor="whiteAlpha.200"
+                borderRadius="lg"
+                p={4}
+              >
+                <Box as="summary" cursor="pointer" fontWeight="semibold">
+                  {locale.runtimeDiagnostics}
+                </Box>
+                <Box as="pre" mt={3} fontSize="xs" whiteSpace="pre-wrap">
+                  {JSON.stringify(diagnostics, null, 2)}
+                </Box>
+              </Box>
             ) : null}
 
             {sentiment ? (
@@ -2547,9 +2579,16 @@ function IaPulsePageContent() {
                   <Heading size="sm" mb={2}>
                     {locale.sentimentAnalysis}
                   </Heading>
-                  <Box as="pre" fontSize="sm" whiteSpace="pre-wrap">
-                    {JSON.stringify(sentiment, null, 2)}
-                  </Box>
+                  <SimpleGrid columns={{ base: 1, sm: 2 }} gap={3}>
+                    <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                      <Text fontSize="xs" color="whiteAlpha.600">Sentiment</Text>
+                      <Text fontSize="xl" fontWeight="bold">{sentiment.sentiment}</Text>
+                    </Box>
+                    <Box p={3} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+                      <Text fontSize="xs" color="whiteAlpha.600">Confidence</Text>
+                      <Text fontSize="xl" fontWeight="bold">{Math.round(sentiment.confidence * 100)}%</Text>
+                    </Box>
+                  </SimpleGrid>
                 </Card.Body>
               </Card.Root>
             ) : null}
@@ -2568,12 +2607,20 @@ function IaPulsePageContent() {
             {draftEmail ? (
               <Card.Root bg="whiteAlpha.50" borderWidth="1px" borderColor="whiteAlpha.200">
                 <Card.Body>
-                  <Heading size="sm" mb={2}>
-                    {locale.generatedEmail}
-                  </Heading>
-                  <Text fontWeight="bold">{locale.subject}:</Text>
-                  <Text mb={3}>{draftEmail.subject || '—'}</Text>
-                  <Text whiteSpace="pre-wrap">{draftEmail.body || '—'}</Text>
+                  <Box display="flex" justifyContent="space-between" gap={3} alignItems="center" mb={2}>
+                    <Heading size="sm">{locale.generatedEmail}</Heading>
+                    <Button
+                      size="sm"
+                      borderRadius="lg"
+                      onClick={() =>
+                        void copyToClipboard(`${locale.subject}: ${draftEmail.subject}\n\n${draftEmail.body}`, locale.emailLabel)
+                      }
+                    >
+                      {locale.copyEmail}
+                    </Button>
+                  </Box>
+                  <Text fontWeight="bold">{locale.subject}: {draftEmail.subject || '—'}</Text>
+                  <Text mt={3} whiteSpace="pre-wrap">{draftEmail.body || '—'}</Text>
                 </Card.Body>
               </Card.Root>
             ) : null}
@@ -2592,6 +2639,200 @@ function IaPulsePageContent() {
         </Box>
       </AppShell>
     </Guard>
+  );
+}
+
+function PulseCommandCenter({
+  locale,
+  selectedDeal,
+  selectedStageName,
+  selectedStageStatus,
+  displayCrm360,
+  leadAnalysis,
+  crmActionPlan,
+  crmEmailDraft,
+  crmWhatsappDraft,
+  loadingLeadAnalysis,
+  canAnalyzeCrmLead,
+  canApplyRecommendation,
+  applyingRecommendation,
+  creatingTaskLabel,
+  applyInfo,
+  applyError,
+  shareInfo,
+  taskActionInfo,
+  onAnalyze,
+  onApplyRecommendation,
+  onUse360Context,
+  onCopy360Brief,
+  onCopyEmail,
+  onCopyWhatsapp,
+  onOpenWhatsapp,
+  onCreateTask,
+}: {
+  locale: IaPulseLocale;
+  selectedDeal: Deal | null;
+  selectedStageName: string | null;
+  selectedStageStatus: Stage['status'] | null;
+  displayCrm360: Crm360Payload | null;
+  leadAnalysis: LeadAnalysisResult | null;
+  crmActionPlan: string[];
+  crmEmailDraft: { subject: string; body: string } | null;
+  crmWhatsappDraft: string;
+  loadingLeadAnalysis: boolean;
+  canAnalyzeCrmLead: boolean;
+  canApplyRecommendation: boolean;
+  applyingRecommendation: boolean;
+  creatingTaskLabel: string;
+  applyInfo: string | null;
+  applyError: string | null;
+  shareInfo: string | null;
+  taskActionInfo: string | null;
+  onAnalyze: () => void;
+  onApplyRecommendation: () => void;
+  onUse360Context: () => void;
+  onCopy360Brief: () => void;
+  onCopyEmail: () => void;
+  onCopyWhatsapp: () => void;
+  onOpenWhatsapp: () => void;
+  onCreateTask: (label: string, dueInDays: number | null) => void;
+}) {
+  const primaryAction = displayCrm360?.coach.suggestedActions[0] || null;
+  const score = leadAnalysis?.analysis.score ?? null;
+  const winProbability = leadAnalysis ? Math.round(leadAnalysis.analysis.winProbability * 100) : null;
+  const risk = leadAnalysis?.analysis.lossRisk || displayCrm360?.coach.priority || null;
+  const dealTitle = selectedDeal?.title || leadAnalysis?.lead.dealTitle || displayCrm360?.lead.title || locale.selectLead;
+  const dealValue = selectedDeal
+    ? `${String(selectedDeal.currency || 'USD').toUpperCase()} ${Number(selectedDeal.value || 0).toLocaleString()}`
+    : displayCrm360
+      ? `${displayCrm360.lead.currency} ${Number(displayCrm360.lead.value || 0).toLocaleString()}`
+      : locale.na;
+
+  return (
+    <Card.Root bg="linear-gradient(135deg, rgba(124,58,237,0.22), rgba(6,182,212,0.10))" borderWidth="1px" borderColor="violet.300/30">
+      <Card.Body>
+        <Box display="flex" flexWrap="wrap" alignItems="flex-start" justifyContent="space-between" gap={4}>
+          <Box maxW="620px">
+            <Text fontSize="xs" color="violet.100" textTransform="uppercase" letterSpacing="0.14em">
+              IA Command Center
+            </Text>
+            <Heading mt={1} size="md">
+              {dealTitle}
+            </Heading>
+            <Text mt={2} fontSize="sm" color="whiteAlpha.800">
+              {selectedStageName || displayCrm360?.lead.stageName || locale.stage} · {selectedStageStatus || displayCrm360?.lead.stageStatus || locale.status} · {dealValue}
+            </Text>
+            <Text mt={3} fontSize="sm" color="whiteAlpha.900">
+              {leadAnalysis?.analysis.explanation || displayCrm360?.coach.summary || 'Select a CRM lead and run analysis to get a concrete recommendation, ready-to-send messages and task actions.'}
+            </Text>
+          </Box>
+
+          <Button colorPalette="blue" onClick={onAnalyze} disabled={!canAnalyzeCrmLead} borderRadius="xl" minW="180px">
+            {loadingLeadAnalysis ? <Spinner size="sm" /> : leadAnalysis ? 'Refresh IA' : locale.analyzeCrmLead}
+          </Button>
+        </Box>
+
+        <SimpleGrid mt={5} columns={{ base: 1, md: 3 }} gap={3}>
+          <Box p={4} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+            <Text fontSize="xs" color="whiteAlpha.600">{locale.score}</Text>
+            <Text mt={1} fontSize="3xl" fontWeight="bold">{score !== null ? `${score}/100` : '--'}</Text>
+            <Text fontSize="xs" color="whiteAlpha.600">{winProbability !== null ? `${winProbability}% ${locale.winProbability.toLowerCase()}` : locale.crmLeadAnalysis}</Text>
+          </Box>
+          <Box p={4} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+            <Text fontSize="xs" color="whiteAlpha.600">{locale.risk}</Text>
+            <Text mt={1} fontSize="3xl" fontWeight="bold">{risk || '--'}</Text>
+            <Text fontSize="xs" color="whiteAlpha.600">
+              {leadAnalysis?.analysis.recommendedOutcome || displayCrm360?.coach.priority || locale.priority}
+            </Text>
+          </Box>
+          <Box p={4} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+            <Text fontSize="xs" color="whiteAlpha.600">{locale.nextBestActions}</Text>
+            <Text mt={1} fontSize="sm" fontWeight="semibold">
+              {primaryAction?.label || leadAnalysis?.analysis.nextBestActions[0] || locale.noTasksYet}
+            </Text>
+            {primaryAction ? (
+              <Button
+                mt={3}
+                size="sm"
+                colorPalette="cyan"
+                borderRadius="lg"
+                disabled={creatingTaskLabel === primaryAction.label}
+                onClick={() => onCreateTask(primaryAction.label, primaryAction.dueInDays)}
+              >
+                {creatingTaskLabel === primaryAction.label ? <Spinner size="sm" /> : locale.createTask}
+              </Button>
+            ) : null}
+          </Box>
+        </SimpleGrid>
+
+        <SimpleGrid mt={5} columns={{ base: 1, xl: 2 }} gap={3}>
+          <Box p={4} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+            <Box display="flex" justifyContent="space-between" gap={3} alignItems="center">
+              <Heading size="xs">{locale.emailReadyToSend}</Heading>
+              <Button size="sm" borderRadius="lg" disabled={!crmEmailDraft} onClick={onCopyEmail}>
+                {locale.copyEmail}
+              </Button>
+            </Box>
+            {crmEmailDraft ? (
+              <>
+                <Text mt={3} fontSize="sm" fontWeight="semibold">{locale.subject}: {crmEmailDraft.subject}</Text>
+                <Text mt={2} fontSize="sm" color="whiteAlpha.800" whiteSpace="pre-wrap" lineClamp={7}>
+                  {crmEmailDraft.body}
+                </Text>
+              </>
+            ) : (
+              <Text mt={3} fontSize="sm" color="whiteAlpha.600">{locale.analyzeCrmLead}</Text>
+            )}
+          </Box>
+
+          <Box p={4} borderRadius="lg" bg="blackAlpha.300" borderWidth="1px" borderColor="whiteAlpha.200">
+            <Box display="flex" justifyContent="space-between" gap={3} alignItems="center">
+              <Heading size="xs">{locale.whatsappReadyToSend}</Heading>
+              <Box display="flex" gap={2}>
+                <Button size="sm" borderRadius="lg" disabled={!crmWhatsappDraft} onClick={onCopyWhatsapp}>
+                  {locale.copyWhatsapp}
+                </Button>
+                <Button size="sm" colorPalette="green" borderRadius="lg" disabled={!crmWhatsappDraft} onClick={onOpenWhatsapp}>
+                  {locale.openWhatsapp}
+                </Button>
+              </Box>
+            </Box>
+            <Text mt={3} fontSize="sm" color="whiteAlpha.800" whiteSpace="pre-wrap">
+              {crmWhatsappDraft || locale.analyzeCrmLead}
+            </Text>
+          </Box>
+        </SimpleGrid>
+
+        <Box mt={5} display="flex" flexWrap="wrap" gap={2}>
+          <Button size="sm" colorPalette="green" onClick={onApplyRecommendation} disabled={!canApplyRecommendation || applyingRecommendation} borderRadius="lg">
+            {applyingRecommendation ? <Spinner size="sm" /> : locale.applyRecommendation}
+          </Button>
+          <Button size="sm" variant="outline" borderColor="whiteAlpha.300" borderRadius="lg" onClick={onUse360Context} disabled={!displayCrm360}>
+            {locale.use360Context}
+          </Button>
+          <Button size="sm" variant="outline" borderColor="whiteAlpha.300" borderRadius="lg" onClick={onCopy360Brief} disabled={!displayCrm360}>
+            {locale.copy360Brief}
+          </Button>
+        </Box>
+
+        {crmActionPlan.length > 0 ? (
+          <Box mt={4} p={3} borderRadius="lg" bg="blackAlpha.200" borderWidth="1px" borderColor="whiteAlpha.200">
+            <Text fontSize="xs" color="whiteAlpha.600" mb={2}>{locale.proposedActionPlan}</Text>
+            <Stack gap={1}>
+              {crmActionPlan.slice(0, 4).map((step) => (
+                <Text key={step} fontSize="sm" color="whiteAlpha.900">{step}</Text>
+              ))}
+            </Stack>
+          </Box>
+        ) : null}
+
+        {[applyInfo, applyError, shareInfo, taskActionInfo].filter(Boolean).map((message) => (
+          <Text key={message || ''} mt={2} fontSize="sm" color={message === applyError ? 'red.300' : 'green.300'}>
+            {message}
+          </Text>
+        ))}
+      </Card.Body>
+    </Card.Root>
   );
 }
 
