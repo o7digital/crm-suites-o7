@@ -349,7 +349,19 @@ export default function DashboardPage() {
         )}
 
         {data && (
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+            <MetricCard
+              title="Clientes"
+              value={INT.format(data.clients ?? 0)}
+              hint={`${INT.format(data.prospects ?? 0)} prospects`}
+              tone="green"
+            />
+            <MetricCard
+              title="Prospects"
+              value={INT.format(data.prospects ?? 0)}
+              hint={`${INT.format((data.clients ?? 0) + (data.prospects ?? 0))} contactos CRM`}
+              tone="amber"
+            />
             <MetricCard
               title="Leads abiertos"
               value={INT.format(data.leads.open ?? data.dealStatusStats.open.count)}
