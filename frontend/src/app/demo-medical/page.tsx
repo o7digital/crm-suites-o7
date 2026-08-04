@@ -10,7 +10,7 @@ const patients = [
 ];
 
 const stages = [
-  { label: 'Nouveaux leads', count: 18, amount: '42k', color: '#38bdf8' },
+  { label: 'Demandes patients', count: 18, amount: '42k', color: '#38bdf8' },
   { label: 'Consultations', count: 11, amount: '31k', color: '#34d399' },
   { label: 'Plans proposes', count: 7, amount: '26k', color: '#f59e0b' },
   { label: 'Traitements', count: 9, amount: '58k', color: '#fb7185' },
@@ -30,9 +30,45 @@ function money(value: number) {
 export default function MedicalDemoPage() {
   const [selected, setSelected] = useState(patients[0]);
   const total = useMemo(() => patients.reduce((sum, patient) => sum + patient.value, 0), []);
+  const nav = ['Tableau clinique', 'Patients', 'Agenda', 'Pipeline soins', 'Facturation', 'IA medicale', 'Pilotage'];
 
   return (
     <main className="min-h-screen bg-[#f7faf9] text-[#10231f]">
+      <header className="sticky top-0 z-20 border-b border-[#d8e5e0] bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center gap-5 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-12 w-12 place-items-center rounded-lg bg-[#10231f] text-sm font-black text-[#34d399]">
+              o7
+            </div>
+            <div>
+              <div className="font-semibold leading-tight">Clinique o7 Medical</div>
+              <div className="text-xs text-[#58706a]">CRM patients - demo</div>
+            </div>
+          </div>
+          <nav className="hidden flex-1 items-center justify-center gap-1 lg:flex">
+            {nav.map((item, index) => (
+              <a
+                key={item}
+                className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                  index === 0 ? 'bg-[#e7f7f2] text-[#14745f]' : 'text-[#58706a] hover:bg-[#f0f7f4]'
+                }`}
+                href="#"
+              >
+                {item}
+              </a>
+            ))}
+          </nav>
+          <div className="ml-auto flex items-center gap-2">
+            <button className="rounded-lg border border-[#d8e5e0] bg-white px-3 py-2 text-sm font-semibold text-[#14745f]">
+              + Patient
+            </button>
+            <button className="rounded-lg bg-[#34d399] px-3 py-2 text-sm font-semibold text-[#10231f]">
+              Nouvelle consultation
+            </button>
+          </div>
+        </div>
+      </header>
+
       <section className="border-b border-[#d8e5e0] bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -64,15 +100,15 @@ export default function MedicalDemoPage() {
                 <div className="mb-4 h-1.5 rounded-full" style={{ backgroundColor: stage.color }} />
                 <div className="text-2xl font-semibold">{stage.count}</div>
                 <div className="text-sm font-medium">{stage.label}</div>
-                <div className="mt-2 text-xs text-[#58706a]">{stage.amount} EUR opportunites</div>
+                <div className="mt-2 text-xs text-[#58706a]">{stage.amount} EUR parcours de soin</div>
               </div>
             ))}
           </div>
 
           <div className="rounded-lg border border-[#d8e5e0] bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-[#edf3f1] px-4 py-3">
-              <h2 className="text-lg font-semibold">Pipeline patients</h2>
-              <span className="rounded-full bg-[#e7f7f2] px-3 py-1 text-xs font-semibold text-[#14745f]">Demo live</span>
+              <h2 className="text-lg font-semibold">Pipeline parcours patients</h2>
+              <span className="rounded-full bg-[#e7f7f2] px-3 py-1 text-xs font-semibold text-[#14745f]">Cabinet live</span>
             </div>
             <div className="divide-y divide-[#edf3f1]">
               {patients.map((patient) => (
@@ -141,7 +177,7 @@ export default function MedicalDemoPage() {
           </div>
 
           <div className="rounded-lg border border-[#d8e5e0] bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-semibold">Automations simples</h2>
+            <h2 className="text-lg font-semibold">Automations patients</h2>
             <div className="mt-3 grid gap-2 text-sm">
               {['Rappel SMS J-1', 'Email devis non signe', 'Relance soin post-operatoire', 'Alerte dossier incomplet'].map((item) => (
                 <div key={item} className="flex items-center justify-between rounded-lg bg-[#f7faf9] px-3 py-2">
