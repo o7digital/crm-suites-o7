@@ -17,7 +17,24 @@ const isProtectedRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
-  if (['/', '/register', '/login'].includes(req.nextUrl.pathname)) {
+  if (
+    [
+      '/',
+      '/account',
+      '/admin',
+      '/clients',
+      '/crm',
+      '/export',
+      '/forecast',
+      '/ia-pulse',
+      '/invoices',
+      '/login',
+      '/orders',
+      '/post-sales',
+      '/register',
+      '/tasks',
+    ].includes(req.nextUrl.pathname)
+  ) {
     return NextResponse.redirect(new URL('/demo-medical', req.url));
   }
   if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
