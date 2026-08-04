@@ -23,14 +23,54 @@ const agenda = [
   ['16:15', 'Controle post-soin', 'Nora Bensaid', 'Salle 3'],
 ];
 
+const views = {
+  'Tableau clinique': {
+    title: 'Cabinet medical, pipeline patient et revenus en un seul ecran.',
+    summary: 'Vue dirigeant pour suivre activite, soins, relances et risque de no-show.',
+    cards: ['146 patients actifs', '8 540 EUR de soins potentiels', '6% no-show risque'],
+  },
+  Patients: {
+    title: 'Dossiers patients, priorites et suivis de soin.',
+    summary: 'Chaque patient garde son besoin, son score, sa prochaine action et son parcours clinique.',
+    cards: ['42 nouveaux dossiers', '18 consentements a signer', '11 relances post-consultation'],
+  },
+  Agenda: {
+    title: 'Agenda cabinet avec rappels automatiques.',
+    summary: 'Consultations, visio, salles et rappels SMS sont regroupes pour eviter les trous dans la journee.',
+    cards: ['4 rendez-vous aujourd hui', '2 salles optimisees', '1 visio planifiee'],
+  },
+  'Pipeline soins': {
+    title: 'Pipeline de soins, du premier contact au traitement.',
+    summary: 'Le cabinet voit ou chaque patient bloque: consultation, plan propose, devis, traitement.',
+    cards: ['18 demandes patients', '7 plans proposes', '9 traitements en cours'],
+  },
+  Facturation: {
+    title: 'Facturation medicale et plans de paiement.',
+    summary: 'Suivi simple des devis, acomptes, paiements restants et revenus attendus.',
+    cards: ['4 200 EUR devis prioritaire', '3 paiements attendus', '780 EUR relance assurance'],
+  },
+  'IA medicale': {
+    title: 'IA de relance patient et priorisation cabinet.',
+    summary: 'Suggestions de relance, risque d absence, dossier incomplet et prochain meilleur message.',
+    cards: ['Sofia: devis a signer', 'Marc: SMS J-1', 'Nora: controle trimestriel'],
+  },
+  Pilotage: {
+    title: 'Pilotage cabinet pour gerant et equipe medicale.',
+    summary: 'Occupation, conversion, revenus par parcours et charge operationnelle en temps reel.',
+    cards: ['84% occupation agenda', '31k EUR en consultation', '92/100 meilleur score patient'],
+  },
+};
+
 function money(value: number) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value);
 }
 
 export default function MedicalDemoPage() {
   const [selected, setSelected] = useState(patients[0]);
+  const [activeView, setActiveView] = useState<keyof typeof views>('Tableau clinique');
   const total = useMemo(() => patients.reduce((sum, patient) => sum + patient.value, 0), []);
-  const nav = ['Tableau clinique', 'Patients', 'Agenda', 'Pipeline soins', 'Facturation', 'IA medicale', 'Pilotage'];
+  const nav = Object.keys(views) as Array<keyof typeof views>;
+  const view = views[activeView];
 
   return (
     <main className="min-h-screen bg-[#f7faf9] text-[#10231f]">
@@ -46,23 +86,32 @@ export default function MedicalDemoPage() {
             </div>
           </div>
           <nav className="hidden flex-1 items-center justify-center gap-1 lg:flex">
-            {nav.map((item, index) => (
-              <a
+            {nav.map((item) => (
+              <button
                 key={item}
+                onClick={() => setActiveView(item)}
                 className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                  index === 0 ? 'bg-[#e7f7f2] text-[#14745f]' : 'text-[#58706a] hover:bg-[#f0f7f4]'
+                  activeView === item ? 'bg-[#e7f7f2] text-[#14745f]' : 'text-[#58706a] hover:bg-[#f0f7f4]'
                 }`}
-                href="#"
+                type="button"
               >
                 {item}
-              </a>
+              </button>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <button className="rounded-lg border border-[#d8e5e0] bg-white px-3 py-2 text-sm font-semibold text-[#14745f]">
+            <button
+              className="rounded-lg border border-[#d8e5e0] bg-white px-3 py-2 text-sm font-semibold text-[#14745f]"
+              onClick={() => setActiveView('Patients')}
+              type="button"
+            >
               + Patient
             </button>
-            <button className="rounded-lg bg-[#34d399] px-3 py-2 text-sm font-semibold text-[#10231f]">
+            <button
+              className="rounded-lg bg-[#34d399] px-3 py-2 text-sm font-semibold text-[#10231f]"
+              onClick={() => setActiveView('Agenda')}
+              type="button"
+            >
               Nouvelle consultation
             </button>
           </div>
@@ -74,8 +123,9 @@ export default function MedicalDemoPage() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#1f8a70]">o7 PulseCRM Medical Demo</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-normal text-[#10231f] md:text-5xl">
-              Cabinet medical, pipeline patient et revenus en un seul ecran.
+              {view.title}
             </h1>
+            <p className="mt-3 max-w-2xl text-sm text-[#58706a]">{view.summary}</p>
           </div>
           <div className="grid grid-cols-3 gap-3 text-center">
             {[
@@ -94,6 +144,14 @@ export default function MedicalDemoPage() {
 
       <section className="mx-auto grid max-w-7xl gap-4 px-5 py-5 lg:grid-cols-[1.25fr_0.75fr]">
         <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            {view.cards.map((card) => (
+              <div key={card} className="rounded-lg border border-[#d8e5e0] bg-[#10231f] px-4 py-3 text-sm font-semibold text-white shadow-sm">
+                {card}
+              </div>
+            ))}
+          </div>
+
           <div className="grid gap-3 md:grid-cols-4">
             {stages.map((stage) => (
               <div key={stage.label} className="rounded-lg border border-[#d8e5e0] bg-white p-4 shadow-sm">
