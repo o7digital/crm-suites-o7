@@ -1,5 +1,1 @@
-import { redirect } from 'next/navigation';
-
-export default function InvoicesPage() {
-  redirect('/admin/ocr-scan');
-}
+export { default } from '../demo-medical/page';
