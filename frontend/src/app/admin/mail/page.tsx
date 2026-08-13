@@ -7,10 +7,12 @@ import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useApi, useAuth } from '../../../contexts/AuthContext';
 import seed from '../../../lib/newsletterCampaigns.json';
+import annualEventsSeed from '../../../lib/events2026.json';
+import { BufferStudioModal, EventCatalogModal, type AnnualEvent, type BufferConfig } from './CampaignTools';
 
-type NewsletterCampaign = (typeof seed.campaigns)[number] & { bodyHtml?: string };
-type NewsletterEvent = NewsletterCampaign['events'][number];
-type MailchimpSetup = typeof seed.mailchimp & { newsletterCampaigns?: NewsletterCampaign[] };
+type NewsletterEvent = AnnualEvent;
+type NewsletterCampaign = Omit<(typeof seed.campaigns)[number], 'events'> & { bodyHtml?: string; events: NewsletterEvent[] };
+type MailchimpSetup = typeof seed.mailchimp & { newsletterCampaigns?: NewsletterCampaign[]; buffer: BufferConfig };
 type EditorPanel = 'contenu' | 'evenements' | 'design' | 'mailchimp';
 type PreviewMode = 'desktop' | 'mobile';
 
@@ -27,17 +29,22 @@ type MailchimpDraftResponse = {
 };
 
 const draftStorageKey = 'suites-mine-newsletter-drafts-v2';
-const emptyMailchimp = clone(seed.mailchimp) as MailchimpSetup;
+const emptyMailchimp = { ...clone(seed.mailchimp), buffer: { apiKey: '', organizationId: '' } } as MailchimpSetup;
+const annualEvents = clone(annualEventsSeed) as AnnualEvent[];
 
 export default function AdminMailPage() {
   const { token } = useAuth();
   const api = useApi(token);
-  const [campaigns, setCampaigns] = useState<NewsletterCampaign[]>(() => clone(seed.campaigns));
+  const [campaigns, setCampaigns] = useState<NewsletterCampaign[]>(() => hydrateCampaigns(clone(seed.campaigns)));
   const [campaignId, setCampaignId] = useState(seed.campaigns[0].id);
   const [setup, setSetup] = useState<MailchimpSetup>(emptyMailchimp);
   const [panel, setPanel] = useState<EditorPanel>('contenu');
   const [previewMode, setPreviewMode] = useState<PreviewMode>('desktop');
   const [documentOpen, setDocumentOpen] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [bufferOpen, setBufferOpen] = useState(false);
+  const [socialEvent, setSocialEvent] = useState<AnnualEvent | null>(null);
+  const [catalogTargetId, setCatalogTargetId] = useState(seed.campaigns[0].id);
   const [draftsLoaded, setDraftsLoaded] = useState(false);
   const [busy, setBusy] = useState<'save' | 'test' | 'publish' | null>(null);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error' | 'info'; text: string } | null>(null);
@@ -56,7 +63,7 @@ export default function AdminMailPage() {
         const stored = window.localStorage.getItem(draftStorageKey);
         if (stored) {
           const parsed = JSON.parse(stored) as NewsletterCampaign[];
-          if (Array.isArray(parsed) && parsed.length === seed.campaigns.length) localCampaigns = parsed;
+          if (Array.isArray(parsed) && parsed.length === seed.campaigns.length) localCampaigns = hydrateCampaigns(parsed);
         }
       } catch {
         // A malformed local draft should never block the editor.
@@ -73,9 +80,10 @@ export default function AdminMailPage() {
           ...saved,
           gallery: saved.gallery?.length ? saved.gallery : emptyMailchimp.gallery,
           mailchimp: { ...emptyMailchimp.mailchimp, ...(saved.mailchimp ?? {}) },
+          buffer: { ...emptyMailchimp.buffer, ...(saved.buffer ?? {}) },
         } as MailchimpSetup);
         if (Array.isArray(saved.newsletterCampaigns) && saved.newsletterCampaigns.length === seed.campaigns.length) {
-          setCampaigns(saved.newsletterCampaigns as NewsletterCampaign[]);
+          setCampaigns(hydrateCampaigns(saved.newsletterCampaigns));
         }
       } catch (err) {
         if (!cancelled) {
@@ -198,7 +206,7 @@ export default function AdminMailPage() {
   const resetCampaign = () => {
     const original = seed.campaigns.find((campaign) => campaign.id === selected.id);
     if (!original) return;
-    setCampaigns((current) => current.map((campaign) => (campaign.id === selected.id ? clone(original) : campaign)));
+    setCampaigns((current) => current.map((campaign) => (campaign.id === selected.id ? hydrateCampaigns([clone(original)])[0] : campaign)));
     setNotice({ tone: 'info', text: `${selected.month} a été réinitialisé avec le contenu validé du 13 août.` });
   };
 
@@ -223,8 +231,25 @@ export default function AdminMailPage() {
       description: '',
       url: '',
       sourceLabel: '',
+      month: selected.month,
+      sortDate: '',
     };
     patchCampaign({ events: [...selected.events, nextEvent] });
+  };
+
+  const addCatalogEvent = (event: AnnualEvent) => {
+    setCampaigns((current) => current.map((campaign) => {
+      if (campaign.id !== catalogTargetId || campaign.events.some((item) => item.id === event.id)) return campaign;
+      return { ...campaign, events: [...campaign.events, clone(event)], status: 'DRAFT' } as NewsletterCampaign;
+    }));
+    const target = campaigns.find((campaign) => campaign.id === catalogTargetId);
+    setNotice({ tone: 'ok', text: `${event.title} ajouté à la newsletter ${target?.month || ''}.` });
+  };
+
+  const persistBufferConfig = async (buffer: BufferConfig) => {
+    const nextSetup = { ...setup, buffer };
+    await api('/tenant/settings', { method: 'PATCH', body: JSON.stringify({ marketingSetup: nextSetup }) });
+    setSetup(nextSetup);
   };
 
   const moveEvent = (index: number, direction: -1 | 1) => {
@@ -252,16 +277,43 @@ export default function AdminMailPage() {
             busy={busy}
           />
         ) : null}
+        {catalogOpen ? (
+          <EventCatalogModal
+            events={annualEvents}
+            campaignNames={campaigns.map(({ id, month }) => ({ id, month }))}
+            targetCampaignId={catalogTargetId}
+            onTargetCampaign={setCatalogTargetId}
+            selectedEventIds={new Set(campaigns.find((campaign) => campaign.id === catalogTargetId)?.events.map((event) => event.id) || [])}
+            onAdd={addCatalogEvent}
+            onSocial={(event) => { setSocialEvent(event); setBufferOpen(true); }}
+            onClose={() => setCatalogOpen(false)}
+          />
+        ) : null}
+        {bufferOpen ? (
+          <BufferStudioModal
+            api={api}
+            initialConfig={setup.buffer}
+            initialEvent={socialEvent}
+            onPersistConfig={persistBufferConfig}
+            onClose={() => { setBufferOpen(false); setSocialEvent(null); }}
+          />
+        ) : null}
         <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Marketing · Mailchimp</p>
             <h1 className="mt-1 text-3xl font-semibold">Studio newsletter Suites Mine</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
               Trois campagnes 2026 — août, septembre et novembre — avec événements vérifiés, édition complète et
-              aperçu fidèle au design Suites Mine.
+              aperçu fidèle au design Suites Mine. Le catalogue culturel couvre août à décembre et alimente aussi Buffer.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button className="btn-secondary text-sm" type="button" onClick={() => { setCatalogTargetId(selected.id); setCatalogOpen(true); }}>
+              Catalogue événements
+            </button>
+            <button className="btn-secondary text-sm" type="button" onClick={() => { setSocialEvent(null); setBufferOpen(true); }}>
+              Réseaux · Buffer
+            </button>
             <button className="btn-secondary text-sm" type="button" onClick={downloadHtml}>
               Télécharger HTML
             </button>
@@ -620,6 +672,7 @@ function NewsletterDocumentEditor({
                       <DocField label="Lieu" value={event.venue} onChange={(venue) => patchEvent(index, { venue })} compact />
                       <DocField label="Description" value={event.description} onChange={(description) => patchEvent(index, { description })} multiline compact />
                       <DocField label="Source officielle" value={event.url} onChange={(url) => patchEvent(index, { url })} compact />
+                      <DocField label="Photo / affiche (URL HTTPS)" value={event.imageUrl || ''} onChange={(imageUrl) => patchEvent(index, { imageUrl })} compact />
                     </div>
                     <button type="button" onClick={() => removeEvent(index)} className="h-8 rounded-md px-2 text-xs text-red-600 hover:bg-red-50">
                       Retirer
@@ -779,6 +832,7 @@ function EventsEditor({
             <Field label="Lieu" value={event.venue} onChange={(venue) => patchEvent(index, { venue })} />
             <TextArea label="Description" value={event.description} onChange={(description) => patchEvent(index, { description })} rows={4} />
             <Field label="URL officielle" value={event.url} onChange={(url) => patchEvent(index, { url })} />
+            <Field label="URL de la photo / affiche" value={event.imageUrl || ''} onChange={(imageUrl) => patchEvent(index, { imageUrl })} />
             <Field label="Nom de la source" value={event.sourceLabel} onChange={(sourceLabel) => patchEvent(index, { sourceLabel })} />
             <div className="flex gap-2">
               <button className="btn-secondary flex-1 text-xs" type="button" onClick={() => moveEvent(index, -1)} disabled={index === 0}>
@@ -969,7 +1023,12 @@ function NewsletterPreview({ campaign, setup, mode }: { campaign: NewsletterCamp
           <h3 className="mt-2 font-serif text-3xl text-[#203229]">Agenda seleccionada para {campaign.month.toLowerCase()}</h3>
           <div className={`mt-6 grid gap-4 ${!isMobile && campaign.events.length > 1 ? 'sm:grid-cols-2' : ''}`}>
             {campaign.events.map((event) => (
-              <article key={event.id} className="rounded-lg border border-[#ded1bc] bg-[#f8f0e2] p-5">
+              <article key={event.id} className="overflow-hidden rounded-lg border border-[#ded1bc] bg-[#f8f0e2]">
+                {event.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={event.imageUrl} alt={`Affiche de ${event.title}`} className="h-40 w-full object-cover" />
+                ) : null}
+                <div className="p-5">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#98743a]">{event.category}</span>
                   <span className="text-right text-xs text-[#716554]">{event.date}</span>
@@ -982,6 +1041,7 @@ function NewsletterPreview({ campaign, setup, mode }: { campaign: NewsletterCamp
                     Vérifier sur {event.sourceLabel || 'le site officiel'}
                   </a>
                 ) : null}
+                </div>
               </article>
             ))}
           </div>
@@ -1022,7 +1082,7 @@ function buildMailchimpHtml(campaign: NewsletterCampaign, setup: MailchimpSetup)
     .join('');
   const events = campaign.events
     .map(
-      (event) => `<tr><td style="padding:8px 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #ded1bc;background:#f8f0e2;border-radius:8px;"><tr><td style="padding:20px;"><div style="color:#98743a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;">${escapeHtml(event.category)} · ${escapeHtml(event.date)}</div><h3 style="margin:10px 0 5px;font-family:Georgia,serif;font-size:22px;color:#203229;">${escapeHtml(event.title)}</h3><div style="color:#6b5d49;font-size:12px;font-weight:700;">${escapeHtml(event.venue)}</div><p style="margin:12px 0;color:#5b5247;font-size:14px;line-height:1.6;">${escapeHtml(event.description)}</p>${event.url ? `<a href="${escapeHtml(event.url)}" style="color:#1f3a31;font-size:12px;font-weight:700;">Verificar en ${escapeHtml(event.sourceLabel || 'sitio oficial')}</a>` : ''}</td></tr></table></td></tr>`,
+      (event) => `<tr><td style="padding:8px 0;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #ded1bc;background:#f8f0e2;border-radius:8px;">${event.imageUrl ? `<tr><td><img src="${escapeHtml(event.imageUrl)}" alt="${escapeHtml(event.title)}" width="612" style="display:block;width:100%;height:auto;border:0;border-radius:8px 8px 0 0;" /></td></tr>` : ''}<tr><td style="padding:20px;"><div style="color:#98743a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;">${escapeHtml(event.category)} · ${escapeHtml(event.date)}</div><h3 style="margin:10px 0 5px;font-family:Georgia,serif;font-size:22px;color:#203229;">${escapeHtml(event.title)}</h3><div style="color:#6b5d49;font-size:12px;font-weight:700;">${escapeHtml(event.venue)}</div><p style="margin:12px 0;color:#5b5247;font-size:14px;line-height:1.6;">${escapeHtml(event.description)}</p>${event.url ? `<a href="${escapeHtml(event.url)}" style="color:#1f3a31;font-size:12px;font-weight:700;">Verificar en ${escapeHtml(event.sourceLabel || 'sitio oficial')}</a>` : ''}</td></tr></table></td></tr>`,
     )
     .join('');
   const gallery = setup.gallery
@@ -1218,6 +1278,29 @@ function formatVerifiedDate(value: string) {
 
 function messageFromError(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+function hydrateCampaigns(value: unknown): NewsletterCampaign[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((rawCampaign) => {
+    const campaign = rawCampaign as NewsletterCampaign;
+    return {
+      ...campaign,
+      events: Array.isArray(campaign.events)
+        ? campaign.events.map((event) => {
+            const catalogEvent = annualEvents.find((item) => item.id === event.id);
+            return {
+              ...(catalogEvent || {}),
+              ...event,
+              month: event.month || catalogEvent?.month || campaign.month,
+              sortDate: event.sortDate || catalogEvent?.sortDate || '',
+              imageUrl: event.imageUrl || catalogEvent?.imageUrl,
+              posterUrl: event.posterUrl || catalogEvent?.posterUrl || event.url,
+            } as NewsletterEvent;
+          })
+        : [],
+    };
+  });
 }
 
 function clone<T>(value: T): T {

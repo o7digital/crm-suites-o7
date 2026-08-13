@@ -6,6 +6,7 @@ import { RequestUser } from '../common/user.decorator';
 import { UpdateBrandingDto } from './dto/update-branding.dto';
 import { UpdateTenantSettingsDto } from './dto/update-settings.dto';
 import { CreateMailchimpDraftDto, SendNewsletterDto, SendNewsletterTestDto } from './dto/send-newsletter.dto';
+import { CreateBufferPostDto } from './dto/buffer.dto';
 
 type ContractClientFieldKey =
   | 'firstName'
@@ -53,6 +54,11 @@ type MarketingBrevoConfig = {
   senderName?: string;
 };
 
+type MarketingBufferConfig = {
+  apiKey?: string;
+  organizationId?: string;
+};
+
 type MarketingSetup = {
   provider: MarketingProvider;
   accountLabel?: string;
@@ -69,6 +75,7 @@ type MarketingSetup = {
   smtp?: MarketingSmtpConfig | null;
   mailchimp?: MarketingMailchimpConfig | null;
   brevo?: MarketingBrevoConfig | null;
+  buffer?: MarketingBufferConfig | null;
 };
 
 type MarketingNewsletterEvent = {
@@ -80,6 +87,8 @@ type MarketingNewsletterEvent = {
   description: string;
   url: string;
   sourceLabel: string;
+  imageUrl?: string;
+  posterUrl?: string;
 };
 
 type MarketingNewsletterCampaign = {
@@ -267,6 +276,7 @@ export class TenantService {
     const mailchimpRaw =
       obj.mailchimp && typeof obj.mailchimp === 'object' ? (obj.mailchimp as Record<string, unknown>) : null;
     const brevoRaw = obj.brevo && typeof obj.brevo === 'object' ? (obj.brevo as Record<string, unknown>) : null;
+    const bufferRaw = obj.buffer && typeof obj.buffer === 'object' ? (obj.buffer as Record<string, unknown>) : null;
     const rawCampaigns = Array.isArray(obj.newsletterCampaigns) ? obj.newsletterCampaigns : [];
 
     const smtp: MarketingSmtpConfig | null =
@@ -315,6 +325,16 @@ export class TenantService {
           }
         : null;
 
+    const buffer: MarketingBufferConfig | null =
+      bufferRaw && (cleanSecret(bufferRaw.apiKey, 500) || cleanText(bufferRaw.organizationId, 180))
+        ? {
+            ...(cleanSecret(bufferRaw.apiKey, 500) ? { apiKey: cleanSecret(bufferRaw.apiKey, 500) } : {}),
+            ...(cleanText(bufferRaw.organizationId, 180)
+              ? { organizationId: cleanText(bufferRaw.organizationId, 180) }
+              : {}),
+          }
+        : null;
+
     const newsletterCampaigns: MarketingNewsletterCampaign[] = [];
     for (const rawCampaign of rawCampaigns.slice(0, 12)) {
       if (!rawCampaign || typeof rawCampaign !== 'object') continue;
@@ -325,7 +345,7 @@ export class TenantService {
 
       const events: MarketingNewsletterEvent[] = [];
       const rawEvents = Array.isArray(campaign.events) ? campaign.events : [];
-      for (const rawEvent of rawEvents.slice(0, 8)) {
+      for (const rawEvent of rawEvents.slice(0, 20)) {
         if (!rawEvent || typeof rawEvent !== 'object') continue;
         const event = rawEvent as Record<string, unknown>;
         const eventId = cleanText(event.id, 100);
@@ -340,6 +360,8 @@ export class TenantService {
           description: cleanText(event.description, 800) || '',
           url: cleanUrl(event.url) || '',
           sourceLabel: cleanText(event.sourceLabel, 120) || '',
+          ...(cleanUrl(event.imageUrl) ? { imageUrl: cleanUrl(event.imageUrl) } : {}),
+          ...(cleanUrl(event.posterUrl) ? { posterUrl: cleanUrl(event.posterUrl) } : {}),
         });
       }
 
@@ -393,6 +415,7 @@ export class TenantService {
       ...(smtp ? { smtp } : {}),
       ...(mailchimp ? { mailchimp } : {}),
       ...(brevo ? { brevo } : {}),
+      ...(buffer ? { buffer } : {}),
     };
   }
 
@@ -680,6 +703,135 @@ export class TenantService {
         ? `https://${config.serverPrefix}.admin.mailchimp.com/campaigns/show/?id=${campaign.web_id}`
         : null,
     };
+  }
+
+  private getBufferConfig(setup: MarketingSetup | null) {
+    const apiKey = String(setup?.buffer?.apiKey || '').trim();
+    const organizationId = String(setup?.buffer?.organizationId || '').trim();
+    if (!apiKey) throw new BadRequestException('La clé API Buffer est requise.');
+    return { apiKey, organizationId };
+  }
+
+  private async bufferRequest<T>(apiKey: string, query: string): Promise<T> {
+    let response: Response;
+    try {
+      response = await fetch('https://api.buffer.com', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+      });
+    } catch {
+      throw new ServiceUnavailableException('Buffer est temporairement indisponible.');
+    }
+
+    const payload = (await response.json().catch(() => null)) as
+      | { data?: T; errors?: Array<{ message?: string }> }
+      | null;
+    if (!response.ok || !payload) {
+      throw new BadRequestException(`Buffer: requête refusée (${response.status}).`);
+    }
+    if (payload.errors?.length) {
+      throw new BadRequestException(`Buffer: ${payload.errors.map((error) => error.message).filter(Boolean).join('; ')}`);
+    }
+    if (!payload.data) throw new BadRequestException('Buffer: réponse vide.');
+    return payload.data;
+  }
+
+  private async loadBufferWorkspace(setup: MarketingSetup | null) {
+    const config = this.getBufferConfig(setup);
+    const account = await this.bufferRequest<{
+      account?: { organizations?: Array<{ id: string; name: string }> };
+    }>(
+      config.apiKey,
+      'query GetOrganizations { account { organizations { id name } } }',
+    );
+    const organizations = account.account?.organizations || [];
+    if (!organizations.length) throw new BadRequestException('Buffer: aucune organisation accessible avec cette clé.');
+    const organization =
+      organizations.find((item) => item.id === config.organizationId) || organizations[0];
+    const channelData = await this.bufferRequest<{
+      channels?: Array<{
+        id: string;
+        name: string;
+        displayName?: string | null;
+        service: string;
+        avatar?: string | null;
+        isQueuePaused?: boolean;
+      }>;
+    }>(
+      config.apiKey,
+      `query GetChannels { channels(input: { organizationId: ${JSON.stringify(organization.id)} }) { id name displayName service avatar isQueuePaused } }`,
+    );
+    return { config, organization, organizations, channels: channelData.channels || [] };
+  }
+
+  async getBufferChannels(user: RequestUser) {
+    await this.ensureAdmin(user);
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: user.tenantId },
+      select: { marketingSetup: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    const setup = this.sanitizeMarketingSetup(tenant.marketingSetup) ?? null;
+    const workspace = await this.loadBufferWorkspace(setup);
+    return {
+      ok: true,
+      organization: workspace.organization,
+      organizations: workspace.organizations,
+      channels: workspace.channels,
+    };
+  }
+
+  async createBufferPost(dto: CreateBufferPostDto, user: RequestUser) {
+    await this.ensureAdmin(user);
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: user.tenantId },
+      select: { marketingSetup: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    const setup = this.sanitizeMarketingSetup(tenant.marketingSetup) ?? null;
+    const workspace = await this.loadBufferWorkspace(setup);
+    const allowedChannelIds = new Set(workspace.channels.map((channel) => channel.id));
+    const channelIds = [...new Set(dto.channelIds.map((id) => id.trim()).filter((id) => allowedChannelIds.has(id)))];
+    if (!channelIds.length) throw new BadRequestException('Sélectionnez au moins un réseau Buffer connecté.');
+
+    let dueAt = '';
+    if (dto.mode === 'custom') {
+      const parsed = new Date(String(dto.dueAt || ''));
+      if (!Number.isFinite(parsed.getTime())) throw new BadRequestException('La date de programmation Buffer est invalide.');
+      if (parsed.getTime() <= Date.now()) throw new BadRequestException('La date Buffer doit être dans le futur.');
+      dueAt = parsed.toISOString();
+    }
+
+    const results: Array<{ channelId: string; postId: string; dueAt?: string | null }> = [];
+    const failed: Array<{ channelId: string; message: string }> = [];
+    for (const channelId of channelIds) {
+      const scheduling =
+        dto.mode === 'custom'
+          ? `mode: customScheduled, dueAt: ${JSON.stringify(dueAt)}`
+          : 'mode: addToQueue';
+      const assets = dto.imageUrl?.trim()
+        ? `assets: [{ image: { url: ${JSON.stringify(dto.imageUrl.trim())} } }]`
+        : '';
+      const query = `mutation CreatePost { createPost(input: { text: ${JSON.stringify(dto.text.trim())}, channelId: ${JSON.stringify(channelId)}, schedulingType: automatic, ${scheduling} ${assets} }) { ... on PostActionSuccess { post { id dueAt } } ... on MutationError { message } } }`;
+      try {
+        const data = await this.bufferRequest<{
+          createPost?: { post?: { id?: string; dueAt?: string | null }; message?: string };
+        }>(workspace.config.apiKey, query);
+        const result = data.createPost;
+        if (!result?.post?.id) throw new Error(result?.message || 'Buffer n’a pas créé le post.');
+        results.push({ channelId, postId: result.post.id, dueAt: result.post.dueAt });
+      } catch (error) {
+        failed.push({ channelId, message: error instanceof Error ? error.message : 'Échec Buffer' });
+      }
+    }
+    if (!results.length) {
+      throw new BadRequestException(failed.map((item) => item.message).join('; ') || 'Aucun post Buffer créé.');
+    }
+    return { ok: failed.length === 0, created: results, failed };
   }
 
   async getBranding(user: RequestUser) {
