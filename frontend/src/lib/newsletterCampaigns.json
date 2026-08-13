@@ -1,0 +1,185 @@
+{
+  "mailchimp": {
+    "provider": "MAILCHIMP",
+    "accountLabel": "Suites Mine Mailchimp",
+    "fromName": "Suites Mine",
+    "fromEmail": "contacto@suitesmine.com",
+    "replyTo": "contacto@suitesmine.com",
+    "reservationUrl": "https://hotels.cloudbeds.com/reservation/",
+    "websiteUrl": "https://www.suitesmine.com/",
+    "address": "Río Ebro 64, Colonia Cuauhtémoc, CDMX",
+    "phone": "+52 55 3666 8535",
+    "heroImage": "https://www.suitesmine.com/assets/uploads/2024/09/HSM2-32-370x555.webp",
+    "gallery": [
+      "https://www.suitesmine.com/assets/uploads/2024/09/HSM2-32-370x555.webp",
+      "https://www.suitesmine.com/assets/uploads/2024/09/HSM2-11-370x555.webp",
+      "https://www.suitesmine.com/assets/uploads/2024/09/HSM2-6-370x555.webp",
+      "https://www.suitesmine.com/assets/uploads/2024/09/escalinatas-jacuzzi-370x167.webp"
+    ],
+    "mailchimp": {
+      "apiKey": "",
+      "serverPrefix": "",
+      "audienceId": ""
+    }
+  },
+  "campaigns": [
+    {
+      "id": "agosto-cultura-reforma",
+      "month": "Agosto",
+      "sendWindow": "14–16 de agosto de 2026",
+      "segment": "Huéspedes leisure, parejas y contactos interesados en cultura y música",
+      "goal": "Convertir escapadas de última hora alrededor de Reforma y Chapultepec.",
+      "status": "READY",
+      "lastVerified": "2026-08-13",
+      "subject": "Agosto en CDMX: Sam Smith, Tamayo y una suite cerca de todo",
+      "preheader": "Tres planes para cerrar el verano desde Suites Mine, a pasos de Reforma.",
+      "headline": "Tu agosto cultural empieza en Reforma",
+      "eyebrow": "Agenda Suites Mine · Agosto 2026",
+      "heroImage": "https://www.suitesmine.com/assets/uploads/2024/09/HSM2-32-370x555.webp",
+      "body": "Hola {{firstName}},\n\nAgosto todavía guarda noches memorables en la Ciudad de México. Desde Suites Mine puedes combinar una residencia íntima de Sam Smith en el Auditorio Nacional con una tarde de arquitectura y arte en el Museo Tamayo.\n\nNuestro equipo puede ayudarte a organizar una estancia cómoda cerca de Reforma, con desayuno y recomendaciones para moverte por la ciudad. Las fechas y disponibilidad de los eventos pueden cambiar: consulta siempre la fuente oficial antes de reservar.\n\nElige tus fechas y prepara una escapada hecha a tu ritmo.",
+      "cta": "Consultar disponibilidad",
+      "ctaUrl": "https://hotels.cloudbeds.com/reservation/",
+      "highlights": ["A dos calles del Ángel", "Suites amplias con cocina", "Terraza, bar y jacuzzi"],
+      "events": [
+        {
+          "id": "sam-smith-agosto",
+          "category": "Concierto",
+          "title": "Sam Smith · To Be Free",
+          "date": "17, 18, 20 y 21 de agosto · 21:00",
+          "venue": "Auditorio Nacional",
+          "description": "Residencia de cuatro noches en uno de los recintos más emblemáticos de la ciudad.",
+          "url": "https://www.auditorio.com.mx/cartelera/2026/agosto/sam-smith.html",
+          "sourceLabel": "Auditorio Nacional"
+        },
+        {
+          "id": "tamayo-arquitectura",
+          "category": "Museo",
+          "title": "Arquitectura y cosmotécnica",
+          "date": "Hasta el 3 de enero de 2027",
+          "venue": "Museo Tamayo",
+          "description": "Una lectura contemporánea del edificio brutalista a 45 años de la inauguración del museo.",
+          "url": "https://www.museotamayo.org/exposiciones/museo-tamayo-arquitectura-y-cosmotecnica",
+          "sourceLabel": "Museo Tamayo"
+        }
+      ],
+      "mailchimp": {
+        "campaignType": "regular",
+        "tags": ["newsletter", "agosto", "cultura", "last-minute"],
+        "mergeTags": ["firstName", "fullName", "company", "email"],
+        "utmCampaign": "newsletter_agosto_2026_cultura_reforma"
+      }
+    },
+    {
+      "id": "septiembre-musica-arte",
+      "month": "Septiembre",
+      "sendWindow": "1–3 de septiembre de 2026",
+      "segment": "Parejas, viajeros internacionales y huéspedes recurrentes",
+      "goal": "Générer des réservations de week-end autour des grands concerts de septembre.",
+      "status": "READY",
+      "lastVerified": "2026-08-13",
+      "subject": "Septiembre suena a Robyn y Maroon 5 en Ciudad de México",
+      "preheader": "Conciertos, arte mexicano y una base tranquila junto a Reforma.",
+      "headline": "Septiembre: música, arte y ciudad",
+      "eyebrow": "Agenda Suites Mine · Septiembre 2026",
+      "heroImage": "https://www.suitesmine.com/assets/uploads/2024/09/HSM2-11-370x555.webp",
+      "body": "Hola {{firstName}},\n\nSeptiembre llega con una agenda que vale el viaje. Robyn y Lykke Li toman el Palacio de los Deportes, Maroon 5 cierra el mes en el Estadio Alfredo Harp Helú y el Museo Tamayo presenta los últimos días de Tamayo Horizontes.\n\nSuites Mine es tu punto de descanso junto a Reforma: una suite amplia para comenzar despacio, volver sin prisa y aprovechar la ciudad entre cada plan. Verifica horarios y disponibilidad con los organizadores antes de comprar.\n\nCuéntanos qué evento tienes en mente y te ayudamos a elegir las mejores noches.",
+      "cta": "Planear mi estancia",
+      "ctaUrl": "https://hotels.cloudbeds.com/reservation/",
+      "highlights": ["Ubicación céntrica", "Wifi de alta velocidad", "Atención personalizada"],
+      "events": [
+        {
+          "id": "robyn-septiembre",
+          "category": "Concierto",
+          "title": "Robyn · The Sexistential Tour",
+          "date": "19 de septiembre · 20:00",
+          "venue": "Palacio de los Deportes",
+          "description": "Robyn llega a CDMX acompañada por Lykke Li para una noche de pop electrónico.",
+          "url": "https://www.ticketmaster.com.mx/palacio-de-los-deportes-tickets-ciudad-de-mexico/venue/163842?page=2",
+          "sourceLabel": "Ticketmaster México"
+        },
+        {
+          "id": "maroon5-septiembre",
+          "category": "Concierto",
+          "title": "Maroon 5",
+          "date": "30 de septiembre",
+          "venue": "Estadio Alfredo Harp Helú",
+          "description": "Una gran noche pop para cerrar septiembre en la capital.",
+          "url": "https://www.ocesa.com.mx/todos-los-eventos/maroon-5-boletos-ae618",
+          "sourceLabel": "OCESA"
+        },
+        {
+          "id": "tamayo-horizontes",
+          "category": "Museo",
+          "title": "Tamayo Horizontes",
+          "date": "Hasta el 20 de septiembre",
+          "venue": "Museo Tamayo",
+          "description": "Pinturas de madurez de Rufino Tamayo reunidas en diálogo con colecciones privadas.",
+          "url": "https://www.museotamayo.org/exposiciones/tamayo-horizontes",
+          "sourceLabel": "Museo Tamayo"
+        }
+      ],
+      "mailchimp": {
+        "campaignType": "regular",
+        "tags": ["newsletter", "septiembre", "conciertos", "arte"],
+        "mergeTags": ["firstName", "fullName", "company", "email"],
+        "utmCampaign": "newsletter_septiembre_2026_musica_arte"
+      }
+    },
+    {
+      "id": "noviembre-grandes-noches",
+      "month": "Noviembre",
+      "sendWindow": "26–29 de octubre de 2026",
+      "segment": "Huéspedes recurrentes, parejas, viajeros internacionales y fans de música en vivo",
+      "goal": "Capturer les séjours liés aux grandes dates de novembre et aux week-ends prolongés.",
+      "status": "READY",
+      "lastVerified": "2026-08-13",
+      "subject": "Noviembre en CDMX: Cirque du Soleil, Soda Stereo y MUNAL",
+      "preheader": "Espectáculo, música y arte mexicano desde una suite preparada para descansar.",
+      "headline": "Grandes noches de noviembre",
+      "eyebrow": "Agenda Suites Mine · Noviembre 2026",
+      "heroImage": "https://www.suitesmine.com/assets/uploads/2024/09/HSM2-6-370x555.webp",
+      "body": "Hola {{firstName}},\n\nNoviembre trae excelentes razones para visitar la capital. Cirque du Soleil instala ECHO en la Gran Carpa Santa Fe desde el día 13, Soda Stereo presenta Ecos en el Palacio de los Deportes el 23 y el MUNAL recorre la construcción visual de México como destino.\n\nHaz de Suites Mine tu base cerca de Reforma: espacio para trabajar o descansar, atención directa y una ubicación práctica para seguir explorando al día siguiente. La venta y los horarios dependen de cada organizador; confirma la información en las fuentes enlazadas.\n\nEscríbenos tus fechas y preparamos una estancia a tu medida.",
+      "cta": "Cotizar mi escapada",
+      "ctaUrl": "https://hotels.cloudbeds.com/reservation/",
+      "highlights": ["Suite tipo apartamento", "Desayuno y bar", "Seguimiento antes de tu llegada"],
+      "events": [
+        {
+          "id": "cirque-echo-noviembre",
+          "category": "Espectáculo",
+          "title": "Cirque du Soleil · ECHO",
+          "date": "Desde el 13 de noviembre",
+          "venue": "Gran Carpa Santa Fe",
+          "description": "La nueva producción del Cirque du Soleil combina acrobacia, personajes y un universo visual inmersivo.",
+          "url": "https://www.ocesa.com.mx/todos-los-eventos/cirque-du-soleil-boletos-ae9243",
+          "sourceLabel": "OCESA"
+        },
+        {
+          "id": "soda-stereo-noviembre",
+          "category": "Concierto",
+          "title": "Soda Stereo · Ecos",
+          "date": "23 de noviembre",
+          "venue": "Palacio de los Deportes",
+          "description": "El legado de Soda Stereo vuelve a encontrarse con el público de Ciudad de México.",
+          "url": "https://www.ocesa.com.mx/todos-los-eventos/soda-stereo-boletos-ae1629933",
+          "sourceLabel": "OCESA"
+        },
+        {
+          "id": "munal-ruta-destino-noviembre",
+          "category": "Museo",
+          "title": "México: ruta y destino",
+          "date": "Hasta el 14 de febrero de 2027",
+          "venue": "Museo Nacional de Arte (MUNAL)",
+          "description": "Arte, fotografía, mapas y cultura visual exploran cómo México construyó su imagen como destino durante el siglo XX.",
+          "url": "https://munal.mx/es/exposiciones/m%C3%A9xico-ruta-y-destino",
+          "sourceLabel": "MUNAL"
+        }
+      ],
+      "mailchimp": {
+        "campaignType": "regular",
+        "tags": ["newsletter", "noviembre", "cirque-du-soleil", "soda-stereo"],
+        "mergeTags": ["firstName", "fullName", "company", "email"],
+        "utmCampaign": "newsletter_noviembre_2026_grandes_noches"
+      }
+    }
+  ]
+}

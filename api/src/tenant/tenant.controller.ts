@@ -5,7 +5,7 @@ import type { RequestUser } from '../common/user.decorator';
 import { TenantService } from './tenant.service';
 import { UpdateBrandingDto } from './dto/update-branding.dto';
 import { UpdateTenantSettingsDto } from './dto/update-settings.dto';
-import { SendNewsletterDto, SendNewsletterTestDto } from './dto/send-newsletter.dto';
+import { CreateMailchimpDraftDto, SendNewsletterDto, SendNewsletterTestDto } from './dto/send-newsletter.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tenant')
@@ -40,5 +40,15 @@ export class TenantController {
   @Post('newsletter/send')
   sendNewsletter(@Body() dto: SendNewsletterDto, @CurrentUser() user: RequestUser) {
     return this.tenantService.sendNewsletter(dto, user);
+  }
+
+  @Post('newsletter/mailchimp/test')
+  testMailchimp(@CurrentUser() user: RequestUser) {
+    return this.tenantService.testMailchimp(user);
+  }
+
+  @Post('newsletter/mailchimp/draft')
+  createMailchimpDraft(@Body() dto: CreateMailchimpDraftDto, @CurrentUser() user: RequestUser) {
+    return this.tenantService.createMailchimpDraft(dto, user);
   }
 }
