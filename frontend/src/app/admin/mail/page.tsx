@@ -35,7 +35,7 @@ const annualEvents = clone(annualEventsSeed) as AnnualEvent[];
 export default function AdminMailPage() {
   const { token } = useAuth();
   const api = useApi(token);
-  const [campaigns, setCampaigns] = useState<NewsletterCampaign[]>(() => hydrateCampaigns(clone(seed.campaigns)));
+  const [campaigns, setCampaigns] = useState<NewsletterCampaign[]>(() => mergeCampaignsWithSeed(seed.campaigns));
   const [campaignId, setCampaignId] = useState(seed.campaigns[0].id);
   const [setup, setSetup] = useState<MailchimpSetup>(emptyMailchimp);
   const [panel, setPanel] = useState<EditorPanel>('contenu');
@@ -63,7 +63,7 @@ export default function AdminMailPage() {
         const stored = window.localStorage.getItem(draftStorageKey);
         if (stored) {
           const parsed = JSON.parse(stored) as NewsletterCampaign[];
-          if (Array.isArray(parsed) && parsed.length === seed.campaigns.length) localCampaigns = hydrateCampaigns(parsed);
+          if (Array.isArray(parsed)) localCampaigns = mergeCampaignsWithSeed(parsed);
         }
       } catch {
         // A malformed local draft should never block the editor.
@@ -82,8 +82,8 @@ export default function AdminMailPage() {
           mailchimp: { ...emptyMailchimp.mailchimp, ...(saved.mailchimp ?? {}) },
           buffer: { ...emptyMailchimp.buffer, ...(saved.buffer ?? {}) },
         } as MailchimpSetup);
-        if (Array.isArray(saved.newsletterCampaigns) && saved.newsletterCampaigns.length === seed.campaigns.length) {
-          setCampaigns(hydrateCampaigns(saved.newsletterCampaigns));
+        if (Array.isArray(saved.newsletterCampaigns)) {
+          setCampaigns(mergeCampaignsWithSeed(saved.newsletterCampaigns));
         }
       } catch (err) {
         if (!cancelled) {
@@ -303,7 +303,7 @@ export default function AdminMailPage() {
             <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Marketing · Mailchimp</p>
             <h1 className="mt-1 text-3xl font-semibold">Studio newsletter Suites Mine</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-              Trois campagnes 2026 — août, septembre et novembre — avec événements vérifiés, édition complète et
+              Cinq campagnes 2026 — août, septembre, octobre, novembre et décembre — avec événements vérifiés, édition complète et
               aperçu fidèle au design Suites Mine. Le catalogue culturel couvre août à décembre et alimente aussi Buffer.
             </p>
           </div>
@@ -1300,6 +1300,21 @@ function hydrateCampaigns(value: unknown): NewsletterCampaign[] {
           })
         : [],
     };
+  });
+}
+
+function mergeCampaignsWithSeed(value: unknown): NewsletterCampaign[] {
+  const defaults = hydrateCampaigns(clone(seed.campaigns));
+  const saved = hydrateCampaigns(value);
+  return defaults.map((template) => {
+    const draft = saved.find((campaign) => campaign.id === template.id);
+    if (!draft) return template;
+    return {
+      ...template,
+      ...draft,
+      events: draft.events?.length ? draft.events : template.events,
+      mailchimp: { ...template.mailchimp, ...draft.mailchimp },
+    } as NewsletterCampaign;
   });
 }
 

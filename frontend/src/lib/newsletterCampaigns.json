@@ -126,6 +126,115 @@
       }
     },
     {
+      "id": "octubre-espectaculos-cdmx",
+      "month": "Octubre",
+      "sendWindow": "24–27 de septiembre de 2026",
+      "segment": "Viajeros culturales, parejas, familias y huéspedes interesados en música en vivo",
+      "goal": "Convertir estancias de octubre alrededor de conciertos, danza y espectáculos familiares.",
+      "status": "READY",
+      "lastVerified": "2026-08-13",
+      "subject": "Octubre en CDMX: Motorama, Amadeus, ballet y grandes conciertos",
+      "preheader": "Ocho planes de música, danza y espectáculo para vivir la ciudad desde Reforma.",
+      "headline": "Octubre se vive en grande",
+      "eyebrow": "Agenda Suites Mine · Octubre 2026",
+      "heroImage": "https://www.suitesmine.com/assets/uploads/2024/09/escalinatas-jacuzzi-370x167.webp",
+      "body": "Hola {{firstName}},\n\nOctubre reúne algunas de las noches más variadas del año en Ciudad de México: Motorama abre el mes, Amadeus cobra vida con orquesta y coro, la Compañía Nacional de Danza presenta Lago de los Cisnes y Hombres G vuelve al Auditorio Nacional. También hay opciones familiares como Monster Jam y grandes citas con Álvaro Díaz, la Sonora Santanera, Romeo Santos y Prince Royce.\n\nDesde Suites Mine puedes descansar junto a Reforma y organizar cada salida con calma. Consulta siempre horarios y disponibilidad en las fuentes oficiales enlazadas antes de comprar.\n\nElige tu evento y nosotros te ayudamos a preparar la estancia.",
+      "cta": "Reservar mi estancia de octubre",
+      "ctaUrl": "https://hotels.cloudbeds.com/reservation/",
+      "highlights": ["Cerca de Reforma", "Suites amplias con cocina", "Terraza, bar y jacuzzi"],
+      "events": [
+        {
+          "id": "motorama-octubre",
+          "category": "Concierto",
+          "title": "Motorama",
+          "date": "1 de octubre · 21:00",
+          "venue": "Auditorio Nacional",
+          "description": "El grupo de post-punk celebra veinte años de trayectoria.",
+          "url": "https://www.auditorio.com.mx/cartelera/2026/octubre/motorama.html",
+          "sourceLabel": "Auditorio Nacional",
+          "imageUrl": "https://www.auditorio.com.mx/assets/images/cartelera/2026/Motorama/Auditorio-Nacional-Motorama-Cartelera.jpg"
+        },
+        {
+          "id": "monster-jam-octubre",
+          "category": "Familia",
+          "title": "Monster Jam",
+          "date": "2, 3 y 4 de octubre",
+          "venue": "Estadio GNP Seguros",
+          "description": "Acrobacias y competencias de grandes vehículos en un espectáculo familiar.",
+          "url": "https://www.ocesa.com.mx/monster-jam",
+          "sourceLabel": "OCESA"
+        },
+        {
+          "id": "amadeus-live-octubre",
+          "category": "Cine y música",
+          "title": "Amadeus Live",
+          "date": "3 de octubre · 19:30",
+          "venue": "Auditorio Nacional",
+          "description": "La película ganadora del Óscar se proyecta en alta definición con orquesta y coro en vivo.",
+          "url": "https://www.auditorio.com.mx/cartelera/2026/octubre/amadeus-live.html",
+          "sourceLabel": "Auditorio Nacional",
+          "imageUrl": "https://www.auditorio.com.mx/assets/images/cartelera/2026/Amadeus/BANNER_600-X-420.jpg"
+        },
+        {
+          "id": "alvaro-diaz-octubre",
+          "category": "Concierto",
+          "title": "Álvaro Díaz · Omakase Tour",
+          "date": "9 y 11 de octubre",
+          "venue": "Palacio de los Deportes",
+          "description": "Dos fechas de la gira Omakase en Ciudad de México.",
+          "url": "https://www.ocesa.com.mx/todos-los-eventos/%C3%A1lvaro-d%C3%ADaz-boletos-ae1512481",
+          "sourceLabel": "OCESA"
+        },
+        {
+          "id": "lago-cisnes-octubre",
+          "category": "Danza",
+          "title": "Lago de los Cisnes",
+          "date": "10 de octubre · 20:30",
+          "venue": "Auditorio Nacional",
+          "description": "La Compañía Nacional de Danza presenta una lectura contemporánea del clásico.",
+          "url": "https://www.auditorio.com.mx/cartelera/2026/octubre/lago-de-los-cisnes.html",
+          "sourceLabel": "Auditorio Nacional",
+          "imageUrl": "https://www.auditorio.com.mx/assets/images/cartelera/2026/Lago-Cisnes/Auditorio-Nacional-Lago-Cisnes-Cartelera.jpg"
+        },
+        {
+          "id": "sonora-santanera-octubre",
+          "category": "Concierto",
+          "title": "Sonora Santanera · Concierto sinfónico",
+          "date": "11 de octubre · 18:00",
+          "venue": "Auditorio Nacional",
+          "description": "El repertorio de la Sonora Santanera cobra una nueva dimensión con orquesta.",
+          "url": "https://www.auditorio.com.mx/cartelera/2026/octubre/la-%C3%BAnica-internacional-sonora-santanera.html",
+          "sourceLabel": "Auditorio Nacional"
+        },
+        {
+          "id": "hombres-g-octubre",
+          "category": "Concierto",
+          "title": "Hombres G",
+          "date": "13, 14 y 16 de octubre · 20:30",
+          "venue": "Auditorio Nacional",
+          "description": "Tres noches de pop rock iberoamericano con Los Mejores Años De Nuestra Vida.",
+          "url": "https://www.auditorio.com.mx/cartelera/2026/octubre/hombres-g.html",
+          "sourceLabel": "Auditorio Nacional"
+        },
+        {
+          "id": "romeo-prince-octubre",
+          "category": "Concierto",
+          "title": "Romeo Santos y Prince Royce",
+          "date": "25 de octubre",
+          "venue": "Estadio GNP Seguros",
+          "description": "Dos referentes de la bachata comparten una gran noche en la capital.",
+          "url": "https://www.ocesa.com.mx/todos-los-eventos/romeo-santos-y-prince-royce-boletos-ae1658773",
+          "sourceLabel": "OCESA"
+        }
+      ],
+      "mailchimp": {
+        "campaignType": "regular",
+        "tags": ["newsletter", "octubre", "conciertos", "danza", "familia"],
+        "mergeTags": ["firstName", "fullName", "company", "email"],
+        "utmCampaign": "newsletter_octubre_2026_espectaculos_cdmx"
+      }
+    },
+    {
       "id": "noviembre-grandes-noches",
       "month": "Noviembre",
       "sendWindow": "26–29 de octubre de 2026",
@@ -179,6 +288,73 @@
         "tags": ["newsletter", "noviembre", "cirque-du-soleil", "soda-stereo"],
         "mergeTags": ["firstName", "fullName", "company", "email"],
         "utmCampaign": "newsletter_noviembre_2026_grandes_noches"
+      }
+    },
+    {
+      "id": "diciembre-fiestas-cdmx",
+      "month": "Diciembre",
+      "sendWindow": "24–27 de noviembre de 2026",
+      "segment": "Parejas, familias, huéspedes recurrentes y viajeros de fin de año",
+      "goal": "Générer des réservations pour les fêtes, les concerts et les séjours de fin d’année.",
+      "status": "READY",
+      "lastVerified": "2026-08-13",
+      "subject": "Diciembre en CDMX: MANÁ, Cirque du Soleil y arte para cerrar 2026",
+      "preheader": "Conciertos, espectáculo y museos para una escapada de fin de año junto a Reforma.",
+      "headline": "Diciembre merece una gran escapada",
+      "eyebrow": "Agenda Suites Mine · Diciembre 2026",
+      "heroImage": "https://www.suitesmine.com/assets/uploads/2024/09/HSM2-32-370x555.webp",
+      "body": "Hola {{firstName}},\n\nDiciembre transforma Ciudad de México en una escapada llena de música, espectáculo y cultura. Cirque du Soleil continúa la temporada de ECHO en Santa Fe, MANÁ cierra el año con dos noches en el Palacio de los Deportes y las exposiciones del Museo Tamayo y el MUNAL ofrecen planes tranquilos entre celebraciones.\n\nSuites Mine te recibe a dos calles del Ángel con espacio para descansar, preparar el día a tu ritmo y disfrutar la ciudad sin prisas. Confirma siempre fechas, horarios y disponibilidad en las páginas oficiales.\n\nReserva directo y convierte el cierre de 2026 en un viaje memorable.",
+      "cta": "Preparar mi escapada de diciembre",
+      "ctaUrl": "https://hotels.cloudbeds.com/reservation/",
+      "highlights": ["A dos calles del Ángel", "Suite tipo apartamento", "Atención personalizada"],
+      "events": [
+        {
+          "id": "cirque-echo-diciembre",
+          "category": "Espectáculo",
+          "title": "Cirque du Soleil · ECHO",
+          "date": "Funciones durante diciembre",
+          "venue": "Gran Carpa Santa Fe",
+          "description": "La temporada de ECHO continúa en diciembre con funciones para cerrar el año.",
+          "url": "https://www.ocesa.com.mx/todos-los-eventos/cirque-du-soleil-boletos-ae9243",
+          "sourceLabel": "OCESA"
+        },
+        {
+          "id": "mana-diciembre",
+          "category": "Concierto",
+          "title": "MANÁ",
+          "date": "16 y 17 de diciembre",
+          "venue": "Palacio de los Deportes",
+          "description": "Dos grandes noches de rock en español para cerrar la agenda musical de 2026.",
+          "url": "https://www.ticketmaster.com.mx/mana-boletos/artist/759223",
+          "sourceLabel": "Ticketmaster México"
+        },
+        {
+          "id": "tamayo-arquitectura-diciembre",
+          "category": "Museo",
+          "title": "Arquitectura y cosmotécnica",
+          "date": "Hasta el 3 de enero de 2027",
+          "venue": "Museo Tamayo",
+          "description": "Una lectura contemporánea del edificio brutalista a 45 años de la inauguración del museo.",
+          "url": "https://www.museotamayo.org/exposiciones/museo-tamayo-arquitectura-y-cosmotecnica",
+          "sourceLabel": "Museo Tamayo",
+          "imageUrl": "https://cdn.prod.website-files.com/5f3576fec2caeb654f6deb22/6a6a8db7e04a777aae497f84__MG_8780%202.jpg"
+        },
+        {
+          "id": "munal-ruta-destino-diciembre",
+          "category": "Museo",
+          "title": "México: ruta y destino",
+          "date": "Hasta el 14 de febrero de 2027",
+          "venue": "Museo Nacional de Arte (MUNAL)",
+          "description": "Arte, fotografía, mapas y cultura visual exploran cómo México construyó su imagen como destino.",
+          "url": "https://munal.mx/es/exposiciones/m%C3%A9xico-ruta-y-destino",
+          "sourceLabel": "MUNAL"
+        }
+      ],
+      "mailchimp": {
+        "campaignType": "regular",
+        "tags": ["newsletter", "diciembre", "fiestas", "mana", "cirque-du-soleil"],
+        "mergeTags": ["firstName", "fullName", "company", "email"],
+        "utmCampaign": "newsletter_diciembre_2026_fiestas_cdmx"
       }
     }
   ]

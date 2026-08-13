@@ -488,5 +488,32 @@
     "url": "https://www.ticketmaster.com.mx/mana-boletos/artist/759223",
     "sourceLabel": "Ticketmaster México",
     "posterUrl": "https://www.ticketmaster.com.mx/mana-boletos/artist/759223"
+  },
+  {
+    "id": "tamayo-arquitectura-diciembre",
+    "month": "Diciembre",
+    "sortDate": "2026-12-01",
+    "category": "Museo",
+    "title": "Arquitectura y cosmotécnica",
+    "date": "Hasta el 3 de enero de 2027",
+    "venue": "Museo Tamayo",
+    "description": "Una lectura contemporánea del edificio brutalista a 45 años de la inauguración del museo.",
+    "url": "https://www.museotamayo.org/exposiciones/museo-tamayo-arquitectura-y-cosmotecnica",
+    "sourceLabel": "Museo Tamayo",
+    "imageUrl": "https://cdn.prod.website-files.com/5f3576fec2caeb654f6deb22/6a6a8db7e04a777aae497f84__MG_8780%202.jpg",
+    "posterUrl": "https://www.museotamayo.org/exposiciones/museo-tamayo-arquitectura-y-cosmotecnica"
+  },
+  {
+    "id": "munal-ruta-destino-diciembre",
+    "month": "Diciembre",
+    "sortDate": "2026-12-01",
+    "category": "Museo",
+    "title": "México: ruta y destino",
+    "date": "Hasta el 14 de febrero de 2027",
+    "venue": "Museo Nacional de Arte (MUNAL)",
+    "description": "Arte, fotografía, mapas y cultura visual exploran cómo México construyó su imagen como destino.",
+    "url": "https://munal.mx/es/exposiciones/m%C3%A9xico-ruta-y-destino",
+    "sourceLabel": "MUNAL",
+    "posterUrl": "https://munal.mx/es/exposiciones/m%C3%A9xico-ruta-y-destino"
   }
 ]
