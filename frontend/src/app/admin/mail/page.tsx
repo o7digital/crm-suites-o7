@@ -108,10 +108,6 @@ export default function AdminMailPage() {
     window.localStorage.setItem(draftStorageKey, JSON.stringify(campaigns));
   }, [campaigns, draftsLoaded]);
 
-  useEffect(() => {
-    if (window.location.hash === '#editor') setDocumentOpen(true);
-  }, []);
-
   const html = useMemo(() => buildMailchimpHtml(selected, setup), [selected, setup]);
 
   const patchCampaign = (patch: Partial<NewsletterCampaign>) => {
@@ -339,7 +335,7 @@ export default function AdminMailPage() {
                     type="button"
                     onClick={() => {
                       setCampaignId(campaign.id);
-                      setDocumentOpen(true);
+                      setDocumentOpen(false);
                     }}
                     className={`min-w-32 rounded-xl border px-5 py-3 text-sm font-semibold transition ${
                       campaign.id === campaignId
