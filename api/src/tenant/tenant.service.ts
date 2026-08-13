@@ -96,6 +96,7 @@ type MarketingNewsletterCampaign = {
   eyebrow: string;
   heroImage: string;
   body: string;
+  bodyHtml?: string;
   cta: string;
   ctaUrl: string;
   highlights: string[];
@@ -360,6 +361,7 @@ export class TenantService {
         eyebrow: cleanText(campaign.eyebrow, 180) || '',
         heroImage: cleanUrl(campaign.heroImage) || '',
         body: cleanText(campaign.body, 20000) || '',
+        ...(cleanText(campaign.bodyHtml, 50000) ? { bodyHtml: cleanText(campaign.bodyHtml, 50000) } : {}),
         cta: cleanText(campaign.cta, 120) || '',
         ctaUrl: cleanUrl(campaign.ctaUrl) || '',
         highlights: cleanStringList(campaign.highlights, 6, 160),

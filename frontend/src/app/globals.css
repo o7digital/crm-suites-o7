@@ -130,6 +130,82 @@ a {
   color: #08090d;
 }
 
+.newsletter-doc-editor .tiptap {
+  min-height: 420px;
+  border-radius: 8px;
+  color: #403a32;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  line-height: 1.85;
+  outline: none;
+  padding: 8px 4px 48px;
+}
+
+.newsletter-doc-editor .tiptap:focus {
+  box-shadow: inset 3px 0 0 #d0a950;
+  padding-left: 20px;
+}
+
+.newsletter-doc-editor .tiptap p,
+.newsletter-preview-rich p {
+  margin: 0 0 1.15em;
+}
+
+.newsletter-doc-editor .tiptap h2,
+.newsletter-doc-editor .tiptap h3,
+.newsletter-preview-rich h2,
+.newsletter-preview-rich h3 {
+  color: #203229;
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.25;
+  margin: 1.4em 0 0.55em;
+}
+
+.newsletter-doc-editor .tiptap h2,
+.newsletter-preview-rich h2 {
+  font-size: 1.65em;
+}
+
+.newsletter-doc-editor .tiptap h3,
+.newsletter-preview-rich h3 {
+  font-size: 1.3em;
+}
+
+.newsletter-doc-editor .tiptap ul,
+.newsletter-doc-editor .tiptap ol,
+.newsletter-preview-rich ul,
+.newsletter-preview-rich ol {
+  margin: 0 0 1.15em;
+  padding-left: 1.6em;
+}
+
+.newsletter-doc-editor .tiptap ul,
+.newsletter-preview-rich ul {
+  list-style: disc;
+}
+
+.newsletter-doc-editor .tiptap ol,
+.newsletter-preview-rich ol {
+  list-style: decimal;
+}
+
+.newsletter-doc-editor .tiptap blockquote,
+.newsletter-preview-rich blockquote {
+  background: #f8f0e2;
+  border-left: 3px solid #a77f39;
+  color: #5b5247;
+  margin: 1.25em 0;
+  padding: 0.75em 1em;
+}
+
+.newsletter-doc-editor .tiptap a,
+.newsletter-preview-rich a {
+  color: #1f3a31;
+  text-decoration: underline;
+  text-decoration-color: #b5904e;
+  text-underline-offset: 3px;
+}
+
 :root[data-theme-mode='day'] body {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), transparent 240px),
     radial-gradient(900px 520px at 12% -10%, color-mix(in srgb, var(--accent) 14%, white 86%), transparent 70%),
