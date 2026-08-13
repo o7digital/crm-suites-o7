@@ -661,22 +661,30 @@ function NewsletterDocumentEditor({
             </div>
             <div className="space-y-4">
               {campaign.events.map((event, index) => (
-                <article key={event.id} className="rounded-xl border border-[#d8c8ad] bg-white p-5">
-                  <div className="grid gap-4 sm:grid-cols-[140px_1fr_auto]">
-                    <div>
-                      <DocField label="Type" value={event.category} onChange={(category) => patchEvent(index, { category })} compact />
-                      <DocField label="Date" value={event.date} onChange={(date) => patchEvent(index, { date })} compact />
+                <article key={event.id} className="overflow-hidden rounded-xl border border-[#d8c8ad] bg-white">
+                  {event.imageUrl ? (
+                    <div className="border-b border-[#d8c8ad] bg-[#ece3d4]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={event.imageUrl} alt={`Affiche de ${event.title}`} className="h-72 w-full object-cover" />
                     </div>
-                    <div>
-                      <DocField label="Événement" value={event.title} onChange={(title) => patchEvent(index, { title })} compact prominent />
-                      <DocField label="Lieu" value={event.venue} onChange={(venue) => patchEvent(index, { venue })} compact />
-                      <DocField label="Description" value={event.description} onChange={(description) => patchEvent(index, { description })} multiline compact />
-                      <DocField label="Source officielle" value={event.url} onChange={(url) => patchEvent(index, { url })} compact />
-                      <DocField label="Photo / affiche (URL HTTPS)" value={event.imageUrl || ''} onChange={(imageUrl) => patchEvent(index, { imageUrl })} compact />
+                  ) : null}
+                  <div className="p-5">
+                    <div className="grid gap-4 sm:grid-cols-[140px_1fr_auto]">
+                      <div>
+                        <DocField label="Type" value={event.category} onChange={(category) => patchEvent(index, { category })} compact />
+                        <DocField label="Date" value={event.date} onChange={(date) => patchEvent(index, { date })} compact />
+                      </div>
+                      <div>
+                        <DocField label="Événement" value={event.title} onChange={(title) => patchEvent(index, { title })} compact prominent />
+                        <DocField label="Lieu" value={event.venue} onChange={(venue) => patchEvent(index, { venue })} compact />
+                        <DocField label="Description" value={event.description} onChange={(description) => patchEvent(index, { description })} multiline compact />
+                        <DocField label="Source officielle" value={event.url} onChange={(url) => patchEvent(index, { url })} compact />
+                        <DocField label="Photo / affiche (URL HTTPS)" value={event.imageUrl || ''} onChange={(imageUrl) => patchEvent(index, { imageUrl })} compact />
+                      </div>
+                      <button type="button" onClick={() => removeEvent(index)} className="h-8 rounded-md px-2 text-xs text-red-600 hover:bg-red-50">
+                        Retirer
+                      </button>
                     </div>
-                    <button type="button" onClick={() => removeEvent(index)} className="h-8 rounded-md px-2 text-xs text-red-600 hover:bg-red-50">
-                      Retirer
-                    </button>
                   </div>
                 </article>
               ))}
@@ -824,6 +832,12 @@ function EventsEditor({
             </div>
           </summary>
           <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
+            {event.imageUrl ? (
+              <div className="overflow-hidden rounded-lg border border-white/10 bg-slate-950/40">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={event.imageUrl} alt={`Affiche de ${event.title}`} className="h-48 w-full object-cover" />
+              </div>
+            ) : null}
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Catégorie" value={event.category} onChange={(category) => patchEvent(index, { category })} />
               <Field label="Date" value={event.date} onChange={(date) => patchEvent(index, { date })} />
