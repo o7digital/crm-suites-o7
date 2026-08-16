@@ -15,6 +15,7 @@ const nav = [
   { href: '/post-sales', labelKey: 'nav.postSales' },
   { href: '/orders', labelKey: 'nav.orders' },
   { href: '/ia-pulse', labelKey: 'nav.iaPulse' },
+  { href: '/admin/mail', labelKey: 'nav.mailing' },
   { href: '/forecast', labelKey: 'nav.forecast' },
   { href: '/export', labelKey: 'nav.export' },
   { href: '/admin', labelKey: 'nav.admin' },
