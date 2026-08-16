@@ -23,7 +23,7 @@ const nav = [
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, isImpersonating, stopImpersonating } = useAuth();
   const { branding } = useBranding();
   const { t } = useI18n();
   const [accountOpen, setAccountOpen] = useState(false);
@@ -99,6 +99,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const handleLogout = async () => {
     await logout();
     router.replace('/login');
+  };
+
+  const handleStopImpersonating = () => {
+    stopImpersonating();
+    router.replace('/admin/subscriptions');
   };
 
   const toggleThemeMode = useCallback(() => {
@@ -254,6 +259,23 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-6 py-8">
+        {isImpersonating ? (
+          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-300/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-50 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="font-semibold">Session support active</p>
+              <p className="mt-1 text-xs text-amber-100/80">
+                Vous intervenez dans le compte client {user?.tenantName || user?.tenantId || ''}.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="rounded-lg bg-amber-300 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-200"
+              onClick={handleStopImpersonating}
+            >
+              Revenir au compte Olivier
+            </button>
+          </div>
+        ) : null}
         {showAdminBackToTop ? (
           <div className="mb-4 flex items-center justify-end">
             <Link href="/admin" className="btn-secondary text-sm">
