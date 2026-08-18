@@ -44,6 +44,7 @@ model Tenant {
   legalAcceptances          LegalAcceptance[]
   googleCalendarConnections GoogleCalendarConnection[]
   clientCollaborators       ClientCollaborator[]
+  oliviaIntegrationEvents   OliviaIntegrationEvent[]
 }
 
 enum UserRole {
@@ -399,6 +400,23 @@ model DealStageHistory {
   deal      Deal   @relation(fields: [dealId], references: [id])
   fromStage Stage? @relation("FromStage", fields: [fromStageId], references: [id])
   toStage   Stage  @relation("ToStage", fields: [toStageId], references: [id])
+}
+
+// Idempotency ledger for the Olivia One server-to-server opportunity integration.
+model OliviaIntegrationEvent {
+  id              String   @id @default(uuid())
+  tenantId        String
+  sourceMailbox   String
+  sourceMessageId String
+  clientId        String
+  dealId          String?
+  taskIds         Json?
+  createdAt       DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceMailbox, sourceMessageId])
+  @@index([tenantId])
 }
 
 enum TaskStatus {

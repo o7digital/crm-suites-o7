@@ -23,6 +23,7 @@ import { PostSalesModule } from './post-sales/post-sales.module';
 import { PublicLeadsModule } from './public-leads/public-leads.module';
 import { LegalModule } from './legal/legal.module';
 import { BillingModule } from './billing/billing.module';
+import { OliviaIntegrationModule } from './olivia-integration/olivia-integration.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { BillingModule } from './billing/billing.module';
     PublicLeadsModule,
     LegalModule,
     BillingModule,
+    OliviaIntegrationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
