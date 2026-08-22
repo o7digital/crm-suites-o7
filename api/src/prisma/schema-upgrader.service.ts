@@ -9,6 +9,7 @@ export class SchemaUpgraderService {
   // This keeps the API functional even if Prisma Migrate is blocked.
   async run() {
     await this.ensureUserRoleSchema();
+    await this.ensureUserLoginTrackingFields();
     await this.ensureDealClientId();
     await this.ensureDealOwnerId();
     await this.ensureDealProbability();
@@ -21,9 +22,11 @@ export class SchemaUpgraderService {
     await this.ensureSubscriptionsSchema();
     await this.ensureSubscriptionTrialAlertFields();
     await this.ensureSubscriptionStripeFields();
+    await this.ensureSubscriptionConciergeFields();
     await this.ensureTenantBrandingFields();
     await this.ensureTenantCrmSettingsFields();
     await this.ensureGoogleCalendarConnectionSchema();
+    await this.ensureOliviaIntegrationEventSchema();
   }
 
   private async tableExists(table: string) {
@@ -121,6 +124,39 @@ export class SchemaUpgraderService {
       );
     } catch {
       // Ignore permissions / already-added races.
+    }
+  }
+
+  private async ensureUserLoginTrackingFields() {
+    const hasUser = await this.tableExists('User');
+    if (!hasUser) return;
+
+    const columns: Array<{ name: string; type: string }> = [
+      { name: 'firstLoginAt', type: 'TIMESTAMP(3)' },
+      { name: 'lastLoginAt', type: 'TIMESTAMP(3)' },
+    ];
+
+    for (const col of columns) {
+      const exists = await this.columnExists('User', col.name);
+      if (exists) continue;
+      try {
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "User" ADD COLUMN "${col.name}" ${col.type};`,
+        );
+      } catch {
+        // Ignore permissions / already-added races.
+      }
+    }
+
+    try {
+      await this.prisma.$executeRawUnsafe(`
+        UPDATE "User"
+        SET "firstLoginAt" = COALESCE("firstLoginAt", "createdAt"),
+            "lastLoginAt" = COALESCE("lastLoginAt", "updatedAt")
+        WHERE "firstLoginAt" IS NULL OR "lastLoginAt" IS NULL;
+      `);
+    } catch {
+      // Keep startup resilient if an older database is still missing a column.
     }
   }
 
@@ -573,6 +609,34 @@ export class SchemaUpgraderService {
     );
   }
 
+  private async ensureSubscriptionConciergeFields() {
+    const hasSubscription = await this.tableExists('Subscription');
+    if (!hasSubscription) return;
+
+    const columns: Array<{ name: string; type: string }> = [
+      { name: 'conciergeEnabled', type: 'BOOLEAN NOT NULL DEFAULT false' },
+      { name: 'conciergeClientCode', type: 'TEXT' },
+      { name: 'conciergeSiteUrl', type: 'TEXT' },
+      { name: 'conciergeInboxUrl', type: 'TEXT' },
+    ];
+
+    for (const col of columns) {
+      const exists = await this.columnExists('Subscription', col.name);
+      if (exists) continue;
+      try {
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "Subscription" ADD COLUMN "${col.name}" ${col.type};`,
+        );
+      } catch {
+        // Ignore permissions / already-added races.
+      }
+    }
+
+    await this.prisma.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Subscription_conciergeClientCode_key" ON "Subscription"("conciergeClientCode");`,
+    );
+  }
+
   private async ensureTenantBrandingFields() {
     const columns: Array<{ name: string; type: string }> = [
       { name: 'logoDataUrl', type: 'TEXT' },
@@ -693,4 +757,58 @@ export class SchemaUpgraderService {
       }
     }
   }
+
+  private async ensureOliviaIntegrationEventSchema() {
+    const hasTable = await this.tableExists('OliviaIntegrationEvent');
+    if (!hasTable) {
+      await this.prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS "OliviaIntegrationEvent" (
+          "id" TEXT NOT NULL,
+          "tenantId" TEXT NOT NULL,
+          "sourceMailbox" TEXT NOT NULL,
+          "sourceMessageId" TEXT NOT NULL,
+          "clientId" TEXT NOT NULL,
+          "dealId" TEXT,
+          "taskIds" JSONB,
+          "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT "OliviaIntegrationEvent_pkey" PRIMARY KEY ("id")
+        );
+      `);
+    }
+
+    const hasTaskIds = await this.columnExists('OliviaIntegrationEvent', 'taskIds');
+    if (!hasTaskIds) {
+      try {
+        await this.prisma.$executeRawUnsafe(
+          `ALTER TABLE "OliviaIntegrationEvent" ADD COLUMN "taskIds" JSONB;`,
+        );
+      } catch {
+        // Ignore permissions / already-added races.
+      }
+    }
+
+    await this.prisma.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "OliviaIntegrationEvent_sourceMailbox_sourceMessageId_key" ON "OliviaIntegrationEvent"("sourceMailbox", "sourceMessageId");`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "OliviaIntegrationEvent_tenantId_idx" ON "OliviaIntegrationEvent"("tenantId");`,
+    );
+
+    const fkName = 'OliviaIntegrationEvent_tenantId_fkey';
+    const fkExists = await this.constraintExists(fkName);
+    if (!fkExists) {
+      try {
+        await this.prisma.$executeRawUnsafe(`
+          ALTER TABLE "OliviaIntegrationEvent"
+          ADD CONSTRAINT "${fkName}"
+          FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id")
+          ON DELETE CASCADE
+          ON UPDATE CASCADE;
+        `);
+      } catch {
+        // Ignore if the constraint already exists under a different name.
+      }
+    }
+  }
 }
+
