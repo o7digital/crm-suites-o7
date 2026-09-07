@@ -49,6 +49,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
               configService.get<string>('SUPABASE_JWT_SECRET') ||
               configService.get<string>('JWT_SECRET') ||
               'dev-secret';
+            if (configService.get<string>('NODE_ENV') === 'production' &&
+                (secret === 'dev-secret' || Buffer.byteLength(secret) < 32)) {
+              return done(new Error('A strong JWT secret is required in production'), undefined);
+            }
 
             const candidates: Array<string | Buffer> = [secret];
             // If the secret looks base64-ish, also try decoded bytes.
@@ -90,7 +94,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           }
 
           const allowedIssuer = configService.get<string>('CLERK_JWT_ISSUER')?.trim();
-          if (allowedIssuer && issuer.replace(/\/$/, '') !== allowedIssuer.replace(/\/$/, '')) {
+          if (!allowedIssuer || issuer !== allowedIssuer) {
             return done(new Error(`JWT issuer not allowed: ${issuer}`), undefined);
           }
 
@@ -98,23 +102,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             return done(new Error('JWT kid missing'), undefined);
           }
 
-          const jwksUri = `${issuer.replace(/\/$/, '')}/.well-known/jwks.json`;
+          if (!alg || !['RS256', 'RS384', 'RS512'].includes(alg)) {
+            return done(new Error('Unsupported JWT algorithm'), undefined);
+          }
+          const jwksUri = `${allowedIssuer.replace(/\/$/, '')}/.well-known/jwks.json`;
           const client = getJwksClient(jwksUri);
           const key = await client.getSigningKey(kid);
           const signingKey = key.getPublicKey();
 
           const expectedAudience = configService.get<string>('CLERK_JWT_AUDIENCE')?.trim();
-          if (expectedAudience) {
-            try {
-              jwt.verify(rawJwtToken, signingKey, {
-                algorithms: ['RS256', 'RS384', 'RS512'],
-                issuer,
-                audience: expectedAudience,
-              });
-            } catch (err) {
-              return done(err as Error, undefined);
-            }
-          }
+          jwt.verify(rawJwtToken, signingKey, {
+            algorithms: ['RS256', 'RS384', 'RS512'],
+            issuer: allowedIssuer,
+            audience: expectedAudience,
+          });
           return done(null, signingKey);
         } catch (err) {
           return done(err as Error, undefined);

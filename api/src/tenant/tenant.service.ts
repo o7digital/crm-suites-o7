@@ -230,6 +230,19 @@ export class TenantService {
     };
   }
 
+  private publicMarketingSetup(raw: unknown) {
+    const setup = this.sanitizeMarketingSetup(raw);
+    if (!setup) return setup;
+    for (const provider of ['smtp', 'mailchimp', 'brevo', 'buffer'] as const) {
+      const config = setup[provider] as Record<string, unknown> | undefined;
+      if (!config) continue;
+      const key = provider === 'smtp' ? 'password' : 'apiKey';
+      config[`${key}Configured`] = Boolean(config[key]);
+      delete config[key];
+    }
+    return setup;
+  }
+
   private sanitizeMarketingSetup(raw: unknown): MarketingSetup | null | undefined {
     if (raw === undefined) return undefined;
     if (raw === null) return null;
@@ -956,7 +969,10 @@ export class TenantService {
         ? (currency as (typeof this.crmDisplayCurrencies)[number])
         : 'MXN';
       const contractSetup = this.sanitizeContractSetup(tenant.contractSetup);
-      const marketingSetup = this.sanitizeMarketingSetup(tenant.marketingSetup);
+      const role = await this.getUserRole(user);
+      const marketingSetup = role === 'OWNER' || role === 'ADMIN'
+        ? this.publicMarketingSetup(tenant.marketingSetup)
+        : null;
       return {
         tenantId: tenant.id,
         tenantName: tenant.name,
@@ -991,7 +1007,29 @@ export class TenantService {
       ? String(dto.crmDisplayCurrency).toUpperCase()
       : undefined;
     const nextContractSetup = this.sanitizeContractSetup(dto.contractSetup);
-    const nextMarketingSetup = this.sanitizeMarketingSetup(dto.marketingSetup);
+    let nextMarketingSetup = this.sanitizeMarketingSetup(dto.marketingSetup);
+    if (nextMarketingSetup) {
+      const current = await this.prisma.tenant.findFirst({
+        where: { id: user.tenantId },
+        select: { marketingSetup: true },
+      });
+      const saved = this.sanitizeMarketingSetup(current?.marketingSetup);
+      // Blank or omitted credentials keep the stored value. Explicit null clears
+      // a provider, and marketingSetup: null clears the complete configuration.
+      const raw = dto.marketingSetup as Record<string, unknown>;
+      for (const provider of ['smtp', 'mailchimp', 'brevo', 'buffer'] as const) {
+        if (raw[provider] === null) continue;
+        const key = provider === 'smtp' ? 'password' : 'apiKey';
+        const oldConfig = saved?.[provider] as Record<string, unknown> | undefined;
+        const nextConfig = nextMarketingSetup[provider] as Record<string, unknown> | undefined;
+        if (oldConfig?.[key] && !nextConfig?.[key]) {
+          nextMarketingSetup = {
+            ...nextMarketingSetup,
+            [provider]: { ...(nextConfig ?? oldConfig), [key]: oldConfig[key] },
+          };
+        }
+      }
+    }
 
     try {
       const updated = await this.prisma.tenant.update({
@@ -1037,7 +1075,7 @@ export class TenantService {
         ? (currency as (typeof this.crmDisplayCurrencies)[number])
         : 'MXN';
       const contractSetup = this.sanitizeContractSetup(updated.contractSetup);
-      const marketingSetup = this.sanitizeMarketingSetup(updated.marketingSetup);
+      const marketingSetup = this.publicMarketingSetup(updated.marketingSetup);
 
       return {
         tenantId: updated.id,

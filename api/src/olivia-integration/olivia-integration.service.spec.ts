@@ -180,6 +180,7 @@ describe('OliviaIntegrationService', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           title: 'Expansion opportunity',
+          probability: 0.6,
           currency: 'USD',
           pipelineId: 'pipeline-1',
           stageId: 'stage-1',
@@ -221,5 +222,17 @@ describe('OliviaIntegrationService', () => {
       taskIds: ['existing-task'],
       duplicate: true,
     });
+  });
+
+  it.each([
+    [0, 0], [1, 1], [0.6, 0.6], [-1, 0], [60, 1],
+    [undefined, undefined], [Number.NaN, undefined], [Number.POSITIVE_INFINITY, undefined],
+  ])('stores probability %s as %s', async (probability, expected) => {
+    process.env.OLIVIA_DEFAULT_TENANT_ID = 'tenant-1';
+    const tx = buildTx();
+    await new OliviaIntegrationService(buildPrismaStub(tx)).createOpportunity({
+      sourceMailbox: 'sales@brand.com', sourceMessageId: 'probability-test', probability,
+    });
+    expect(tx.deal.create.mock.calls[0][0].data.probability).toBe(expected);
   });
 });
