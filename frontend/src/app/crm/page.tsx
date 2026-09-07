@@ -61,6 +61,12 @@ type Deal = {
   title: string;
   value: number;
   currency: string;
+  status?: Stage['status'];
+  closedAt?: string | null;
+  closeNote?: string | null;
+  lossReason?: DealLossReason | null;
+  lossComment?: string | null;
+  followUpAt?: string | null;
   probability?: number | null;
   expectedCloseDate?: string | null;
   clientId?: string | null;
@@ -71,6 +77,36 @@ type Deal = {
   pipelineId: string;
   stage?: Stage | null;
   items?: DealItem[];
+};
+
+const DEAL_LOSS_REASONS = [
+  'price',
+  'no_response',
+  'competitor',
+  'budget',
+  'project_cancelled',
+  'timing',
+  'other',
+] as const;
+type DealLossReason = (typeof DEAL_LOSS_REASONS)[number];
+
+type ClosingDraft = {
+  deal: Deal;
+  status: 'WON' | 'LOST';
+  finalValue: string;
+  closedAt: string;
+  note: string;
+  lossReason: DealLossReason | '';
+  lossComment: string;
+  followUpAt: string;
+  prepareOnboarding: boolean;
+  createFollowUp: boolean;
+};
+
+type ClosingUndo = {
+  before: Deal;
+  after: Deal;
+  message: string;
 };
 
 type WorkspaceUser = {
@@ -232,6 +268,19 @@ function toDateInputValue(value?: string | null) {
   return '';
 }
 
+function todayInputValue() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
+function tomorrowInputValue() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const local = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 10);
+}
+
 function toProbabilityPct(value?: number | null) {
   const probability = Number(value);
   if (!Number.isFinite(probability)) return '0';
@@ -296,6 +345,7 @@ export default function CrmPage() {
     reset: resetIaState,
   } = useIA();
   const lastDragAtRef = useRef<number>(0);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const proposalRef = useRef<HTMLInputElement | null>(null);
   const [crmDisplayCurrency, setCrmDisplayCurrency] = useState<DealCurrency>('MXN');
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
@@ -393,6 +443,10 @@ export default function CrmPage() {
   const [viewMode, setViewMode] = useState<CrmViewMode>('KANBAN');
   const [forecastYear, setForecastYear] = useState<number>(new Date().getFullYear());
   const [statusDropHover, setStatusDropHover] = useState<Stage['status'] | null>(null);
+  const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
+  const [closingDraft, setClosingDraft] = useState<ClosingDraft | null>(null);
+  const [closingSaving, setClosingSaving] = useState(false);
+  const [closingUndo, setClosingUndo] = useState<ClosingUndo | null>(null);
   const [workflowDraggedStageId, setWorkflowDraggedStageId] = useState<string | null>(null);
   const [workflowStageDropTarget, setWorkflowStageDropTarget] = useState<{
     stageId: string;
@@ -424,6 +478,20 @@ export default function CrmPage() {
     setWorkflowInfo(null);
     clearWorkflowStageDnD();
   };
+
+  useEffect(() => {
+    const finishDrag = () => {
+      setDraggedDealId(null);
+      setStatusDropHover(null);
+    };
+    window.addEventListener('dragend', finishDrag);
+    window.addEventListener('drop', finishDrag);
+    return () => {
+      window.removeEventListener('dragend', finishDrag);
+      window.removeEventListener('drop', finishDrag);
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!showModal) {
@@ -683,6 +751,14 @@ export default function CrmPage() {
     return map;
   }, [sortedStages]);
 
+  const dealStatusById = useMemo(() => {
+    const map: Record<string, Stage['status']> = {};
+    for (const deal of deals) {
+      map[deal.id] = deal.status ?? stageStatusById[deal.stageId] ?? 'OPEN';
+    }
+    return map;
+  }, [deals, stageStatusById]);
+
   const vendorOptions = useMemo(() => {
     if (!user?.tenantId) return [];
     return [
@@ -701,21 +777,12 @@ export default function CrmPage() {
 
   const filteredDeals = useMemo(() => {
     if (statusFilter === 'ALL') return vendorScopedDeals;
-    return vendorScopedDeals.filter((deal) => stageStatusById[deal.stageId] === statusFilter);
-  }, [stageStatusById, statusFilter, vendorScopedDeals]);
-
-  const visibleStages = useMemo(() => {
-    if (statusFilter === 'ALL') return sortedStages;
-    return sortedStages.filter((stage) => getEffectiveStageStatus(stage) === statusFilter);
-  }, [sortedStages, statusFilter]);
+    return vendorScopedDeals.filter((deal) => dealStatusById[deal.id] === statusFilter);
+  }, [dealStatusById, statusFilter, vendorScopedDeals]);
 
   const visiblePipelineStages = useMemo(() => {
-    return visibleStages.filter((stage) => {
-      const effectiveStatus = getEffectiveStageStatus(stage);
-      if (statusFilter === 'WON' || statusFilter === 'LOST') return effectiveStatus === statusFilter;
-      return effectiveStatus === 'OPEN';
-    });
-  }, [statusFilter, visibleStages]);
+    return sortedStages.filter((stage) => getEffectiveStageStatus(stage) === 'OPEN');
+  }, [sortedStages]);
 
   const firstWonStage = useMemo(() => {
     return sortedStages.find((stage) => getEffectiveStageStatus(stage) === 'WON') || null;
@@ -726,20 +793,20 @@ export default function CrmPage() {
   }, [sortedStages]);
 
   const openLeadsCount = useMemo(() => {
-    return filteredDeals.reduce((sum, deal) => (stageStatusById[deal.stageId] === 'OPEN' ? sum + 1 : sum), 0);
-  }, [filteredDeals, stageStatusById]);
+    return filteredDeals.reduce((sum, deal) => (dealStatusById[deal.id] === 'OPEN' ? sum + 1 : sum), 0);
+  }, [dealStatusById, filteredDeals]);
 
   const openDeals = useMemo(() => {
-    return filteredDeals.filter((deal) => stageStatusById[deal.stageId] === 'OPEN');
-  }, [filteredDeals, stageStatusById]);
+    return filteredDeals.filter((deal) => dealStatusById[deal.id] === 'OPEN');
+  }, [dealStatusById, filteredDeals]);
 
   const wonDeals = useMemo(() => {
-    return filteredDeals.filter((deal) => stageStatusById[deal.stageId] === 'WON');
-  }, [filteredDeals, stageStatusById]);
+    return filteredDeals.filter((deal) => dealStatusById[deal.id] === 'WON');
+  }, [dealStatusById, filteredDeals]);
 
   const lostDeals = useMemo(() => {
-    return filteredDeals.filter((deal) => stageStatusById[deal.stageId] === 'LOST');
-  }, [filteredDeals, stageStatusById]);
+    return filteredDeals.filter((deal) => dealStatusById[deal.id] === 'LOST');
+  }, [dealStatusById, filteredDeals]);
 
   const wonTotalLabel = useMemo(() => {
     return formatDealsTotalInCurrency(wonDeals, crmDisplayCurrency, fx, fxLoading);
@@ -764,15 +831,10 @@ export default function CrmPage() {
     return Math.round((probabilities.reduce((sum, value) => sum + value, 0) / probabilities.length) * 100);
   }, [openDeals, stages]);
 
-  const showStatusDropZones = statusFilter === 'ALL' || statusFilter === 'OPEN';
   const summaryStatuses = useMemo(() => {
-    if (statusFilter === 'ALL') {
-      return (viewMode === 'KANBAN' ? ['WON'] : ['WON', 'LOST']) as Stage['status'][];
-    }
-    if (viewMode === 'KANBAN' && statusFilter === 'LOST') return [] as Stage['status'][];
-    if (statusFilter === 'OPEN') return [] as Stage['status'][];
+    if (statusFilter === 'ALL' || statusFilter === 'OPEN') return [] as Stage['status'][];
     return [statusFilter];
-  }, [statusFilter, viewMode]);
+  }, [statusFilter]);
 
   const forecastMonthOrder = useMemo(() => {
     const currentMonth = new Date().getMonth();
@@ -780,12 +842,12 @@ export default function CrmPage() {
   }, []);
 
   const forecastPipelineDeals = useMemo(() => {
-    return filteredDeals.filter((deal) => stageStatusById[deal.stageId] === 'OPEN');
-  }, [filteredDeals, stageStatusById]);
+    return filteredDeals.filter((deal) => dealStatusById[deal.id] === 'OPEN');
+  }, [dealStatusById, filteredDeals]);
 
   const forecastLostDeals = useMemo(() => {
-    return filteredDeals.filter((deal) => stageStatusById[deal.stageId] === 'LOST');
-  }, [filteredDeals, stageStatusById]);
+    return filteredDeals.filter((deal) => dealStatusById[deal.id] === 'LOST');
+  }, [dealStatusById, filteredDeals]);
 
   const forecastColumns = useMemo(() => {
     return forecastMonthOrder.map((month) => {
@@ -954,6 +1016,16 @@ export default function CrmPage() {
     const source = cached ?? fallback;
     return [...(source || [])].sort((a, b) => a.position - b.position);
   }, [modalPipelineId, pipelineId, stages, stagesByPipelineId]);
+
+  const modalDealStages = useMemo(
+    () =>
+      modalSortedStages.filter(
+        (stage) =>
+          getEffectiveStageStatus(stage) === 'OPEN' ||
+          (editingDeal?.stageId === stage.id && editingDeal.pipelineId === modalPipelineId),
+      ),
+    [editingDeal?.pipelineId, editingDeal?.stageId, modalPipelineId, modalSortedStages],
+  );
 
   const modalDefaultStageId = useMemo(() => {
     const openStage = modalSortedStages.find((stage) => getEffectiveStageStatus(stage) === 'OPEN');
@@ -1407,35 +1479,152 @@ export default function CrmPage() {
     [dealOrderByStageId, filteredDeals],
   );
 
-  const handleMarkEditingDealStatus = useCallback(
-    async (status: 'WON' | 'LOST') => {
-      if (!editingDeal) return;
-      const targetStage = modalSortedStages.find((s) => getEffectiveStageStatus(s) === status);
-      if (!targetStage) {
-        setError(`No ${status} stage available in this pipeline`);
-        return;
-      }
-      setDealStatusSaving(status);
-      setError(null);
-      try {
-        const updated = await api<Deal>(`/deals/${editingDeal.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ stageId: targetStage.id }),
-        });
-        const merged = { ...editingDeal, ...updated, stageId: targetStage.id };
-        setEditingDeal(merged);
-        setForm((prev) => ({ ...prev, stageId: targetStage.id }));
-        setDeals((prev) => prev.map((d) => (d.id === editingDeal.id ? { ...d, ...merged } : d)));
-        setShowModal(false);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : `Unable to mark ${status}`;
-        setError(message);
-      } finally {
-        setDealStatusSaving(null);
-      }
-    },
-    [api, editingDeal, modalSortedStages],
-  );
+  const makeClosingDraft = (deal: Deal, status: 'WON' | 'LOST'): ClosingDraft => ({
+    deal,
+    status,
+    finalValue: String(deal.value ?? ''),
+    closedAt: toDateInputValue(deal.closedAt) || todayInputValue(),
+    note: deal.closeNote || '',
+    lossReason: deal.lossReason || '',
+    lossComment: deal.lossComment || '',
+    followUpAt: toDateInputValue(deal.followUpAt),
+    prepareOnboarding: false,
+    createFollowUp: false,
+  });
+
+  const showClosingUndo = (before: Deal, after: Deal, status: 'WON' | 'LOST') => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setClosingUndo({
+      before,
+      after,
+      message: status === 'WON' ? t('crm.close.wonToast') : t('crm.close.lostToast'),
+    });
+    undoTimerRef.current = setTimeout(() => setClosingUndo(null), 7000);
+  };
+
+  const performClose = async (
+    deal: Deal,
+    status: 'WON' | 'LOST',
+    details?: Partial<ClosingDraft>,
+    announce = true,
+  ) => {
+    const targetStage = status === 'WON' ? firstWonStage : firstLostStage;
+    if (!targetStage) {
+      setError(`No ${status} stage available in this pipeline`);
+      return null;
+    }
+
+    const optimisticClosedAt = details?.closedAt || new Date().toISOString();
+    const optimistic: Deal = {
+      ...deal,
+      status,
+      stageId: targetStage.id,
+      stage: targetStage,
+      closedAt: optimisticClosedAt,
+      value: details?.finalValue ? Number(details.finalValue) : deal.value,
+      closeNote: details?.note ?? deal.closeNote,
+      lossReason: status === 'LOST' ? details?.lossReason || deal.lossReason : null,
+      lossComment: status === 'LOST' ? details?.lossComment ?? deal.lossComment : null,
+      followUpAt: details?.followUpAt || null,
+    };
+
+    setClosingSaving(true);
+    setError(null);
+    setDraggedDealId(null);
+    setStatusDropHover(null);
+    setDeals((prev) => prev.map((item) => (item.id === deal.id ? optimistic : item)));
+
+    try {
+      const updated = await api<Deal>(`/deals/${deal.id}/close`, {
+        method: 'POST',
+        body: JSON.stringify({
+          status,
+          finalValue: details?.finalValue ? Number(details.finalValue) : undefined,
+          closedAt: details?.closedAt || undefined,
+          note: details?.note || undefined,
+          lossReason: status === 'LOST' ? details?.lossReason : undefined,
+          lossComment: status === 'LOST' ? details?.lossComment || undefined : undefined,
+          followUpAt: details?.followUpAt || undefined,
+          prepareOnboarding: details?.prepareOnboarding || false,
+          createFollowUp: details?.createFollowUp || false,
+        }),
+      });
+      const merged = { ...optimistic, ...updated };
+      setDeals((prev) => prev.map((item) => (item.id === deal.id ? merged : item)));
+      if (announce) showClosingUndo(deal, merged, status);
+      return merged;
+    } catch (err) {
+      setDeals((prev) => prev.map((item) => (item.id === deal.id ? deal : item)));
+      const message = err instanceof Error ? err.message : `Unable to mark ${status}`;
+      setError(message);
+      return null;
+    } finally {
+      setClosingSaving(false);
+    }
+  };
+
+  const handleDropDealToStatus = async (dealId: string, status: 'WON' | 'LOST') => {
+    const deal = deals.find((item) => item.id === dealId);
+    if (!deal || dealStatusById[deal.id] !== 'OPEN') return;
+    lastDragAtRef.current = Date.now();
+    setDraggedDealId(null);
+    setStatusDropHover(null);
+
+    if (status === 'LOST') {
+      setClosingDraft(makeClosingDraft(deal, status));
+      return;
+    }
+
+    const updated = await performClose(deal, status);
+    if (updated) setClosingDraft(makeClosingDraft(updated, status));
+  };
+
+  const handleSaveClosingDraft = async () => {
+    if (!closingDraft) return;
+    if (closingDraft.status === 'LOST' && !closingDraft.lossReason) {
+      setError(t('crm.close.lossReasonRequired'));
+      return;
+    }
+    const updated = await performClose(
+      closingDraft.deal,
+      closingDraft.status,
+      closingDraft,
+      closingDraft.status === 'LOST',
+    );
+    if (updated) setClosingDraft(null);
+  };
+
+  const handleUndoClosing = async () => {
+    if (!closingUndo) return;
+    const undo = closingUndo;
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setClosingUndo(null);
+    setClosingDraft(null);
+    setDeals((prev) => prev.map((item) => (item.id === undo.before.id ? undo.before : item)));
+    try {
+      const reopened = await api<Deal>(`/deals/${undo.before.id}/reopen`, {
+        method: 'POST',
+        body: JSON.stringify({ stageId: undo.before.stageId }),
+      });
+      setDeals((prev) =>
+        prev.map((item) =>
+          item.id === undo.before.id ? { ...undo.before, ...reopened } : item,
+        ),
+      );
+    } catch (err) {
+      setDeals((prev) => prev.map((item) => (item.id === undo.after.id ? undo.after : item)));
+      const message = err instanceof Error ? err.message : t('crm.close.undoFailed');
+      setError(message);
+    }
+  };
+
+  const handleMarkEditingDealStatus = async (status: 'WON' | 'LOST') => {
+    if (!editingDeal) return;
+    setDealStatusSaving(status);
+    setShowModal(false);
+    await handleDropDealToStatus(editingDeal.id, status);
+    setDealStatusSaving(null);
+  };
 
   const handleAnalyzeEditingDeal = useCallback(async () => {
     if (!editingDeal) return;
@@ -1469,15 +1658,6 @@ export default function CrmPage() {
     form.value,
     products,
   ]);
-
-  const handleDropDealToStatus = async (dealId: string, status: Stage['status']) => {
-    const targetStage = status === 'WON' ? firstWonStage : firstLostStage;
-    if (!targetStage) {
-      setError(`No ${status} stage available in this pipeline`);
-      return;
-    }
-    await handleMoveDeal(dealId, targetStage.id);
-  };
 
   const handleMoveDealToForecastMonth = async (dealId: string, month: number) => {
     const targetDeal = deals.find((deal) => deal.id === dealId);
@@ -2088,7 +2268,7 @@ export default function CrmPage() {
           </div>
         )}
 
-        {viewMode === 'KANBAN' ? (
+        {viewMode === 'KANBAN' && (statusFilter === 'ALL' || statusFilter === 'OPEN') ? (
           <>
           {/* Keep all stages on one line (no wrap). Horizontal scroll if needed. */}
           <div
@@ -2114,26 +2294,19 @@ export default function CrmPage() {
                   onMoveDeal={handleMoveDeal}
                   onReorderDealInStage={handleReorderDealInStage}
                   onOpenDeal={openDealFromCard}
-                  onDealDragStart={() => {
+                  onDealDragStart={(dealId) => {
                     lastDragAtRef.current = Date.now();
+                    setDraggedDealId(dealId);
                   }}
+                  onDealDragEnd={() => {
+                    setDraggedDealId(null);
+                    setStatusDropHover(null);
+                  }}
+                  onCloseDeal={(dealId, status) => void handleDropDealToStatus(dealId, status)}
                   onRequestAddStageAfter={(sourceStage) => openWorkflowEditor(sourceStage.id)}
                   highlighted={highlightStageId === stage.id}
                 />
               ))}
-              {(statusFilter === 'ALL' || statusFilter === 'LOST') ? (
-                <LostDealsColumn
-                  deals={lostDeals}
-                  totalLabel={lostTotalLabel}
-                  displayCurrency={crmDisplayCurrency}
-                  lostStage={firstLostStage}
-                  onOpenDeal={openEditModal}
-                  onDealDragStart={() => {
-                    lastDragAtRef.current = Date.now();
-                  }}
-                  onMoveToLost={(dealId) => handleDropDealToStatus(dealId, 'LOST')}
-                />
-              ) : null}
             </div>
           </div>
           </>
@@ -2159,7 +2332,7 @@ export default function CrmPage() {
                     <td className="px-3 py-2 font-semibold text-slate-100">{deal.title}</td>
                     <td className="px-3 py-2 text-slate-300">{deal.client ? getClientDisplayName(deal.client) : '—'}</td>
                     <td className="px-3 py-2 text-slate-300">{stageNameById[deal.stageId] ? stageName(stageNameById[deal.stageId]) : '—'}</td>
-                    <td className="px-3 py-2 text-slate-400">{stageStatusById[deal.stageId] ? t(`stageStatus.${stageStatusById[deal.stageId]}`) : '—'}</td>
+                    <td className="px-3 py-2 text-slate-400">{dealStatusById[deal.id] ? t(`stageStatus.${dealStatusById[deal.id]}`) : '—'}</td>
                     <td className="px-3 py-2 text-right text-slate-200">{deal.currency} {Number(deal.value || 0).toLocaleString()}</td>
                     <td className="px-3 py-2 text-right text-slate-300">{Math.round((Number.isFinite(Number(deal.probability)) ? Number(deal.probability) : 0) * 100)}%</td>
                     <td className="px-3 py-2 text-slate-400">{toDateInputValue(deal.expectedCloseDate) || '—'}</td>
@@ -2313,45 +2486,53 @@ export default function CrmPage() {
           </div>
         ) : null}
 
-        {viewMode === 'KANBAN' && showStatusDropZones ? (
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {(['WON', 'LOST'] as Stage['status'][]).map((status) => {
-            const targetStage = status === 'WON' ? firstWonStage : firstLostStage;
-            const isHover = statusDropHover === status;
-            return (
-              <div
-                key={status}
-                className={`rounded-xl border px-4 py-3 transition ${
-                  targetStage
-                    ? isHover
-                      ? 'border-amber-300/60 bg-amber-400/10'
-                      : 'border-white/15 bg-white/5'
-                    : 'border-white/10 bg-white/[0.03] opacity-70'
-                }`}
-                onDragOver={(event) => {
-                  if (!targetStage) return;
-                  event.preventDefault();
-                  setStatusDropHover(status);
-                }}
-                onDragLeave={() => {
-                  if (statusDropHover === status) setStatusDropHover(null);
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  setStatusDropHover(null);
-                  const dealId = event.dataTransfer.getData('text/plain');
-                  if (!dealId) return;
-                  handleDropDealToStatus(dealId, status);
-                }}
-              >
-                <p className="text-sm font-semibold text-slate-100">{t(`stageStatus.${status}`)}</p>
-                <p className="mt-1 text-xs text-slate-400">
-                  {targetStage ? stageName(targetStage.name) : t('crm.noStagesShort')}
-                </p>
-              </div>
-            );
-          })}
-        </div>
+        {viewMode === 'KANBAN' && draggedDealId ? (
+          <div className="fixed inset-x-3 bottom-3 z-[70] mx-auto max-w-4xl rounded-2xl border border-white/15 bg-slate-950/95 p-3 shadow-2xl shadow-black/60 backdrop-blur-xl transition-all duration-200 md:inset-x-8 md:bottom-6">
+            <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+              {t('crm.close.dropHint')}
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {(['WON', 'LOST'] as const).map((status) => {
+                const targetStage = status === 'WON' ? firstWonStage : firstLostStage;
+                const isHover = statusDropHover === status;
+                return (
+                  <div
+                    key={status}
+                    className={`flex min-h-20 items-center justify-center rounded-xl border-2 border-dashed px-3 text-center transition-all duration-150 ${
+                      !targetStage
+                        ? 'border-white/10 bg-white/[0.03] text-slate-500'
+                        : status === 'WON'
+                          ? isHover
+                            ? 'scale-[1.02] border-emerald-200 bg-emerald-400/25 text-emerald-50'
+                            : 'border-emerald-400/50 bg-emerald-500/10 text-emerald-100'
+                          : isHover
+                            ? 'scale-[1.02] border-rose-200 bg-rose-400/25 text-rose-50'
+                            : 'border-rose-400/50 bg-rose-500/10 text-rose-100'
+                    }`}
+                    onDragOver={(event) => {
+                      if (!targetStage) return;
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = 'move';
+                      setStatusDropHover(status);
+                    }}
+                    onDragLeave={() => {
+                      if (statusDropHover === status) setStatusDropHover(null);
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const dealId = event.dataTransfer.getData('text/plain') || draggedDealId;
+                      setStatusDropHover(null);
+                      if (dealId && targetStage) void handleDropDealToStatus(dealId, status);
+                    }}
+                  >
+                    <p className="text-sm font-bold tracking-[0.08em] md:text-lg">
+                      {status === 'WON' ? '✓ GANADO / WON' : '✕ PERDIDO / LOST'}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         ) : null}
 
         {summaryStatuses.length > 0 ? (
@@ -2406,6 +2587,148 @@ export default function CrmPage() {
                 </div>
               );
             })}
+          </div>
+        ) : null}
+
+        {closingDraft ? (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 px-4 py-8 backdrop-blur-sm">
+            <div className="card w-full max-w-lg border border-white/15 p-5 shadow-2xl shadow-black/60">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className={`text-xs font-semibold uppercase tracking-[0.16em] ${closingDraft.status === 'WON' ? 'text-emerald-300' : 'text-rose-300'}`}>
+                    {closingDraft.status === 'WON' ? '✓ GANADO / WON' : '✕ PERDIDO / LOST'}
+                  </p>
+                  <h2 className="mt-1 text-xl font-semibold text-slate-50">{closingDraft.deal.title}</h2>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {closingDraft.status === 'WON' ? t('crm.close.wonOptionalHint') : t('crm.close.lostRequiredHint')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-lg border border-white/10 px-2 py-1 text-slate-400 transition hover:bg-white/10 hover:text-white"
+                  onClick={() => setClosingDraft(null)}
+                  aria-label={t('common.close')}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                {closingDraft.status === 'WON' ? (
+                  <label className="text-sm text-slate-300">
+                    {t('crm.close.finalAmount')}
+                    <div className="mt-1 flex rounded-lg border border-white/10 bg-black/20 focus-within:border-violet-300/50">
+                      <span className="px-3 py-2 text-xs text-slate-500">{closingDraft.deal.currency}</span>
+                      <input
+                        className="min-w-0 flex-1 bg-transparent px-2 py-2 text-slate-100 outline-none"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={closingDraft.finalValue}
+                        onChange={(event) => setClosingDraft((prev) => prev ? { ...prev, finalValue: event.target.value } : prev)}
+                      />
+                    </div>
+                  </label>
+                ) : (
+                  <label className="text-sm text-slate-300">
+                    {t('crm.close.lossReason')} <span className="text-rose-300">*</span>
+                    <select
+                      className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-slate-100"
+                      value={closingDraft.lossReason}
+                      onChange={(event) => setClosingDraft((prev) => prev ? { ...prev, lossReason: event.target.value as DealLossReason } : prev)}
+                    >
+                      <option value="">{t('crm.close.selectReason')}</option>
+                      {DEAL_LOSS_REASONS.map((reason) => (
+                        <option key={reason} value={reason}>{t(`crm.close.reason.${reason}`)}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                <label className="text-sm text-slate-300">
+                  {t('crm.close.closedAt')}
+                  <input
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-slate-100"
+                    type="date"
+                    value={closingDraft.closedAt}
+                    onChange={(event) => setClosingDraft((prev) => prev ? { ...prev, closedAt: event.target.value } : prev)}
+                  />
+                </label>
+
+                <label className="text-sm text-slate-300 sm:col-span-2">
+                  {closingDraft.status === 'WON' ? t('crm.close.note') : t('crm.close.lossComment')}
+                  <textarea
+                    className="mt-1 min-h-20 w-full resize-y rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-slate-100 outline-none focus:border-violet-300/50"
+                    maxLength={4000}
+                    value={closingDraft.status === 'WON' ? closingDraft.note : closingDraft.lossComment}
+                    onChange={(event) => setClosingDraft((prev) => prev ? closingDraft.status === 'WON' ? { ...prev, note: event.target.value } : { ...prev, lossComment: event.target.value } : prev)}
+                  />
+                </label>
+
+                <label className="text-sm text-slate-300 sm:col-span-2">
+                  {t('crm.close.followUpAt')}
+                  <input
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-slate-100"
+                    type="date"
+                    min={tomorrowInputValue()}
+                    value={closingDraft.followUpAt}
+                    onChange={(event) => setClosingDraft((prev) => prev ? { ...prev, followUpAt: event.target.value } : prev)}
+                  />
+                </label>
+              </div>
+
+              <div className="mt-4 space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                {closingDraft.status === 'WON' ? (
+                  <label className="flex items-center gap-3 text-sm text-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={closingDraft.prepareOnboarding}
+                      onChange={(event) => setClosingDraft((prev) => prev ? { ...prev, prepareOnboarding: event.target.checked } : prev)}
+                    />
+                    {t('crm.close.prepareOnboarding')}
+                  </label>
+                ) : null}
+                <label className="flex items-center gap-3 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={closingDraft.createFollowUp}
+                    disabled={!closingDraft.followUpAt || !closingDraft.deal.clientId}
+                    onChange={(event) => setClosingDraft((prev) => prev ? { ...prev, createFollowUp: event.target.checked } : prev)}
+                  />
+                  {t('crm.close.createFollowUp')}
+                </label>
+                {!closingDraft.deal.clientId ? (
+                  <p className="text-xs text-amber-200/80">{t('crm.close.followUpNeedsContact')}</p>
+                ) : null}
+              </div>
+
+              <div className="mt-5 flex justify-end gap-3">
+                <button type="button" className="btn-secondary" onClick={() => setClosingDraft(null)} disabled={closingSaving}>
+                  {closingDraft.status === 'WON' ? t('crm.close.skip') : t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className={closingDraft.status === 'WON' ? 'btn-primary' : 'rounded-lg bg-rose-500 px-4 py-2 font-semibold text-white transition hover:bg-rose-400 disabled:opacity-50'}
+                  onClick={() => void handleSaveClosingDraft()}
+                  disabled={closingSaving || (closingDraft.status === 'LOST' && !closingDraft.lossReason)}
+                >
+                  {closingSaving ? t('common.saving') : closingDraft.status === 'WON' ? t('common.save') : t('crm.close.confirmLost')}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {closingUndo ? (
+          <div className="fixed inset-x-4 bottom-5 z-[90] mx-auto flex max-w-md items-center justify-between gap-4 rounded-xl border border-white/15 bg-slate-950/95 px-4 py-3 shadow-2xl shadow-black/60 backdrop-blur-xl">
+            <p className="text-sm text-slate-100">{closingUndo.message}</p>
+            <button
+              type="button"
+              className="rounded-lg border border-violet-300/40 bg-violet-400/10 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-violet-100 transition hover:bg-violet-400/20"
+              onClick={() => void handleUndoClosing()}
+            >
+              {t('crm.close.undo')}
+            </button>
           </div>
         ) : null}
 
@@ -2924,10 +3247,10 @@ export default function CrmPage() {
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={form.stageId}
                     onChange={(e) => setForm((prev) => ({ ...prev, stageId: e.target.value }))}
-                    disabled={modalStagesLoading || modalSortedStages.length === 0}
+                    disabled={modalStagesLoading || modalDealStages.length === 0}
                   >
-                    <option value="">{modalSortedStages.length ? t('crm.selectStage') : t('crm.noStagesShort')}</option>
-                    {modalSortedStages.map((s) => (
+                    <option value="">{modalDealStages.length ? t('crm.selectStage') : t('crm.noStagesShort')}</option>
+                    {modalDealStages.map((s) => (
                       <option key={s.id} value={s.id}>
                         {stageName(s.name)} · {getEffectiveStageStatus(s) === 'WON' && isOperationsLikeStage(s.name) ? 'Operaciones' : t(`stageStatus.${getEffectiveStageStatus(s)}`)} ·{' '}
                         {Math.round((s.probability ?? 0) * 100)}%
@@ -3361,6 +3684,8 @@ function StageColumn({
   onReorderDealInStage,
   onOpenDeal,
   onDealDragStart,
+  onDealDragEnd,
+  onCloseDeal,
   onRequestAddStageAfter,
   highlighted,
 }: {
@@ -3377,7 +3702,9 @@ function StageColumn({
     placement: DealDropPlacement,
   ) => void;
   onOpenDeal: (deal: Deal) => void;
-  onDealDragStart: () => void;
+  onDealDragStart: (dealId: string) => void;
+  onDealDragEnd: () => void;
+  onCloseDeal: (dealId: string, status: 'WON' | 'LOST') => void;
   onRequestAddStageAfter: (stage: Stage) => void;
   highlighted: boolean;
 }) {
@@ -3483,8 +3810,10 @@ function StageColumn({
             draggable
             onDragStart={(event) => {
               event.dataTransfer.setData('text/plain', deal.id);
-              onDealDragStart();
+              event.dataTransfer.effectAllowed = 'move';
+              onDealDragStart(deal.id);
             }}
+            onDragEnd={onDealDragEnd}
             onDragOver={(event) => {
               event.preventDefault();
             }}
@@ -3562,6 +3891,28 @@ function StageColumn({
             <p className="text-xs text-slate-400">
               {deal.currency} {Number(deal.value).toLocaleString()}
             </p>
+            <div className="mt-3 grid grid-cols-2 gap-2 md:hidden">
+              <button
+                type="button"
+                className="rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-2 py-1.5 text-[11px] font-bold text-emerald-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCloseDeal(deal.id, 'WON');
+                }}
+              >
+                ✓ WON
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-2 py-1.5 text-[11px] font-bold text-rose-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCloseDeal(deal.id, 'LOST');
+                }}
+              >
+                ✕ LOST
+              </button>
+            </div>
           </div>
         ))}
         {deals.length === 0 && <p className="text-xs text-slate-500">{t('crm.noDeals')}</p>}

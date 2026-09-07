@@ -9,6 +9,8 @@ import { RequestUser } from '../common/user.decorator';
 import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
 import { MoveStageDto } from './dto/move-stage.dto';
+import { CloseDealDto } from './dto/close-deal.dto';
+import { ReopenDealDto } from './dto/reopen-deal.dto';
 import * as fs from 'fs';
 
 const DEAL_BASE_SELECT = {
@@ -41,6 +43,7 @@ const DEAL_BASE_SELECT = {
 
 type DealSchemaCaps = {
   hasClientId: boolean;
+  hasClosingFields: boolean;
   hasOwnerId: boolean;
   hasProductTables: boolean;
   hasProposalFilePath: boolean;
@@ -66,7 +69,18 @@ export class DealsService {
         FROM information_schema.columns
         WHERE table_schema = 'public'
           AND table_name = 'Deal'
-          AND column_name IN ('clientId', 'ownerId', 'probability', 'proposalFilePath')
+          AND column_name IN (
+            'clientId',
+            'ownerId',
+            'probability',
+            'proposalFilePath',
+            'status',
+            'closedAt',
+            'closeNote',
+            'lossReason',
+            'lossComment',
+            'followUpAt'
+          )
       `,
       this.prisma.$queryRaw<Array<{ table_name: string }>>`
         SELECT table_name
@@ -77,6 +91,17 @@ export class DealsService {
     ]);
 
     const hasClientId = dealColumns.some((c) => c.column_name === 'clientId');
+    const closingColumnNames = [
+      'status',
+      'closedAt',
+      'closeNote',
+      'lossReason',
+      'lossComment',
+      'followUpAt',
+    ];
+    const hasClosingFields = closingColumnNames.every((name) =>
+      dealColumns.some((column) => column.column_name === name),
+    );
     const hasOwnerId = dealColumns.some((c) => c.column_name === 'ownerId');
     const hasProbability = dealColumns.some(
       (c) => c.column_name === 'probability',
@@ -90,6 +115,7 @@ export class DealsService {
 
     const caps = {
       hasClientId,
+      hasClosingFields,
       hasOwnerId,
       hasProductTables,
       hasProposalFilePath,
@@ -104,6 +130,14 @@ export class DealsService {
     if (caps.hasClientId) {
       select.clientId = true;
       select.client = true;
+    }
+    if (caps.hasClosingFields) {
+      select.status = true;
+      select.closedAt = true;
+      select.closeNote = true;
+      select.lossReason = true;
+      select.lossComment = true;
+      select.followUpAt = true;
     }
     if (caps.hasOwnerId) {
       select.ownerId = true;
@@ -278,7 +312,18 @@ export class DealsService {
           tenantId: user.tenantId,
           pipelineId: dto.pipelineId,
           stageId,
-          ...(caps.hasProbability ? { probability: dto.probability ?? null } : {}),
+          ...(caps.hasClosingFields
+            ? {
+                status: targetStageStatus ?? 'OPEN',
+                closedAt:
+                  targetStageStatus === 'WON' || targetStageStatus === 'LOST'
+                    ? new Date()
+                    : null,
+              }
+            : {}),
+          ...(caps.hasProbability
+            ? { probability: dto.probability ?? null }
+            : {}),
         },
       });
 
@@ -295,7 +340,12 @@ export class DealsService {
       }
 
       if (this.isPostSalesHandoffStage(targetStageStatus, targetStageName)) {
-        await this.ensurePostSalesCaseForDeal(tx, deal.id, user.tenantId, user.userId);
+        await this.ensurePostSalesCaseForDeal(
+          tx,
+          deal.id,
+          user.tenantId,
+          user.userId,
+        );
       }
 
       const created = await tx.deal.findFirst({
@@ -352,6 +402,7 @@ export class DealsService {
       stageId: string;
       clientId?: string | null;
       ownerId?: string | null;
+      status?: 'OPEN' | 'WON' | 'LOST';
       probability?: number | null;
       proposalFilePath?: string | null;
       items?: Array<{
@@ -360,6 +411,23 @@ export class DealsService {
         unitPrice?: Prisma.Decimal | null;
       }>;
     };
+
+    let duplicatedStageId = source.stageId;
+    if (caps.hasClosingFields && source.status && source.status !== 'OPEN') {
+      const firstOpenStage = await this.prisma.stage.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          pipelineId: source.pipelineId,
+          status: 'OPEN',
+        },
+        orderBy: { position: 'asc' },
+        select: { id: true },
+      });
+      if (!firstOpenStage) {
+        throw new BadRequestException('Pipeline has no open stage');
+      }
+      duplicatedStageId = firstOpenStage.id;
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const duplicated = await tx.deal.create({
@@ -370,7 +438,8 @@ export class DealsService {
           expectedCloseDate: source.expectedCloseDate ?? undefined,
           tenantId: user.tenantId,
           pipelineId: source.pipelineId,
-          stageId: source.stageId,
+          stageId: duplicatedStageId,
+          ...(caps.hasClosingFields ? { status: 'OPEN', closedAt: null } : {}),
           ...(caps.hasClientId ? { clientId: source.clientId ?? null } : {}),
           ...(caps.hasOwnerId
             ? { ownerId: source.ownerId ?? user.userId }
@@ -425,6 +494,7 @@ export class DealsService {
         id: true,
         pipelineId: true,
         stageId: true,
+        ...(caps.hasClosingFields ? { status: true } : {}),
         ...(caps.hasProbability ? { probability: true } : {}),
       },
     });
@@ -466,7 +536,8 @@ export class DealsService {
           orderBy: { position: 'asc' },
           select: { id: true, status: true, name: true },
         });
-        if (!firstStage) throw new BadRequestException('Pipeline has no stages');
+        if (!firstStage)
+          throw new BadRequestException('Pipeline has no stages');
         targetStageId = firstStage.id;
         resolvedTargetStageId = firstStage.id;
         targetStageStatus = firstStage.status;
@@ -492,6 +563,12 @@ export class DealsService {
         targetStageName = targetStage.name;
       }
       targetStageId = resolvedTargetStageId;
+    }
+
+    if (targetStageStatus === 'LOST' && targetStageId !== existing.stageId) {
+      throw new BadRequestException(
+        'A loss reason is required. Use the deal closing action.',
+      );
     }
 
     let ownerId: string | null | undefined = undefined;
@@ -526,6 +603,18 @@ export class DealsService {
         ? { pipelineId: targetPipelineId }
         : {}),
       ...(targetStageId !== existing.stageId ? { stageId: targetStageId } : {}),
+      ...(caps.hasClosingFields && targetStageStatus
+        ? targetStageStatus === 'OPEN'
+          ? {
+              status: 'OPEN',
+              closedAt: null,
+              closeNote: null,
+              lossReason: null,
+              lossComment: null,
+              followUpAt: null,
+            }
+          : { status: targetStageStatus, closedAt: new Date() }
+        : {}),
     };
 
     if (targetStageId === existing.stageId) {
@@ -553,7 +642,12 @@ export class DealsService {
       });
 
       if (this.isPostSalesHandoffStage(targetStageStatus, targetStageName)) {
-        await this.ensurePostSalesCaseForDeal(tx, existing.id, user.tenantId, user.userId);
+        await this.ensurePostSalesCaseForDeal(
+          tx,
+          existing.id,
+          user.tenantId,
+          user.userId,
+        );
       }
 
       return updated;
@@ -634,7 +728,12 @@ export class DealsService {
           ? { ownerId: user.userId }
           : {}),
       },
-      select: { id: true, stageId: true, pipelineId: true },
+      select: {
+        id: true,
+        stageId: true,
+        pipelineId: true,
+        ...(caps.hasClosingFields ? { status: true } : {}),
+      },
     });
     if (!deal) throw new NotFoundException('Deal not found');
 
@@ -649,6 +748,12 @@ export class DealsService {
 
     if (deal.stageId === dto.stageId) return deal;
 
+    if (stage.status === 'LOST') {
+      throw new BadRequestException(
+        'A loss reason is required. Use the deal closing action.',
+      );
+    }
+
     return this.prisma.$transaction(async (tx) => {
       await tx.dealStageHistory.create({
         data: {
@@ -661,15 +766,224 @@ export class DealsService {
 
       const updated = await tx.deal.update({
         where: { id: deal.id },
-        data: { stageId: dto.stageId },
-        select: { id: true, stageId: true },
+        data: {
+          stageId: dto.stageId,
+          ...(caps.hasClosingFields
+            ? stage.status === 'OPEN'
+              ? {
+                  status: 'OPEN',
+                  closedAt: null,
+                  closeNote: null,
+                  lossReason: null,
+                  lossComment: null,
+                  followUpAt: null,
+                }
+              : { status: stage.status, closedAt: new Date() }
+            : {}),
+        },
+        select: this.dealSelect(caps),
       });
 
       if (this.isPostSalesHandoffStage(stage.status, stage.name)) {
-        await this.ensurePostSalesCaseForDeal(tx, deal.id, user.tenantId, user.userId);
+        await this.ensurePostSalesCaseForDeal(
+          tx,
+          deal.id,
+          user.tenantId,
+          user.userId,
+        );
       }
 
       return updated;
+    });
+  }
+
+  async close(id: string, dto: CloseDealDto, user: RequestUser) {
+    const caps = await this.getSchemaCaps();
+    if (!caps.hasClosingFields) {
+      throw new BadRequestException(
+        'CRM schema upgrade pending (missing deal closing fields). Please retry in a minute.',
+      );
+    }
+
+    const role = await this.getUserRole(user);
+    const existing = await this.prisma.deal.findFirst({
+      where: {
+        id,
+        tenantId: user.tenantId,
+        ...(caps.hasOwnerId && role === 'MEMBER'
+          ? { ownerId: user.userId }
+          : {}),
+      },
+      select: {
+        id: true,
+        title: true,
+        clientId: true,
+        pipelineId: true,
+        stageId: true,
+        status: true,
+        followUpAt: true,
+      },
+    });
+    if (!existing) throw new NotFoundException('Deal not found');
+
+    const targetStatus = dto.status;
+    if (targetStatus === 'LOST' && !dto.lossReason) {
+      throw new BadRequestException('Loss reason is required');
+    }
+
+    const targetStage = await this.prisma.stage.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        pipelineId: existing.pipelineId,
+        status: targetStatus,
+      },
+      orderBy: { position: 'asc' },
+      select: { id: true, name: true, status: true },
+    });
+    if (!targetStage) {
+      throw new BadRequestException(
+        `No ${targetStatus} stage available in this pipeline`,
+      );
+    }
+
+    const closedAt = dto.closedAt ? new Date(dto.closedAt) : new Date();
+    const followUpAt = dto.followUpAt ? new Date(dto.followUpAt) : null;
+    if (followUpAt && followUpAt.getTime() <= Date.now()) {
+      throw new BadRequestException('Follow-up date must be in the future');
+    }
+    if (dto.createFollowUp && !followUpAt) {
+      throw new BadRequestException('A follow-up date is required');
+    }
+    if (dto.createFollowUp && !existing.clientId) {
+      throw new BadRequestException(
+        'Link a contact to this deal before creating a follow-up',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      if (existing.stageId !== targetStage.id) {
+        await tx.dealStageHistory.create({
+          data: {
+            tenantId: user.tenantId,
+            dealId: existing.id,
+            fromStageId: existing.stageId,
+            toStageId: targetStage.id,
+          },
+        });
+      }
+
+      const updated = await tx.deal.update({
+        where: { id: existing.id },
+        data: {
+          stageId: targetStage.id,
+          status: targetStatus,
+          closedAt,
+          value: dto.finalValue,
+          closeNote: dto.note?.trim() || null,
+          lossReason: targetStatus === 'LOST' ? dto.lossReason : null,
+          lossComment:
+            targetStatus === 'LOST' ? dto.lossComment?.trim() || null : null,
+          followUpAt,
+        },
+        select: this.dealSelect(caps),
+      });
+
+      if (targetStatus === 'WON' && dto.prepareOnboarding) {
+        await this.ensurePostSalesCaseForDeal(
+          tx,
+          existing.id,
+          user.tenantId,
+          user.userId,
+        );
+      }
+
+      if (dto.createFollowUp && followUpAt && existing.clientId) {
+        const title = `Follow-up: ${existing.title}`;
+        const duplicate = await tx.task.findFirst({
+          where: {
+            tenantId: user.tenantId,
+            clientId: existing.clientId,
+            title,
+            dueDate: followUpAt,
+          },
+          select: { id: true },
+        });
+        if (!duplicate) {
+          await tx.task.create({
+            data: {
+              tenantId: user.tenantId,
+              clientId: existing.clientId,
+              title,
+              dueDate: followUpAt,
+              status: 'PENDING',
+            },
+          });
+        }
+      }
+
+      return updated;
+    });
+  }
+
+  async reopen(id: string, dto: ReopenDealDto, user: RequestUser) {
+    const caps = await this.getSchemaCaps();
+    if (!caps.hasClosingFields) {
+      throw new BadRequestException(
+        'CRM schema upgrade pending (missing deal closing fields). Please retry in a minute.',
+      );
+    }
+
+    const role = await this.getUserRole(user);
+    const deal = await this.prisma.deal.findFirst({
+      where: {
+        id,
+        tenantId: user.tenantId,
+        ...(caps.hasOwnerId && role === 'MEMBER'
+          ? { ownerId: user.userId }
+          : {}),
+      },
+      select: { id: true, stageId: true, pipelineId: true },
+    });
+    if (!deal) throw new NotFoundException('Deal not found');
+
+    const targetStage = await this.prisma.stage.findFirst({
+      where: {
+        id: dto.stageId,
+        tenantId: user.tenantId,
+        pipelineId: deal.pipelineId,
+        status: 'OPEN',
+      },
+      select: { id: true },
+    });
+    if (!targetStage) {
+      throw new BadRequestException('Open stage not found for pipeline');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      if (deal.stageId !== targetStage.id) {
+        await tx.dealStageHistory.create({
+          data: {
+            tenantId: user.tenantId,
+            dealId: deal.id,
+            fromStageId: deal.stageId,
+            toStageId: targetStage.id,
+          },
+        });
+      }
+
+      return tx.deal.update({
+        where: { id: deal.id },
+        data: {
+          stageId: targetStage.id,
+          status: 'OPEN',
+          closedAt: null,
+          closeNote: null,
+          lossReason: null,
+          lossComment: null,
+          followUpAt: null,
+        },
+        select: this.dealSelect(caps),
+      });
     });
   }
 

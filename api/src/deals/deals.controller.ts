@@ -18,6 +18,8 @@ import { DealsService } from './deals.service';
 import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
 import { MoveStageDto } from './dto/move-stage.dto';
+import { CloseDealDto } from './dto/close-deal.dto';
+import { ReopenDealDto } from './dto/reopen-deal.dto';
 import { JwtAuthGuard } from '../common/jwt-auth.guard';
 import { CurrentUser } from '../common/user.decorator';
 import type { RequestUser } from '../common/user.decorator';
@@ -122,6 +124,24 @@ export class DealsController {
     @CurrentUser() user: RequestUser,
   ) {
     return this.dealsService.moveStage(id, dto, user);
+  }
+
+  @Post(':id/close')
+  close(
+    @Param('id') id: string,
+    @Body() dto: CloseDealDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.dealsService.close(id, dto, user);
+  }
+
+  @Post(':id/reopen')
+  reopen(
+    @Param('id') id: string,
+    @Body() dto: ReopenDealDto,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.dealsService.reopen(id, dto, user);
   }
 
   @Delete(':id')
