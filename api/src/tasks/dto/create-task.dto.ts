@@ -66,6 +66,18 @@ export class CreateTaskDto {
   @Transform(({ value }) => trimString(value))
   clientId: string;
 
+  @IsOptional()
+  @IsString()
+  assigneeId?: string | null;
+
+  @IsOptional()
+  @IsIn(['LOW', 'MEDIUM', 'HIGH', 'URGENT'])
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+
+  @IsOptional()
+  @IsUUID('4')
+  opportunityId?: string | null;
+
   @IsUUID('4')
   @IsOptional()
   postSalesCaseId?: string;

@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsUUID,
   IsBoolean,
   IsDateString,
   IsIn,
@@ -28,6 +29,9 @@ function normalizeStatus(value: unknown) {
 }
 
 export class CloseDealDto {
+  @IsOptional() @IsUUID('4') operationId?: string;
+  @IsOptional() @IsDateString() expectedUpdatedAt?: string;
+
   @Transform(({ value }) => normalizeStatus(value))
   @IsIn(['WON', 'LOST'])
   status: 'WON' | 'LOST';

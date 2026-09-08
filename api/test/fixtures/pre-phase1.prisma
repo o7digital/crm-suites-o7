@@ -30,7 +30,6 @@ model Tenant {
 
   users                     User[]
   clients                   Client[]
-  dealActivities            DealActivity[]
   tasks                     Task[]
   invoices                  Invoice[]
   subscriptions             Subscription[]
@@ -79,7 +78,6 @@ model User {
   updatedAt    DateTime  @updatedAt
 
   tenant                   Tenant                    @relation(fields: [tenantId], references: [id])
-  assignedTasks            Task[]                    @relation("TaskAssignee")
   deals                    Deal[]                    @relation("DealOwner")
   clientsOwned             Client[]                  @relation("ClientOwner")
   postSalesCasesOwned      PostSalesCase[]           @relation("PostSalesCaseOwner")
@@ -224,22 +222,12 @@ model Task {
   tenantId        String
   clientId        String
   postSalesCaseId String?
-  assigneeId      String?
-  priority        TaskPriority @default(MEDIUM)
-  opportunityId   String?
-  completedAt     DateTime?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   client        Client         @relation(fields: [clientId], references: [id])
   postSalesCase PostSalesCase? @relation(fields: [postSalesCaseId], references: [id], onDelete: SetNull)
-  assignee User? @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  opportunity Deal? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
-
-  @@index([tenantId, status, dueDate])
-  @@index([tenantId, assigneeId])
-  @@index([opportunityId])
 }
 
 model GoogleCalendarConnection {
@@ -322,9 +310,6 @@ model Deal {
   lossComment       String?
   followUpAt        DateTime?
   probability       Float?
-  lastActivityAt    DateTime?
-  nextActionAt      DateTime?
-  boardOrder        Int             @default(0)
   expectedCloseDate DateTime?
   proposalFilePath  String?
   clientId          String?
@@ -340,8 +325,6 @@ model Deal {
   owner         User?              @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   pipeline      Pipeline           @relation(fields: [pipelineId], references: [id])
   stage         Stage              @relation(fields: [stageId], references: [id])
-  tasks         Task[]
-  activities    DealActivity[]
   history       DealStageHistory[]
   items         DealItem[]
   postSalesCase PostSalesCase?
@@ -349,9 +332,6 @@ model Deal {
   @@index([ownerId])
   @@index([tenantId, pipelineId, status])
   @@index([tenantId, closedAt])
-  @@index([tenantId, status, nextActionAt])
-  @@index([tenantId, status, lastActivityAt])
-  @@index([tenantId, stageId, boardOrder])
 }
 
 model PostSalesCase {
@@ -491,26 +471,4 @@ enum PostSalesPriority {
   medium
   high
   urgent
-}
-
-// Additive Phase 1 audit, retaining the existing Deal model.
-model DealActivity {
-  id String @id @default(uuid())
-  tenantId String
-  dealId String
-  actorId String
-  action String
-  before Json?
-  after Json?
-  createdAt DateTime @default(now())
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  @@index([tenantId, dealId, createdAt])
-}
-
-enum TaskPriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
 }

@@ -1,3 +1,4 @@
+import { jwtProfile } from './jwt-policy';
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
@@ -31,91 +32,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             return done(new Error('Invalid JWT'), undefined);
           }
 
-          const alg = decoded.header.alg as string | undefined;
-          const kid = decoded.header.kid as string | undefined;
-          const iss = (decoded.payload as Record<string, unknown> | undefined)?.iss as string | undefined;
-
-          if (process.env.JWT_DEBUG === 'true') {
-            // eslint-disable-next-line no-console
-            console.log('[auth] jwt header', { alg, kid, iss });
+          const alg = String(decoded.header.alg || '');
+          const profile = jwtProfile(configService, decoded.payload?.iss, alg);
+          const options: jwt.VerifyOptions = {
+            algorithms: [alg as jwt.Algorithm], issuer: profile.issuer, audience: profile.audience,
+          };
+          if (alg === 'HS256') {
+            jwt.verify(rawJwtToken, profile.secret!, options);
+            return done(null, profile.secret);
           }
-          if (alg && alg.startsWith('HS')) {
-            const allowedHsAlgs = ['HS256', 'HS384', 'HS512'] as const;
-            if (!allowedHsAlgs.includes(alg as (typeof allowedHsAlgs)[number])) {
-              return done(new Error(`Unsupported HS alg: ${alg}`), undefined);
-            }
-            const algorithm = alg as jwt.Algorithm;
-            const secret =
-              configService.get<string>('SUPABASE_JWT_SECRET') ||
-              configService.get<string>('JWT_SECRET') ||
-              'dev-secret';
-            if (configService.get<string>('NODE_ENV') === 'production' &&
-                (secret === 'dev-secret' || Buffer.byteLength(secret) < 32)) {
-              return done(new Error('A strong JWT secret is required in production'), undefined);
-            }
-
-            const candidates: Array<string | Buffer> = [secret];
-            // If the secret looks base64-ish, also try decoded bytes.
-            if (secret.endsWith('=') || /^[A-Za-z0-9+/]+={0,2}$/.test(secret)) {
-              try {
-                candidates.push(Buffer.from(secret, 'base64'));
-              } catch {
-                // ignore decode errors
-              }
-            }
-
-            let lastErr: Error | null = null;
-            for (const candidate of candidates) {
-              try {
-                jwt.verify(rawJwtToken, candidate, { algorithms: [algorithm] });
-                if (process.env.JWT_DEBUG === 'true') {
-                  // eslint-disable-next-line no-console
-                  console.log('[auth] jwt hs verify ok', {
-                    using: candidate instanceof Buffer ? 'base64-decoded' : 'raw',
-                  });
-                }
-                return done(null, candidate);
-              } catch (err) {
-                lastErr = err as Error;
-              }
-            }
-
-            if (process.env.JWT_DEBUG === 'true' && lastErr) {
-              // eslint-disable-next-line no-console
-              console.log('[auth] jwt hs verify failed', { message: lastErr.message });
-            }
-            return done(lastErr ?? new Error('JWT HS verification failed'), undefined);
-          }
-
-          const payload = decoded.payload || {};
-          const issuer = payload.iss as string | undefined;
-          if (!issuer) {
-            return done(new Error('JWT issuer missing'), undefined);
-          }
-
-          const allowedIssuer = configService.get<string>('CLERK_JWT_ISSUER')?.trim();
-          if (!allowedIssuer || issuer !== allowedIssuer) {
-            return done(new Error(`JWT issuer not allowed: ${issuer}`), undefined);
-          }
-
-          if (!kid) {
-            return done(new Error('JWT kid missing'), undefined);
-          }
-
-          if (!alg || !['RS256', 'RS384', 'RS512'].includes(alg)) {
-            return done(new Error('Unsupported JWT algorithm'), undefined);
-          }
-          const jwksUri = `${allowedIssuer.replace(/\/$/, '')}/.well-known/jwks.json`;
-          const client = getJwksClient(jwksUri);
-          const key = await client.getSigningKey(kid);
+          const kid = decoded.header.kid;
+          if (typeof kid !== 'string' || !kid) throw new Error('JWT kid missing');
+          const issuerUrl = new URL(profile.issuer!);
+          if (issuerUrl.protocol !== 'https:') throw new Error('JWT issuer must use HTTPS');
+          const base = profile.issuer!.replace(/\/$/, '');
+          const jwksUri = `${base}/.well-known/jwks.json`;
+          const key = await getJwksClient(jwksUri).getSigningKey(kid);
           const signingKey = key.getPublicKey();
-
-          const expectedAudience = configService.get<string>('CLERK_JWT_AUDIENCE')?.trim();
-          jwt.verify(rawJwtToken, signingKey, {
-            algorithms: ['RS256', 'RS384', 'RS512'],
-            issuer: allowedIssuer,
-            audience: expectedAudience,
-          });
+          jwt.verify(rawJwtToken, signingKey, options);
           return done(null, signingKey);
         } catch (err) {
           return done(err as Error, undefined);
@@ -125,12 +59,27 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    const tenantId =
+    if (typeof payload.sub !== 'string' || !payload.sub) throw new ForbiddenException('JWT subject missing');
+    const membership = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { tenantId: true } });
+    const requestedTenant =
       payload.tenant_id ||
       payload.tenantId ||
       payload.user_metadata?.tenant_id ||
       payload.user_metadata?.tenantId ||
       payload.sub;
+    if (typeof requestedTenant !== 'string') throw new ForbiddenException('Invalid workspace claim');
+    const tenantId = membership?.tenantId || requestedTenant;
+    if (!membership) {
+      const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
+      if (tenant) {
+        const inviteToken = payload.user_metadata?.invite_token || payload.user_metadata?.inviteToken;
+        const invitation = payload.email ? await this.prisma.userInvite.findFirst({ where: {
+          tenantId, status: 'PENDING', email: { equals: payload.email.trim(), mode: 'insensitive' },
+          ...(typeof inviteToken === 'string' ? { token: inviteToken } : {}),
+        }, select: { id: true } }) : null;
+        if (!invitation) throw new ForbiddenException('Workspace membership or invitation required');
+      }
+    }
 
     try {
       const customerSubscription = await this.prisma.subscription.findFirst({

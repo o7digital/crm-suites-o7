@@ -127,11 +127,11 @@ export default function AdminMailPage() {
 
   const persistWorkspace = async (nextCampaigns = campaigns) => {
     const nextSetup = { ...setup, provider: 'MAILCHIMP', newsletterCampaigns: nextCampaigns } as MailchimpSetup;
-    await api('/tenant/settings', {
+    const saved = await api<TenantSettingsResponse>('/tenant/settings', {
       method: 'PATCH',
       body: JSON.stringify({ marketingSetup: nextSetup }),
     });
-    setSetup(nextSetup);
+    setSetup({ ...nextSetup, ...saved.settings.marketingSetup, mailchimp: { ...nextSetup.mailchimp, ...saved.settings.marketingSetup?.mailchimp, apiKey: '' } });
   };
 
   const saveDrafts = async () => {
@@ -244,8 +244,8 @@ export default function AdminMailPage() {
 
   const persistBufferConfig = async (buffer: BufferConfig) => {
     const nextSetup = { ...setup, buffer };
-    await api('/tenant/settings', { method: 'PATCH', body: JSON.stringify({ marketingSetup: nextSetup }) });
-    setSetup(nextSetup);
+    const saved = await api<TenantSettingsResponse>('/tenant/settings', { method: 'PATCH', body: JSON.stringify({ marketingSetup: nextSetup }) });
+    setSetup({ ...nextSetup, buffer: { ...buffer, ...saved.settings.marketingSetup?.buffer, apiKey: '' } });
   };
 
   const moveEvent = (index: number, direction: -1 | 1) => {
@@ -941,7 +941,7 @@ function MailchimpEditor({
           type="password"
           value={setup.mailchimp.apiKey}
           onChange={(apiKey) => setSetup((current) => ({ ...current, mailchimp: { ...current.mailchimp, apiKey } }))}
-          placeholder="••••••••••••••••-us21"
+          placeholder="Laisser vide pour conserver la clé enregistrée"
         />
         <div className="grid gap-3 sm:grid-cols-2">
           <Field

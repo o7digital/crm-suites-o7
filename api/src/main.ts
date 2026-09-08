@@ -42,6 +42,7 @@ async function bootstrap() {
     }),
   );
 
+  if (process.env.RUN_LEGACY_SCHEMA_UPGRADER === 'true') {
   try {
     await app.get(SchemaUpgraderService).run();
     // eslint-disable-next-line no-console
@@ -49,6 +50,8 @@ async function bootstrap() {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.log('[db] schema upgrade skipped', err instanceof Error ? err.message : err);
+  }
+
   }
 
   const port = process.env.PORT ?? 4000;

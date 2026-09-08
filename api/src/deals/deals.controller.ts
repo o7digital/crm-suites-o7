@@ -1,3 +1,5 @@
+import { DealActionsService } from './deal-actions.service';
+import { RankDealDto, UndoCloseDto } from './dto/rank-deal.dto';
 import {
   Body,
   Controller,
@@ -32,7 +34,7 @@ import type { Request, Response } from 'express';
 @UseGuards(JwtAuthGuard)
 @Controller('deals')
 export class DealsController {
-  constructor(private readonly dealsService: DealsService) {
+  constructor(private readonly dealsService: DealsService, private readonly actions: DealActionsService) {
     if (!fs.existsSync(uploadRoot)) {
       fs.mkdirSync(uploadRoot, { recursive: true });
     }
@@ -132,8 +134,17 @@ export class DealsController {
     @Body() dto: CloseDealDto,
     @CurrentUser() user: RequestUser,
   ) {
-    return this.dealsService.close(id, dto, user);
+    return this.actions.close(id, dto, user);
   }
+
+  @Get(':id/activity')
+  history(@Param('id') id: string, @CurrentUser() user: RequestUser) { return this.actions.history(id, user); }
+
+  @Post(':id/undo-close')
+  undo(@Param('id') id: string, @Body() dto: UndoCloseDto, @CurrentUser() user: RequestUser) { return this.actions.undo(id, dto, user); }
+
+  @Patch(':id/rank')
+  rank(@Param('id') id: string, @Body() dto: RankDealDto, @CurrentUser() user: RequestUser) { return this.actions.rank(id, dto, user); }
 
   @Post(':id/reopen')
   reopen(

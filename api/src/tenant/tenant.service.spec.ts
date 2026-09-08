@@ -1,3 +1,4 @@
+import { transformMarketingSecrets } from './marketing-secrets';
 import { ForbiddenException } from '@nestjs/common';
 import { TenantService } from './tenant.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -26,6 +27,9 @@ function setup(role = 'ADMIN') {
 }
 
 describe('tenant settings credentials', () => {
+  const previousKey = process.env.MARKETING_ENCRYPTION_KEY;
+  beforeEach(() => { process.env.MARKETING_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64'); });
+  afterEach(() => { if (previousKey === undefined) delete process.env.MARKETING_ENCRYPTION_KEY; else process.env.MARKETING_ENCRYPTION_KEY = previousKey; });
   it('never exposes stored secrets to administrators and reports configured credentials', async () => {
     const { service, prisma } = setup();
     const result = await service.getSettings(user);
@@ -49,7 +53,7 @@ describe('tenant settings credentials', () => {
     const result = await service.updateSettings({ marketingSetup: {
       provider: 'MAILCHIMP', mailchimp: { apiKey: '', audienceId: 'list-2' },
     } }, user);
-    expect(prisma.tenant.update.mock.calls[0][0].data.marketingSetup.mailchimp).toEqual({ apiKey: 'mailchimp-secret', audienceId: 'list-2' });
+    expect(transformMarketingSecrets(prisma.tenant.update.mock.calls[0][0].data.marketingSetup, false).mailchimp).toEqual({ apiKey: 'mailchimp-secret', audienceId: 'list-2' });
     expect(JSON.stringify(result)).not.toContain('mailchimp-secret');
   });
 
@@ -58,7 +62,7 @@ describe('tenant settings credentials', () => {
     await service.updateSettings({ marketingSetup: {
       provider: 'MAILCHIMP', mailchimp: { apiKey: 'replacement' }, smtp: null,
     } }, user);
-    const saved = prisma.tenant.update.mock.calls[0][0].data.marketingSetup;
+    const saved = transformMarketingSecrets(prisma.tenant.update.mock.calls[0][0].data.marketingSetup, false);
     expect(saved.mailchimp.apiKey).toBe('replacement');
     expect(saved.smtp).toBeUndefined();
   });

@@ -1,3 +1,4 @@
+import { transformMarketingSecrets } from './marketing-secrets';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import nodemailer from 'nodemailer';
 import { Prisma } from '@prisma/client';
@@ -230,8 +231,12 @@ export class TenantService {
     };
   }
 
+  private readMarketingSetup(raw: unknown) {
+    return this.sanitizeMarketingSetup(transformMarketingSecrets(raw, false));
+  }
+
   private publicMarketingSetup(raw: unknown) {
-    const setup = this.sanitizeMarketingSetup(raw);
+    const setup = this.readMarketingSetup(raw);
     if (!setup) return setup;
     for (const provider of ['smtp', 'mailchimp', 'brevo', 'buffer'] as const) {
       const config = setup[provider] as Record<string, unknown> | undefined;
@@ -648,7 +653,7 @@ export class TenantService {
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    const setup = this.sanitizeMarketingSetup(tenant.marketingSetup) ?? null;
+    const setup = this.readMarketingSetup(tenant.marketingSetup) ?? null;
     const config = this.getMailchimpConfig(setup);
     const ping = await this.mailchimpRequest<{ health_status?: string }>(config, '/ping');
     return {
@@ -667,7 +672,7 @@ export class TenantService {
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    const setup = this.sanitizeMarketingSetup(tenant.marketingSetup) ?? null;
+    const setup = this.readMarketingSetup(tenant.marketingSetup) ?? null;
     const config = this.getMailchimpConfig(setup);
     const campaign = await this.mailchimpRequest<{ id: string; web_id?: number; status?: string }>(config, '/campaigns', {
       method: 'POST',
@@ -788,7 +793,7 @@ export class TenantService {
       select: { marketingSetup: true },
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
-    const setup = this.sanitizeMarketingSetup(tenant.marketingSetup) ?? null;
+    const setup = this.readMarketingSetup(tenant.marketingSetup) ?? null;
     const workspace = await this.loadBufferWorkspace(setup);
     return {
       ok: true,
@@ -805,7 +810,7 @@ export class TenantService {
       select: { marketingSetup: true },
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
-    const setup = this.sanitizeMarketingSetup(tenant.marketingSetup) ?? null;
+    const setup = this.readMarketingSetup(tenant.marketingSetup) ?? null;
     const workspace = await this.loadBufferWorkspace(setup);
     const allowedChannelIds = new Set(workspace.channels.map((channel) => channel.id));
     const channelIds = [...new Set(dto.channelIds.map((id) => id.trim()).filter((id) => allowedChannelIds.has(id)))];
@@ -1013,7 +1018,7 @@ export class TenantService {
         where: { id: user.tenantId },
         select: { marketingSetup: true },
       });
-      const saved = this.sanitizeMarketingSetup(current?.marketingSetup);
+      const saved = this.readMarketingSetup(current?.marketingSetup);
       // Blank or omitted credentials keep the stored value. Explicit null clears
       // a provider, and marketingSetup: null clears the complete configuration.
       const raw = dto.marketingSetup as Record<string, unknown>;
@@ -1051,7 +1056,7 @@ export class TenantService {
                 marketingSetup:
                   nextMarketingSetup === null
                     ? Prisma.DbNull
-                    : (nextMarketingSetup as Prisma.InputJsonValue),
+                    : (transformMarketingSecrets(nextMarketingSetup, true) as Prisma.InputJsonValue),
               }
             : {}),
         },
@@ -1109,7 +1114,7 @@ export class TenantService {
       });
       if (!tenant) throw new NotFoundException('Tenant not found');
 
-      const setup = this.sanitizeMarketingSetup(tenant.marketingSetup) ?? null;
+      const setup = this.readMarketingSetup(tenant.marketingSetup) ?? null;
       const recipient: NewsletterRecipient = {
         email: user.email,
         firstName: String(user.name || '').split(/\s+/).filter(Boolean)[0] || null,
@@ -1151,7 +1156,7 @@ export class TenantService {
       });
       if (!tenant) throw new NotFoundException('Tenant not found');
 
-      const setup = this.sanitizeMarketingSetup(tenant.marketingSetup) ?? null;
+      const setup = this.readMarketingSetup(tenant.marketingSetup) ?? null;
       const clients = await this.prisma.client.findMany({
         where: {
           tenantId: user.tenantId,

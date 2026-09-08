@@ -13,3 +13,6 @@ uploads
 db_data
 .npm
 .vercel
+
+# Local isolated Phase 1 validation artifacts
+.phase1-validation/

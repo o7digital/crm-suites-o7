@@ -19,6 +19,9 @@ const DEAL_BASE_SELECT = {
   value: true,
   currency: true,
   expectedCloseDate: true,
+  lastActivityAt: true,
+  nextActionAt: true,
+  boardOrder: true,
   tenantId: true,
   pipelineId: true,
   stageId: true,
@@ -169,7 +172,7 @@ export class DealsService {
       // Legacy / drifted schemas might not have the role column yet. Don't hard-fail the whole CRM.
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
         if (err.code === 'P2021' || err.code === 'P2022') {
-          return 'OWNER';
+          return 'MEMBER';
         }
       }
       throw err;
@@ -302,6 +305,8 @@ export class DealsService {
       const deal = await tx.deal.create({
         data: {
           title: dto.title,
+          lastActivityAt: dto.lastActivityAt ? new Date(dto.lastActivityAt) : new Date(),
+          nextActionAt: dto.nextActionAt ? new Date(dto.nextActionAt) : null,
           value: dto.value,
           currency: (dto.currency ?? 'MXN').toUpperCase(),
           expectedCloseDate: dto.expectedCloseDate
@@ -565,9 +570,9 @@ export class DealsService {
       targetStageId = resolvedTargetStageId;
     }
 
-    if (targetStageStatus === 'LOST' && targetStageId !== existing.stageId) {
+    if (targetStageStatus && targetStageStatus !== 'OPEN' && targetStageId !== existing.stageId) {
       throw new BadRequestException(
-        'A loss reason is required. Use the deal closing action.',
+        'Use the deal closing action to record the outcome and audit.',
       );
     }
 
@@ -589,6 +594,8 @@ export class DealsService {
 
     const data: Prisma.DealUncheckedUpdateInput = {
       title: dto.title,
+      lastActivityAt: dto.lastActivityAt === null ? null : dto.lastActivityAt ? new Date(dto.lastActivityAt) : new Date(),
+      nextActionAt: dto.nextActionAt === undefined ? undefined : dto.nextActionAt ? new Date(dto.nextActionAt) : null,
       value: dto.value,
       currency: dto.currency ? dto.currency.toUpperCase() : undefined,
       expectedCloseDate: dto.expectedCloseDate
@@ -748,9 +755,9 @@ export class DealsService {
 
     if (deal.stageId === dto.stageId) return deal;
 
-    if (stage.status === 'LOST') {
+    if (stage.status !== 'OPEN') {
       throw new BadRequestException(
-        'A loss reason is required. Use the deal closing action.',
+        'Use the deal closing action to record the outcome and audit.',
       );
     }
 
@@ -768,6 +775,7 @@ export class DealsService {
         where: { id: deal.id },
         data: {
           stageId: dto.stageId,
+          lastActivityAt: new Date(),
           ...(caps.hasClosingFields
             ? stage.status === 'OPEN'
               ? {

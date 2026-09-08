@@ -20,7 +20,7 @@ export type AnnualEvent = CampaignEvent & {
   sortDate: string;
 };
 
-export type BufferConfig = { apiKey: string; organizationId: string };
+export type BufferConfig = { apiKey: string; apiKeyConfigured?: boolean; organizationId: string };
 export type BufferChannel = {
   id: string;
   name: string;
@@ -274,7 +274,7 @@ export function BufferStudioModal({
               />
               <p className="mt-2 text-xs leading-5 text-slate-500">La clé est enregistrée dans la configuration du tenant ; les publications sont envoyées à Buffer par l’API du CRM.</p>
             </div>
-            <button type="button" onClick={connect} disabled={busy !== null || !config.apiKey.trim()} className="btn-primary w-full text-sm">
+            <button type="button" onClick={connect} disabled={busy !== null || !config.apiKey.trim() && !config.apiKeyConfigured} className="btn-primary w-full text-sm">
               {busy === 'connect' ? 'Connexion…' : channels.length ? 'Actualiser les réseaux' : 'Connecter Buffer'}
             </button>
             {channels.length ? (

@@ -10,6 +10,8 @@ import { CLIENT_FUNCTION_OPTIONS, getClientDisplayName } from '@/lib/clients';
 import { convertCurrency, formatCurrencyTotal, type FxRatesSnapshot } from '@/lib/fx';
 import { useIA, type LeadAnalysisResult } from '@/hooks/useIA';
 import { useI18n } from '../../contexts/I18nContext';
+import { phase1Labels } from '@/lib/pulse-phase1';
+import { DealActivityHistory } from '@/components/DealActivityHistory';
 import { WindowControls } from '../../components/WindowControls';
 
 type Pipeline = {
@@ -69,6 +71,11 @@ type Deal = {
   followUpAt?: string | null;
   probability?: number | null;
   expectedCloseDate?: string | null;
+  nextActionAt?: string | null;
+  lastActivityAt?: string | null;
+  boardOrder?: number;
+  updatedAt?: string;
+  closeEventId?: string;
   clientId?: string | null;
   ownerId?: string | null;
   owner?: { id: string; name: string; email: string } | null;
@@ -294,10 +301,6 @@ function parseProbabilityPct(value: string) {
   return parsed;
 }
 
-function getDealOrderStorageKey(tenantId: string, pipelineId: string) {
-  return `crm.deal-order.${tenantId}.${pipelineId}`;
-}
-
 function formatDealsTotalInCurrency(
   deals: Deal[],
   displayCurrency: DealCurrency,
@@ -345,6 +348,8 @@ export default function CrmPage() {
     reset: resetIaState,
   } = useIA();
   const lastDragAtRef = useRef<number>(0);
+  const phase1 = phase1Labels(useI18n().language);
+  const boardMutationRef = useRef(false);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const proposalRef = useRef<HTMLInputElement | null>(null);
   const [crmDisplayCurrency, setCrmDisplayCurrency] = useState<DealCurrency>('MXN');
@@ -399,6 +404,7 @@ export default function CrmPage() {
     currency: DealCurrency;
     probabilityPct: string;
     probabilityOverridesStage: boolean;
+    nextActionAt: string;
     expectedCloseDate: string;
     clientId: string;
     productIds: string[];
@@ -411,6 +417,7 @@ export default function CrmPage() {
     currency: 'MXN',
     probabilityPct: '',
     probabilityOverridesStage: false,
+    nextActionAt: '',
     expectedCloseDate: '',
     clientId: '',
     productIds: [],
@@ -523,7 +530,8 @@ export default function CrmPage() {
         currency: 'MXN',
         probabilityPct: '',
         probabilityOverridesStage: false,
-        expectedCloseDate: '',
+        nextActionAt: '',
+    expectedCloseDate: '',
         clientId: '',
         productIds: [],
         pipelineId: '',
@@ -692,44 +700,12 @@ export default function CrmPage() {
   }, [api, pipelineId, token]);
 
   useEffect(() => {
-    if (!user?.tenantId || !pipelineId) {
-      setDealOrderByStageId({});
-      return;
+    const order: Record<string, string[]> = {};
+    for (const deal of [...deals].sort((a, b) => (a.boardOrder ?? 0) - (b.boardOrder ?? 0))) {
+      (order[deal.stageId] ??= []).push(deal.id);
     }
-    try {
-      const raw = localStorage.getItem(getDealOrderStorageKey(user.tenantId, pipelineId));
-      if (!raw) {
-        setDealOrderByStageId({});
-        return;
-      }
-      const parsed = JSON.parse(raw) as unknown;
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        setDealOrderByStageId({});
-        return;
-      }
-      const normalized: Record<string, string[]> = {};
-      for (const [stageId, value] of Object.entries(parsed)) {
-        if (Array.isArray(value)) {
-          normalized[stageId] = value.filter((id): id is string => typeof id === 'string');
-        }
-      }
-      setDealOrderByStageId(normalized);
-    } catch {
-      setDealOrderByStageId({});
-    }
-  }, [pipelineId, user?.tenantId]);
-
-  useEffect(() => {
-    if (!user?.tenantId || !pipelineId) return;
-    try {
-      localStorage.setItem(
-        getDealOrderStorageKey(user.tenantId, pipelineId),
-        JSON.stringify(dealOrderByStageId),
-      );
-    } catch {
-      // ignore storage failures (private mode / quota)
-    }
-  }, [dealOrderByStageId, pipelineId, user?.tenantId]);
+    setDealOrderByStageId(order);
+  }, [deals]);
 
   const sortedStages = useMemo(() => {
     return [...stages].sort((a, b) => a.position - b.position);
@@ -1111,7 +1087,8 @@ export default function CrmPage() {
       currency: crmDisplayCurrency,
       probabilityPct: toProbabilityPct(defaultStage?.probability),
       probabilityOverridesStage: false,
-      expectedCloseDate: '',
+      nextActionAt: '',
+    expectedCloseDate: '',
       clientId: '',
       productIds: [],
       pipelineId,
@@ -1134,6 +1111,7 @@ export default function CrmPage() {
       currency: (String(deal.currency || 'MXN').toUpperCase() as DealCurrency) || 'MXN',
       probabilityPct: toProbabilityPct(deal.probability ?? deal.stage?.probability),
       probabilityOverridesStage: deal.probability !== undefined && deal.probability !== null,
+      nextActionAt: toDateInputValue(deal.nextActionAt),
       expectedCloseDate: toDateInputValue(deal.expectedCloseDate),
       clientId: deal.clientId ?? '',
       productIds: (deal.items ?? []).map((it) => it.productId).filter(Boolean),
@@ -1195,6 +1173,7 @@ export default function CrmPage() {
             title,
             value,
             currency: form.currency,
+            nextActionAt: form.nextActionAt || null,
             expectedCloseDate: form.expectedCloseDate || undefined,
             clientId: form.clientId ? form.clientId : null,
             ownerId: form.ownerId ? form.ownerId : null,
@@ -1258,6 +1237,7 @@ export default function CrmPage() {
             title,
             value,
             currency: form.currency,
+            nextActionAt: form.nextActionAt || null,
             expectedCloseDate: form.expectedCloseDate || undefined,
             clientId: form.clientId || undefined,
             ownerId: form.ownerId || undefined,
@@ -1404,59 +1384,38 @@ export default function CrmPage() {
     }
   };
 
-  const handleMoveDeal = async (dealId: string, stageId: string) => {
+  const persistDealPosition = useCallback(async (dealId: string, stageId: string, targetId?: string, placement?: DealDropPlacement) => {
+    if (boardMutationRef.current) return;
+    const before = deals.find(deal => deal.id === dealId);
+    if (!before?.updatedAt) return;
+    boardMutationRef.current = true;
+    const previous = deals;
+    const ordered = deals.filter(deal => deal.stageId === stageId && deal.id !== dealId)
+      .sort((a, b) => (a.boardOrder ?? 0) - (b.boardOrder ?? 0));
+    let index = targetId ? ordered.findIndex(deal => deal.id === targetId) : ordered.length;
+    if (index < 0) index = ordered.length;
+    if (targetId && placement === 'after') index++;
+    ordered.splice(index, 0, { ...before, stageId });
+    const rank = new Map(ordered.map((deal, position) => [deal.id, position]));
+    setDeals(current => current.map(deal => rank.has(deal.id) ? { ...deal, stageId, boardOrder: rank.get(deal.id), stage: stages.find(stage => stage.id === stageId) } : deal));
     try {
-      await api(`/deals/${dealId}/move-stage`, {
-        method: 'POST',
-        body: JSON.stringify({ stageId }),
-      });
-      setDeals((prev) =>
-        prev.map((deal) => (deal.id === dealId ? { ...deal, stageId } : deal)),
-      );
-      setDealOrderByStageId((prev) => {
-        const next: Record<string, string[]> = {};
-        for (const [id, orderedIds] of Object.entries(prev)) {
-          next[id] = orderedIds.filter((orderedId) => orderedId !== dealId);
-        }
-        const destination = next[stageId] ? [...next[stageId]] : [];
-        destination.push(dealId);
-        next[stageId] = Array.from(new Set(destination));
-        return next;
-      });
+      await api(`/deals/${dealId}/rank`, { method: 'PATCH', body: JSON.stringify({ stageId, targetId, placement, expectedUpdatedAt: before.updatedAt }) });
+      const fresh = await api<Deal[]>(`/deals?pipelineId=${encodeURIComponent(before.pipelineId)}`);
+      setDeals(fresh);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unable to move deal';
-      setError(message);
-    }
+      setDeals(previous);
+      setError(err instanceof Error ? err.message : 'Unable to save order');
+      // Reconcile conflicts and responses lost after a successful server commit.
+      try { setDeals(await api<Deal[]>(`/deals?pipelineId=${encodeURIComponent(before.pipelineId)}`)); } catch { /* Keep the rollback visible until retry. */ }
+    } finally { boardMutationRef.current = false; }
+  }, [api, deals, stages]);
+
+  const handleMoveDeal = (dealId: string, stageId: string, targetId?: string, placement?: DealDropPlacement) => {
+    void persistDealPosition(dealId, stageId, targetId, placement);
   };
-
-  const handleReorderDealInStage = useCallback(
-    (stageId: string, draggedDealId: string, targetDealId: string, placement: DealDropPlacement) => {
-      if (!draggedDealId || !targetDealId || draggedDealId === targetDealId) return;
-      setDealOrderByStageId((prev) => {
-        const stageDealIds = deals.filter((deal) => deal.stageId === stageId).map((deal) => deal.id);
-        if (stageDealIds.length === 0) return prev;
-
-        const base = (prev[stageId] || []).filter((id) => stageDealIds.includes(id));
-        for (const id of stageDealIds) {
-          if (!base.includes(id)) base.push(id);
-        }
-        if (!base.includes(draggedDealId)) base.push(draggedDealId);
-
-        const withoutDragged = base.filter((id) => id !== draggedDealId);
-        const targetIndex = withoutDragged.findIndex((id) => id === targetDealId);
-        if (targetIndex < 0) return prev;
-
-        const insertIndex = placement === 'before' ? targetIndex : targetIndex + 1;
-        const reordered = [
-          ...withoutDragged.slice(0, insertIndex),
-          draggedDealId,
-          ...withoutDragged.slice(insertIndex),
-        ];
-        return { ...prev, [stageId]: reordered };
-      });
-    },
-    [deals],
-  );
+  const handleReorderDealInStage = (stageId: string, dealId: string, targetId: string, placement: DealDropPlacement) => {
+    if (dealId !== targetId) void persistDealPosition(dealId, stageId, targetId, placement);
+  };
 
   const getDealsForStage = useCallback(
     (stageId: string) => {
@@ -1508,6 +1467,7 @@ export default function CrmPage() {
     details?: Partial<ClosingDraft>,
     announce = true,
   ) => {
+    if (boardMutationRef.current) return null;
     const targetStage = status === 'WON' ? firstWonStage : firstLostStage;
     if (!targetStage) {
       setError(`No ${status} stage available in this pipeline`);
@@ -1528,6 +1488,7 @@ export default function CrmPage() {
       followUpAt: details?.followUpAt || null,
     };
 
+    boardMutationRef.current = true;
     setClosingSaving(true);
     setError(null);
     setDraggedDealId(null);
@@ -1539,6 +1500,8 @@ export default function CrmPage() {
         method: 'POST',
         body: JSON.stringify({
           status,
+          operationId: crypto.randomUUID(),
+          expectedUpdatedAt: deal.updatedAt,
           finalValue: details?.finalValue ? Number(details.finalValue) : undefined,
           closedAt: details?.closedAt || undefined,
           note: details?.note || undefined,
@@ -1559,6 +1522,7 @@ export default function CrmPage() {
       setError(message);
       return null;
     } finally {
+      boardMutationRef.current = false;
       setClosingSaving(false);
     }
   };
@@ -1575,8 +1539,7 @@ export default function CrmPage() {
       return;
     }
 
-    const updated = await performClose(deal, status);
-    if (updated) setClosingDraft(makeClosingDraft(updated, status));
+    await performClose(deal, status);
   };
 
   const handleSaveClosingDraft = async () => {
@@ -1595,16 +1558,17 @@ export default function CrmPage() {
   };
 
   const handleUndoClosing = async () => {
-    if (!closingUndo) return;
+    if (!closingUndo?.after.closeEventId || boardMutationRef.current) return;
+    boardMutationRef.current = true;
     const undo = closingUndo;
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     setClosingUndo(null);
     setClosingDraft(null);
     setDeals((prev) => prev.map((item) => (item.id === undo.before.id ? undo.before : item)));
     try {
-      const reopened = await api<Deal>(`/deals/${undo.before.id}/reopen`, {
+      const reopened = await api<Deal>(`/deals/${undo.before.id}/undo-close`, {
         method: 'POST',
-        body: JSON.stringify({ stageId: undo.before.stageId }),
+        body: JSON.stringify({ eventId: undo.after.closeEventId }),
       });
       setDeals((prev) =>
         prev.map((item) =>
@@ -1615,7 +1579,7 @@ export default function CrmPage() {
       setDeals((prev) => prev.map((item) => (item.id === undo.after.id ? undo.after : item)));
       const message = err instanceof Error ? err.message : t('crm.close.undoFailed');
       setError(message);
-    }
+    } finally { boardMutationRef.current = false; }
   };
 
   const handleMarkEditingDealStatus = async (status: 'WON' | 'LOST') => {
@@ -2498,6 +2462,7 @@ export default function CrmPage() {
                 return (
                   <div
                     key={status}
+                    data-testid={`close-zone-${status}`}
                     className={`flex min-h-20 items-center justify-center rounded-xl border-2 border-dashed px-3 text-center transition-all duration-150 ${
                       !targetStage
                         ? 'border-white/10 bg-white/[0.03] text-slate-500'
@@ -2634,6 +2599,7 @@ export default function CrmPage() {
                     {t('crm.close.lossReason')} <span className="text-rose-300">*</span>
                     <select
                       className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-slate-100"
+                      data-testid="loss-reason"
                       value={closingDraft.lossReason}
                       onChange={(event) => setClosingDraft((prev) => prev ? { ...prev, lossReason: event.target.value as DealLossReason } : prev)}
                     >
@@ -2709,6 +2675,7 @@ export default function CrmPage() {
                 <button
                   type="button"
                   className={closingDraft.status === 'WON' ? 'btn-primary' : 'rounded-lg bg-rose-500 px-4 py-2 font-semibold text-white transition hover:bg-rose-400 disabled:opacity-50'}
+                  data-testid="confirm-close"
                   onClick={() => void handleSaveClosingDraft()}
                   disabled={closingSaving || (closingDraft.status === 'LOST' && !closingDraft.lossReason)}
                 >
@@ -2725,6 +2692,7 @@ export default function CrmPage() {
             <button
               type="button"
               className="rounded-lg border border-violet-300/40 bg-violet-400/10 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-violet-100 transition hover:bg-violet-400/20"
+              data-testid="undo-close"
               onClick={() => void handleUndoClosing()}
             >
               {t('crm.close.undo')}
@@ -3261,7 +3229,13 @@ export default function CrmPage() {
 
                 <label className="block text-sm text-slate-300">
                   {t('crm.probability')}
-                  <div className="relative mt-2">
+                  <div>
+                  {editingDeal && <DealActivityHistory dealId={editingDeal.id} />}
+                  <label className="text-sm text-slate-300">{phase1.nextAction}</label>
+                  <input type="date" value={form.nextActionAt} onChange={e => setForm(prev => ({ ...prev, nextActionAt: e.target.value }))} className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm ring-1 ring-white/10" />
+                  {editingDeal && <p className="mt-2 text-xs text-slate-400">{phase1.lastActivity}: {editingDeal.lastActivityAt ? new Date(editingDeal.lastActivityAt).toLocaleString() : '—'}</p>}
+                </div>
+                <div className="relative mt-2">
                     <input
                       type="number"
                       min={0}
@@ -3694,7 +3668,7 @@ function StageColumn({
   displayCurrency: DealCurrency;
   fx: FxRatesSnapshot | null;
   fxLoading: boolean;
-  onMoveDeal: (dealId: string, stageId: string) => void;
+  onMoveDeal: (dealId: string, stageId: string, targetId?: string, placement?: DealDropPlacement) => void;
   onReorderDealInStage: (
     stageId: string,
     draggedDealId: string,
@@ -3807,6 +3781,7 @@ function StageColumn({
         {deals.map((deal) => (
           <div
             key={deal.id}
+            data-testid={`deal-card-${deal.id}`}
             draggable
             onDragStart={(event) => {
               event.dataTransfer.setData('text/plain', deal.id);
@@ -3830,7 +3805,7 @@ function StageColumn({
               }
               const draggedIsInSameStage = deals.some((d) => d.id === draggedDealId);
               if (!draggedIsInSameStage) {
-                void onMoveDeal(draggedDealId, stage.id);
+                void onMoveDeal(draggedDealId, stage.id, deal.id, placement);
               }
             }}
             role="button"

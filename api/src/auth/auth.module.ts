@@ -1,3 +1,4 @@
+import { localJwtOptions } from '../common/jwt-policy';
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -12,14 +13,7 @@ import { JwtStrategy } from '../common/jwt.strategy';
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (config: ConfigService) => {
-        const secret = config.get<string>('JWT_SECRET') || 'dev-secret';
-        if (config.get<string>('NODE_ENV') === 'production' &&
-            (secret === 'dev-secret' || Buffer.byteLength(secret) < 32)) {
-          throw new Error('JWT_SECRET must contain at least 32 bytes in production');
-        }
-        return { secret, signOptions: { expiresIn: '7d' as const } };
-      },
+      useFactory: (config: ConfigService) => localJwtOptions(config),
       inject: [ConfigService],
     }),
   ],
