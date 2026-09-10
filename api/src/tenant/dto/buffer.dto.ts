@@ -1,6 +1,10 @@
-import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsIn, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsBoolean, ArrayMaxSize, ArrayNotEmpty, IsArray, IsIn, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 
 export class CreateBufferPostDto {
+  @IsOptional()
+  @IsBoolean()
+  saveToDraft?: boolean;
+
   @IsString()
   @MaxLength(5000)
   text: string;

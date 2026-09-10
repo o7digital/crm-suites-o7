@@ -1,3 +1,4 @@
+import { IntegrationsModule } from './integrations/integrations.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
@@ -27,6 +28,7 @@ import { OliviaIntegrationModule } from './olivia-integration/olivia-integration
 
 @Module({
   imports: [
+    IntegrationsModule,
     ConfigModule.forRoot({ isGlobal: true }),
     FxModule,
     IaModule,

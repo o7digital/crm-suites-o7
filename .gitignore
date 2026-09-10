@@ -16,3 +16,7 @@ db_data
 
 # Local isolated Phase 1 validation artifacts
 .phase1-validation/
+
+# Browser test artifacts
+/frontend/test-results/
+/frontend/playwright-report/

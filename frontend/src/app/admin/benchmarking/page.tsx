@@ -168,6 +168,12 @@ function toAudienceCsv(contacts: AudienceContact[]) {
 }
 
 export default function AdminBenchmarkingPage() {
+  const { user } = useAuth();
+  if (!user) return <Guard><span /></Guard>;
+  return <AdminBenchmarkingPageWorkspace key={`${user.tenantId}:${user.id}`} />;
+}
+
+function AdminBenchmarkingPageWorkspace() {
   const { token, user } = useAuth();
   const api = useApi(token);
 
@@ -188,6 +194,7 @@ export default function AdminBenchmarkingPage() {
   const [manualSearch, setManualSearch] = useState('');
   const [draft, setDraft] = useState<NewsletterDraft>(EMPTY_DRAFT);
 
+  const [draftLoaded, setDraftLoaded] = useState(false);
   const draftStorageKey = user ? `o7-benchmarking-draft:${user.tenantId}:${user.id}` : '';
 
   useEffect(() => {
@@ -203,17 +210,17 @@ export default function AdminBenchmarkingPage() {
       });
     } catch {
       // Ignore invalid local drafts.
-    }
+    } finally { setDraftLoaded(true); }
   }, [draftStorageKey]);
 
   useEffect(() => {
-    if (!draftStorageKey || typeof window === 'undefined') return;
+    if (!draftLoaded || !draftStorageKey || typeof window === 'undefined') return;
     try {
       window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
     } catch {
       // Ignore storage failures.
     }
-  }, [draft, draftStorageKey]);
+  }, [draft, draftStorageKey, draftLoaded]);
 
   useEffect(() => {
     if (!token) return;

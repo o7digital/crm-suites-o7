@@ -805,6 +805,7 @@ export class TenantService {
 
   async createBufferPost(dto: CreateBufferPostDto, user: RequestUser) {
     await this.ensureAdmin(user);
+    if (dto.saveToDraft === false) throw new BadRequestException('Only Buffer drafts are supported.');
     const tenant = await this.prisma.tenant.findFirst({
       where: { id: user.tenantId },
       select: { marketingSetup: true },
@@ -814,6 +815,8 @@ export class TenantService {
     const workspace = await this.loadBufferWorkspace(setup);
     const allowedChannelIds = new Set(workspace.channels.map((channel) => channel.id));
     const channelIds = [...new Set(dto.channelIds.map((id) => id.trim()).filter((id) => allowedChannelIds.has(id)))];
+    if (dto.channelIds.some(id => !allowedChannelIds.has(id.trim()))) throw new BadRequestException('Unknown Buffer channel.');
+    if (!dto.text.trim()) throw new BadRequestException('Post text is required.');
     if (!channelIds.length) throw new BadRequestException('Sélectionnez au moins un réseau Buffer connecté.');
 
     let dueAt = '';
@@ -834,13 +837,17 @@ export class TenantService {
       const assets = dto.imageUrl?.trim()
         ? `assets: [{ image: { url: ${JSON.stringify(dto.imageUrl.trim())} } }]`
         : '';
-      const query = `mutation CreatePost { createPost(input: { text: ${JSON.stringify(dto.text.trim())}, channelId: ${JSON.stringify(channelId)}, schedulingType: automatic, ${scheduling} ${assets} }) { ... on PostActionSuccess { post { id dueAt } } ... on MutationError { message } } }`;
+      const service = workspace.channels.find((channel) => channel.id === channelId)?.service;
+      const metadata = service === 'instagram' ? 'metadata: { instagram: { type: post, shouldShareToFeed: true } }' : service === 'facebook' ? 'metadata: { facebook: { type: post } }' : '';
+      const query = `mutation CreatePost { createPost(input: { text: ${JSON.stringify(dto.text.trim())}, channelId: ${JSON.stringify(channelId)}, saveToDraft: true, schedulingType: automatic, ${scheduling} ${assets} ${metadata} }) { ... on PostActionSuccess { post { id dueAt status } } ... on MutationError { message } } }`;
       try {
         const data = await this.bufferRequest<{
-          createPost?: { post?: { id?: string; dueAt?: string | null }; message?: string };
+          createPost?: { post?: { id?: string; dueAt?: string | null; status?: string }; message?: string };
         }>(workspace.config.apiKey, query);
         const result = data.createPost;
         if (!result?.post?.id) throw new Error(result?.message || 'Buffer n’a pas créé le post.');
+        if (result.post.status !== 'draft') throw new Error('Buffer did not confirm draft status. Check the post before retrying.');
+        if (dueAt && result.post.dueAt !== dueAt) throw new Error('Buffer did not confirm the requested date. Check the draft before retrying.');
         results.push({ channelId, postId: result.post.id, dueAt: result.post.dueAt });
       } catch (error) {
         failed.push({ channelId, message: error instanceof Error ? error.message : 'Échec Buffer' });
