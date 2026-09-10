@@ -24,6 +24,7 @@ import { PublicLeadsModule } from './public-leads/public-leads.module';
 import { LegalModule } from './legal/legal.module';
 import { BillingModule } from './billing/billing.module';
 import { OliviaIntegrationModule } from './olivia-integration/olivia-integration.module';
+import { ChatGptIntegrationModule } from './chatgpt-integration/chatgpt-integration.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { OliviaIntegrationModule } from './olivia-integration/olivia-integration
     LegalModule,
     BillingModule,
     OliviaIntegrationModule,
+    ChatGptIntegrationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

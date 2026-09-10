@@ -28,6 +28,65 @@ export class SchemaUpgraderService {
     await this.ensureTenantCrmSettingsFields();
     await this.ensureGoogleCalendarConnectionSchema();
     await this.ensureOliviaIntegrationEventSchema();
+    await this.ensureExternalApiSchema();
+  }
+
+  private async ensureExternalApiSchema() {
+    await this.prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ExternalApiCredential" (
+        "id" TEXT NOT NULL,
+        "tenantId" TEXT NOT NULL,
+        "provider" TEXT NOT NULL DEFAULT 'CHATGPT',
+        "keyId" TEXT NOT NULL,
+        "apiKeyHash" TEXT NOT NULL,
+        "enabled" BOOLEAN NOT NULL DEFAULT true,
+        "scopes" TEXT[] NOT NULL,
+        "lastAccessAt" TIMESTAMP(3),
+        "rotatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "ExternalApiCredential_pkey" PRIMARY KEY ("id")
+      );
+    `);
+    await this.prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ExternalApiAccessLog" (
+        "id" TEXT NOT NULL,
+        "tenantId" TEXT NOT NULL,
+        "apiKeyId" TEXT NOT NULL,
+        "endpoint" TEXT NOT NULL,
+        "statusHttp" INTEGER NOT NULL,
+        "accessedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "ExternalApiAccessLog_pkey" PRIMARY KEY ("id")
+      );
+    `);
+
+    const indexes = [
+      `CREATE UNIQUE INDEX IF NOT EXISTS "ExternalApiCredential_keyId_key" ON "ExternalApiCredential"("keyId");`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "ExternalApiCredential_tenantId_provider_key" ON "ExternalApiCredential"("tenantId", "provider");`,
+      `CREATE INDEX IF NOT EXISTS "ExternalApiCredential_tenantId_idx" ON "ExternalApiCredential"("tenantId");`,
+      `CREATE INDEX IF NOT EXISTS "ExternalApiAccessLog_tenantId_accessedAt_idx" ON "ExternalApiAccessLog"("tenantId", "accessedAt");`,
+      `CREATE INDEX IF NOT EXISTS "ExternalApiAccessLog_apiKeyId_idx" ON "ExternalApiAccessLog"("apiKeyId");`,
+    ];
+    for (const sql of indexes) await this.prisma.$executeRawUnsafe(sql);
+
+    const fks = [
+      {
+        name: 'ExternalApiCredential_tenantId_fkey',
+        sql: `ALTER TABLE "ExternalApiCredential" ADD CONSTRAINT "ExternalApiCredential_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;`,
+      },
+      {
+        name: 'ExternalApiAccessLog_tenantId_fkey',
+        sql: `ALTER TABLE "ExternalApiAccessLog" ADD CONSTRAINT "ExternalApiAccessLog_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;`,
+      },
+    ];
+    for (const fk of fks) {
+      if (await this.constraintExists(fk.name)) continue;
+      try {
+        await this.prisma.$executeRawUnsafe(fk.sql);
+      } catch {
+        // Ignore deployment races or equivalent existing constraints.
+      }
+    }
   }
 
   private async tableExists(table: string) {
@@ -843,7 +902,10 @@ export class SchemaUpgraderService {
       `);
     }
 
-    const hasTaskIds = await this.columnExists('OliviaIntegrationEvent', 'taskIds');
+    const hasTaskIds = await this.columnExists(
+      'OliviaIntegrationEvent',
+      'taskIds',
+    );
     if (!hasTaskIds) {
       try {
         await this.prisma.$executeRawUnsafe(
@@ -878,4 +940,3 @@ export class SchemaUpgraderService {
     }
   }
 }
-

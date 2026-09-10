@@ -11,58 +11,145 @@ export class DashboardService {
     private fx: FxService,
   ) {}
 
-  private schemaCache:
-    | { checkedAt: number; hasOwnerId: boolean; hasProbability: boolean }
-    | null = null;
+  private schemaCache: {
+    checkedAt: number;
+    hasOwnerId: boolean;
+    hasDealProbability: boolean;
+    hasStageProbability: boolean;
+    hasStageStatus: boolean;
+  } | null = null;
 
   private async getDealSchemaCaps(): Promise<{
     hasOwnerId: boolean;
-    hasProbability: boolean;
+    hasDealProbability: boolean;
+    hasStageProbability: boolean;
+    hasStageStatus: boolean;
   }> {
     const now = Date.now();
     if (this.schemaCache && now - this.schemaCache.checkedAt < 60_000) {
       return {
         hasOwnerId: this.schemaCache.hasOwnerId,
-        hasProbability: this.schemaCache.hasProbability,
+        hasDealProbability: this.schemaCache.hasDealProbability,
+        hasStageProbability: this.schemaCache.hasStageProbability,
+        hasStageStatus: this.schemaCache.hasStageStatus,
       };
     }
     try {
-      const cols = await this.prisma.$queryRaw<Array<{ column_name: string }>>`
+      const cols = await this.prisma.$queryRaw<
+        Array<{ table_name: string; column_name: string }>
+      >`
+        SELECT table_name, column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND (
+            (table_name = 'Deal' AND column_name IN ('ownerId', 'probability'))
+            OR (table_name = 'Stage' AND column_name IN ('probability', 'status'))
+          )
+      `;
+      const hasOwnerId = cols.some(
+        (c) =>
+          (!c.table_name || c.table_name === 'Deal') &&
+          c.column_name === 'ownerId',
+      );
+      const hasDealProbability = cols.some(
+        (c) =>
+          (!c.table_name || c.table_name === 'Deal') &&
+          c.column_name === 'probability',
+      );
+      const hasStageProbability = cols.some(
+        (c) => c.table_name === 'Stage' && c.column_name === 'probability',
+      );
+      const hasStageStatus = cols.some(
+        (c) => c.table_name === 'Stage' && c.column_name === 'status',
+      );
+      this.schemaCache = {
+        checkedAt: now,
+        hasOwnerId,
+        hasDealProbability,
+        hasStageProbability,
+        hasStageStatus,
+      };
+      return {
+        hasOwnerId,
+        hasDealProbability,
+        hasStageProbability,
+        hasStageStatus,
+      };
+    } catch {
+      try {
+        const dealCols = await this.prisma.$queryRaw<
+          Array<{ column_name: string }>
+        >`
         SELECT column_name
         FROM information_schema.columns
         WHERE table_schema = 'public'
           AND table_name = 'Deal'
           AND column_name IN ('ownerId', 'probability')
       `;
-      const hasOwnerId = cols.some((c) => c.column_name === 'ownerId');
-      const hasProbability = cols.some((c) => c.column_name === 'probability');
-      this.schemaCache = { checkedAt: now, hasOwnerId, hasProbability };
-      return { hasOwnerId, hasProbability };
-    } catch {
-      // Keep dashboard available when metadata lookup is restricted in production DBs.
-      const fallback = { checkedAt: now, hasOwnerId: true, hasProbability: true };
-      this.schemaCache = fallback;
-      return { hasOwnerId: fallback.hasOwnerId, hasProbability: fallback.hasProbability };
+        const hasOwnerId = dealCols.some((c) => c.column_name === 'ownerId');
+        const hasDealProbability = dealCols.some(
+          (c) => c.column_name === 'probability',
+        );
+        this.schemaCache = {
+          checkedAt: now,
+          hasOwnerId,
+          hasDealProbability,
+          hasStageProbability: false,
+          hasStageStatus: false,
+        };
+        return {
+          hasOwnerId,
+          hasDealProbability,
+          hasStageProbability: false,
+          hasStageStatus: false,
+        };
+      } catch {
+        // Keep dashboard available when metadata lookup is restricted in production DBs.
+        const fallback = {
+          checkedAt: now,
+          hasOwnerId: true,
+          hasDealProbability: true,
+          hasStageProbability: true,
+          hasStageStatus: true,
+        };
+        this.schemaCache = fallback;
+        return {
+          hasOwnerId: fallback.hasOwnerId,
+          hasDealProbability: fallback.hasDealProbability,
+          hasStageProbability: fallback.hasStageProbability,
+          hasStageStatus: fallback.hasStageStatus,
+        };
+      }
     }
   }
 
-  private async getUserRole(user: RequestUser): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
+  private async getUserRole(
+    user: RequestUser,
+  ): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
     const dbUser = await this.prisma.user.findFirst({
       where: { id: user.userId, tenantId: user.tenantId },
       select: { role: true },
     });
-    return (dbUser?.role as 'OWNER' | 'ADMIN' | 'MEMBER' | undefined) ?? 'MEMBER';
+    return (
+      (dbUser?.role as 'OWNER' | 'ADMIN' | 'MEMBER' | undefined) ?? 'MEMBER'
+    );
   }
 
   private getEffectiveProbability(
-    stage: { probability?: number | null; status?: 'OPEN' | 'WON' | 'LOST' | null } | null,
+    stage: {
+      probability?: number | null;
+      status?: 'OPEN' | 'WON' | 'LOST' | null;
+    } | null,
     dealProbability: number | null | undefined,
     hasProbability: boolean,
   ): number {
     const raw =
-      hasProbability && dealProbability !== undefined && dealProbability !== null
+      hasProbability &&
+      dealProbability !== undefined &&
+      dealProbability !== null
         ? Number(dealProbability)
-        : stage?.probability ?? (stage?.status === 'WON' ? 1 : stage?.status === 'LOST' ? 0 : 0);
+        : (stage?.probability ??
+          (stage?.status === 'WON' ? 1 : stage?.status === 'LOST' ? 0 : 0));
 
     if (!Number.isFinite(raw)) return 0;
     if (raw < 0) return 0;
@@ -73,53 +160,68 @@ export class DashboardService {
   async getSnapshot(user: RequestUser) {
     const tenantId = user.tenantId;
     const role = await this.getUserRole(user);
-    const { hasOwnerId, hasProbability } = await this.getDealSchemaCaps();
-    const dealVisibilityWhere = hasOwnerId && role === 'MEMBER' ? { ownerId: user.userId } : {};
+    const {
+      hasOwnerId,
+      hasDealProbability,
+      hasStageProbability,
+      hasStageStatus,
+    } = await this.getDealSchemaCaps();
+    const dealVisibilityWhere =
+      hasOwnerId && role === 'MEMBER' ? { ownerId: user.userId } : {};
+    const openDealWhere = hasStageStatus
+      ? { stage: { status: 'OPEN' as const } }
+      : {};
 
-    const [clientStatusCounts, taskCounts, openDeals, leadTotalCount, invoiceAgg, recentInvoices] =
-      await Promise.all([
-        this.prisma.client.groupBy({
-          by: ['clientStatus'],
-          where: { tenantId },
-          _count: true,
-        }),
-        this.prisma.task.groupBy({
-          by: ['status'],
-          where: { tenantId },
-          _count: true,
-        }),
-        this.prisma.deal.findMany({
-          where: {
-            tenantId,
-            stage: { status: 'OPEN' },
-            ...dealVisibilityWhere,
-          },
-          select: {
-            value: true,
-            currency: true,
-            stage: {
-              select: {
-                probability: true,
-                status: true,
-              },
+    const [
+      clientStatusCounts,
+      taskCounts,
+      openDeals,
+      leadTotalCount,
+      invoiceAgg,
+      recentInvoices,
+    ] = await Promise.all([
+      this.prisma.client.groupBy({
+        by: ['clientStatus'],
+        where: { tenantId },
+        _count: true,
+      }),
+      this.prisma.task.groupBy({
+        by: ['status'],
+        where: { tenantId },
+        _count: true,
+      }),
+      this.prisma.deal.findMany({
+        where: {
+          tenantId,
+          ...openDealWhere,
+          ...dealVisibilityWhere,
+        },
+        select: {
+          value: true,
+          currency: true,
+          stage: {
+            select: {
+              ...(hasStageProbability ? { probability: true } : {}),
+              ...(hasStageStatus ? { status: true } : {}),
             },
-            ...(hasProbability ? { probability: true } : {}),
           },
-        }),
-        this.prisma.deal.count({
-          where: { tenantId, ...dealVisibilityWhere },
-        }),
-        this.prisma.invoice.aggregate({
-          where: { tenantId },
-          _sum: { amount: true },
-          _count: { _all: true },
-        }),
-        this.prisma.invoice.findMany({
-          where: { tenantId, createdAt: { gte: subDays(new Date(), 30) } },
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-        }),
-      ]);
+          ...(hasDealProbability ? { probability: true } : {}),
+        },
+      }),
+      this.prisma.deal.count({
+        where: { tenantId, ...dealVisibilityWhere },
+      }),
+      this.prisma.invoice.aggregate({
+        where: { tenantId },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+      this.prisma.invoice.findMany({
+        where: { tenantId, createdAt: { gte: subDays(new Date(), 30) } },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+    ]);
 
     let clientCount = 0;
     let prospectCount = 0;
@@ -137,16 +239,28 @@ export class DashboardService {
       taskByStatus[status] = _count;
     }
 
-    const openByCurrencyMap = new Map<string, { currency: string; count: number; amount: number }>();
+    const openByCurrencyMap = new Map<
+      string,
+      { currency: string; count: number; amount: number }
+    >();
     for (const deal of openDeals) {
       const currency = (deal.currency || 'USD').toUpperCase();
-      const current = openByCurrencyMap.get(currency) ?? { currency, count: 0, amount: 0 };
+      const current = openByCurrencyMap.get(currency) ?? {
+        currency,
+        count: 0,
+        amount: 0,
+      };
       current.count += 1;
 
       const value = Number(deal.value);
       if (Number.isFinite(value)) {
         current.amount +=
-          value * this.getEffectiveProbability(deal.stage, deal.probability, hasProbability);
+          value *
+          this.getEffectiveProbability(
+            deal.stage,
+            'probability' in deal ? deal.probability : undefined,
+            hasDealProbability,
+          );
       }
 
       openByCurrencyMap.set(currency, current);
@@ -178,7 +292,9 @@ export class DashboardService {
         }
         return sum + converted;
       }, 0);
-      fxMissingCurrencies = Array.from(missing).filter((cur) => cur && cur !== 'USD').sort();
+      fxMissingCurrencies = Array.from(missing)
+        .filter((cur) => cur && cur !== 'USD')
+        .sort();
     } catch (err) {
       fxError = err instanceof Error ? err.message : 'Unable to load FX rates';
       // Fall back to USD-only totals so the dashboard remains usable.

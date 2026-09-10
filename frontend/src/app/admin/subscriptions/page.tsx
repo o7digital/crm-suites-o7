@@ -6,12 +6,17 @@ import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useApi, useAuth } from '../../../contexts/AuthContext';
 import { useI18n } from '../../../contexts/I18nContext';
+import {
+  countryOptions,
+  defaultCountryForLanguage,
+  type CountryCode,
+} from '../../../lib/countries';
 import { industryGroups, industryLabel, industryRecommendedMode } from '../../../lib/industries';
 
 type SubscriptionItem = {
   id: string;
   customerName: string;
-  customerCountry?: 'CA' | 'MX' | 'FR' | null;
+  customerCountry?: CountryCode | null;
   customerAddress?: string | null;
   customerTenantId: string;
   contactFirstName?: string | null;
@@ -41,7 +46,7 @@ type SubscriptionItem = {
 
 type LinkDraft = {
   customerName: string;
-  customerCountry: 'CA' | 'MX' | 'FR' | '';
+  customerCountry: CountryCode | '';
   customerAddress: string;
   contactFirstName: string;
   contactLastName: string;
@@ -82,7 +87,7 @@ type InviteDraft = {
 type CreateInviteRow = InviteDraft & { id: string };
 
 type SubscriptionPlan = 'TRIAL' | 'PULSE_BASIC' | 'PULSE_STANDARD' | 'PULSE_ADVANCED' | 'PULSE_ADVANCED_PLUS' | 'PULSE_TEAM';
-type CustomerCountry = 'CA' | 'MX' | 'FR';
+type CustomerCountry = CountryCode;
 
 const DEFAULT_SEATS_BY_PLAN: Record<SubscriptionPlan, number> = {
   TRIAL: 1,
@@ -99,16 +104,8 @@ const DEFAULT_INVITE_DRAFT: InviteDraft = {
   role: 'ADMIN',
 };
 
-const CUSTOMER_COUNTRIES: Array<{ value: CustomerCountry; labelKey: string }> = [
-  { value: 'FR', labelKey: 'adminSubscriptions.country.france' },
-  { value: 'MX', labelKey: 'adminSubscriptions.country.mexico' },
-  { value: 'CA', labelKey: 'adminSubscriptions.country.canada' },
-];
-
 function defaultCustomerCountryForLanguage(language: string): CustomerCountry {
-  if (language === 'fr') return 'FR';
-  if (language === 'es') return 'MX';
-  return 'CA';
+  return defaultCountryForLanguage(language);
 }
 
 function makeInviteRowId() {
@@ -199,6 +196,11 @@ export default function AdminSubscriptionsPage() {
   const api = useApi(token);
   const { t, language } = useI18n();
   const INDUSTRY_GROUPS = industryGroups();
+  const customerCountries = useMemo(() => countryOptions(language), [language]);
+  const customerCountryNames = useMemo(
+    () => new Map(customerCountries.map((country) => [country.value, country.label])),
+    [customerCountries],
+  );
 
   const [origin, setOrigin] = useState('');
   const [items, setItems] = useState<SubscriptionItem[]>([]);
@@ -223,7 +225,7 @@ export default function AdminSubscriptionsPage() {
   const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
   const [customerUserRoleDrafts, setCustomerUserRoleDrafts] = useState<Record<string, 'ADMIN' | 'MEMBER'>>({});
   const [customerName, setCustomerName] = useState('');
-  const [customerCountry, setCustomerCountry] = useState<CustomerCountry>(
+  const [customerCountry, setCustomerCountry] = useState<CustomerCountry | ''>(
     defaultCustomerCountryForLanguage(language),
   );
   const [customerAddress, setCustomerAddress] = useState('');
@@ -1108,9 +1110,9 @@ export default function AdminSubscriptionsPage() {
                   required
                 >
                   <option value="">{t('adminSubscriptions.countryPlaceholder')}</option>
-                  {CUSTOMER_COUNTRIES.map((country) => (
+                  {customerCountries.map((country) => (
                     <option key={country.value} value={country.value}>
-                      {t(country.labelKey)}
+                      {country.label}
                     </option>
                   ))}
                 </select>
@@ -1377,7 +1379,9 @@ export default function AdminSubscriptionsPage() {
                         <p className="font-medium text-slate-100">{sub.customerName}</p>
                         {sub.customerCountry || sub.customerAddress ? (
                           <p className="mt-1 text-xs text-slate-500">
-                            {sub.customerCountry ? t(`adminSubscriptions.countryCode.${sub.customerCountry}`) : ''}
+                            {sub.customerCountry
+                              ? customerCountryNames.get(sub.customerCountry) || sub.customerCountry
+                              : ''}
                             {sub.customerCountry && sub.customerAddress ? ' · ' : ''}
                             {sub.customerAddress || ''}
                           </p>
@@ -1582,9 +1586,9 @@ export default function AdminSubscriptionsPage() {
                                 }
                               >
                                 <option value="">{t('adminSubscriptions.countryPlaceholder')}</option>
-                                {CUSTOMER_COUNTRIES.map((country) => (
+                                {customerCountries.map((country) => (
                                   <option key={country.value} value={country.value}>
-                                    {t(country.labelKey)}
+                                    {country.label}
                                   </option>
                                 ))}
                               </select>

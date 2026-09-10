@@ -18,6 +18,7 @@ const nav = [
   { href: '/admin/mail', labelKey: 'nav.mailing' },
   { href: '/forecast', labelKey: 'nav.forecast' },
   { href: '/export', labelKey: 'nav.export' },
+  { href: '/admin/integrations', labelKey: 'nav.integrations' },
   { href: '/admin', labelKey: 'nav.admin' },
 ] as const;
 
@@ -38,6 +39,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     (href: string) => {
       if (!pathname) return false;
       if (href === '/') return pathname === '/';
+      if (href === '/admin') return pathname === '/admin';
       return pathname === href || pathname.startsWith(`${href}/`);
     },
     [pathname],

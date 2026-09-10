@@ -45,6 +45,8 @@ model Tenant {
   legalAcceptances          LegalAcceptance[]
   googleCalendarConnections GoogleCalendarConnection[]
   clientCollaborators       ClientCollaborator[]
+  externalApiCredentials    ExternalApiCredential[]
+  externalApiAccessLogs     ExternalApiAccessLog[]
   oliviaIntegrationEvents   OliviaIntegrationEvent[]
 }
 
@@ -445,6 +447,40 @@ model OliviaIntegrationEvent {
 
   @@unique([sourceMailbox, sourceMessageId])
   @@index([tenantId])
+}
+
+// Hashed server-to-server credentials. Raw API keys are never persisted.
+model ExternalApiCredential {
+  id           String    @id @default(uuid())
+  tenantId     String
+  provider     String    @default("CHATGPT")
+  keyId        String    @unique
+  apiKeyHash   String
+  enabled      Boolean   @default(true)
+  scopes       String[]
+  lastAccessAt DateTime?
+  rotatedAt    DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+  @@index([tenantId])
+}
+
+model ExternalApiAccessLog {
+  id         String   @id @default(uuid())
+  tenantId   String
+  apiKeyId   String
+  endpoint   String
+  statusHttp Int
+  accessedAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, accessedAt])
+  @@index([apiKeyId])
 }
 
 enum TaskStatus {

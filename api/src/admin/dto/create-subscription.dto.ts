@@ -1,4 +1,16 @@
-import { IsBoolean, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsIn,
+  IsInt,
+  IsISO31661Alpha2,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateSubscriptionDto {
   @IsString()
@@ -8,8 +20,8 @@ export class CreateSubscriptionDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['CA', 'MX', 'FR'])
-  customerCountry?: 'CA' | 'MX' | 'FR';
+  @IsISO31661Alpha2()
+  customerCountry?: string;
 
   @IsOptional()
   @IsString()

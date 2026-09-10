@@ -1,0 +1,89 @@
+openapi: 3.1.0
+info:
+  title: O7 PulseCRM Read-only API
+  version: 1.0.0
+  description: Read-only CRM data for the server-configured O7 Digital tenant. Never send a tenantId.
+servers:
+  - url: https://REPLACE-WITH-RAILWAY-API.example.com/api
+paths:
+  /integrations/chatgpt/summary:
+    get:
+      operationId: getCrmSummary
+      summary: Get a compact CRM summary
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: CRM summary }
+  /integrations/chatgpt/clients:
+    get:
+      operationId: listCrmClients
+      summary: List the most recent CRM clients
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: Client list }
+  /integrations/chatgpt/deals:
+    get:
+      operationId: listCrmDeals
+      summary: List deals and their OPEN, WON or LOST status
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [OPEN, WON, LOST] }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: Deal list }
+  /integrations/chatgpt/tasks:
+    get:
+      operationId: listCrmTasks
+      summary: List tasks, optionally only overdue tasks
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: overdueOnly
+          in: query
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: Task list }
+  /integrations/chatgpt/invoices:
+    get:
+      operationId: listCrmInvoices
+      summary: List invoices and upcoming due dates; payment collection is not tracked
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: dueWithinDays
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 365 }
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: Invoice list }
+  /integrations/chatgpt/forecast:
+    get:
+      operationId: getCrmForecast
+      summary: Get weighted open-deal forecast for a month
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: month
+          in: query
+          description: Month in YYYY-MM format
+          schema: { type: string, pattern: '^\\d{4}-\\d{2}$' }
+      responses:
+        '200': { description: Monthly forecast }
+  /integrations/chatgpt/pipeline:
+    get:
+      operationId: getCrmPipeline
+      summary: Get pipelines, stages and deal totals
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Pipeline summary }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }

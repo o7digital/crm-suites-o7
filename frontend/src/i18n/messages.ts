@@ -18,6 +18,7 @@ const CORE_MESSAGES = {
     "nav.forecast": "Forecast",
     "nav.export": "Export",
     "nav.admin": "Admin",
+    "nav.integrations": "AI Access",
     "admin.backToTop": "Back to top",
 
     "auth.myAccount": "My Account",
@@ -627,6 +628,7 @@ const CORE_MESSAGES = {
     "nav.forecast": "Forecast",
     "nav.export": "Export",
     "nav.admin": "Admin",
+    "nav.integrations": "Accès IA",
     "admin.backToTop": "Retour au menu",
 
     "auth.myAccount": "Mon compte",
@@ -1248,6 +1250,7 @@ const CORE_MESSAGES = {
     "nav.forecast": "Forecast",
     "nav.export": "Export",
     "nav.admin": "Admin",
+    "nav.integrations": "Acceso IA",
     "admin.backToTop": "Volver al menu",
 
     "auth.myAccount": "Mi cuenta",
