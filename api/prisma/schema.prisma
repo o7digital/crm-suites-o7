@@ -46,6 +46,8 @@ model Tenant {
   googleCalendarConnections GoogleCalendarConnection[]
   clientCollaborators       ClientCollaborator[]
   oliviaIntegrationEvents   OliviaIntegrationEvent[]
+  vehicles                  KabinVehicle[]
+  vehicleApplications       KabinApplication[]
 }
 
 enum UserRole {
@@ -188,8 +190,56 @@ model Client {
   deals          Deal[]
   postSalesCases PostSalesCase[]
   collaborators  ClientCollaborator[]
+  kabinApplications KabinApplication[]
 
   @@index([ownerUserId])
+}
+
+model KabinVehicle {
+  id             String   @id @default(uuid())
+  tenantId       String
+  brand          String
+  model          String
+  version        String?
+  modelYear      Int?
+  armorLevel     String?
+  description    String?
+  specifications Json?
+  imageUrl       String?
+  priceMxn       Decimal? @db.Decimal(14, 2)
+  status         String   @default("DRAFT")
+  featured       Boolean  @default(false)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  applications   KabinApplication[]
+
+  @@index([tenantId, status, sortOrder])
+}
+
+model KabinApplication {
+  id             String   @id @default(uuid())
+  tenantId       String
+  clientId       String?
+  vehicleId      String?
+  name           String
+  email          String
+  phone          String?
+  company        String?
+  amountMxn      Decimal? @db.Decimal(14, 2)
+  downPercent    Int?
+  termMonths     Int?
+  annualRate     Decimal? @db.Decimal(6, 2)
+  message        String?
+  status         String   @default("NEW")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client         Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  vehicle        KabinVehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt])
 }
 
 model ClientCollaborator {
