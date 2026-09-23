@@ -2515,6 +2515,7 @@ export default function CrmPage() {
                     }}
                     onDrop={(event) => {
                       event.preventDefault();
+                      event.stopPropagation();
                       const dealId = event.dataTransfer.getData('text/plain') || draggedDealId;
                       setStatusDropHover(null);
                       if (dealId && targetStage) void handleDropDealToStatus(dealId, status);
