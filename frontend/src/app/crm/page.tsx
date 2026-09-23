@@ -371,7 +371,7 @@ export default function CrmPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [dealDuplicating, setDealDuplicating] = useState(false);
-  const [dealStatusSaving, setDealStatusSaving] = useState<Stage['status'] | null>(null);
+  const [dealStatusSaving, setDealStatusSaving] = useState<'WON' | 'LOST' | 'REOPEN' | null>(null);
   const [proposalFile, setProposalFile] = useState<File | null>(null);
   const [proposalFileName, setProposalFileName] = useState('');
   const [proposalError, setProposalError] = useState<string | null>(null);
@@ -1591,6 +1591,36 @@ export default function CrmPage() {
     setDealStatusSaving(null);
   };
 
+  const handleReopenEditingDeal = async () => {
+    if (!editingDeal) return;
+    const selectedStageIsOpen = modalSortedStages.some(
+      (stage) => stage.id === form.stageId && getEffectiveStageStatus(stage) === 'OPEN',
+    );
+    const targetStageId = selectedStageIsOpen
+      ? form.stageId
+      : modalSortedStages.find((stage) => getEffectiveStageStatus(stage) === 'OPEN')?.id;
+    if (!targetStageId) {
+      setError('Ajoutez une étape ouverte au workflow avant de rouvrir ce deal.');
+      return;
+    }
+
+    setDealStatusSaving('REOPEN');
+    try {
+      const reopened = await api<Deal>(`/deals/${editingDeal.id}/reopen`, {
+        method: 'POST',
+        body: JSON.stringify({ stageId: targetStageId }),
+      });
+      setDeals((prev) => prev.map((deal) => (deal.id === reopened.id ? { ...deal, ...reopened } : deal)));
+      setEditingDeal(reopened);
+      setForm((prev) => ({ ...prev, stageId: targetStageId, probabilityPct: toProbabilityPct(reopened.probability) }));
+      setShowModal(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Impossible de rouvrir ce deal.');
+    } finally {
+      setDealStatusSaving(null);
+    }
+  };
+
   const handleAnalyzeEditingDeal = useCallback(async () => {
     if (!editingDeal) return;
 
@@ -2507,9 +2537,18 @@ export default function CrmPage() {
               const totalLabel = status === 'WON' ? wonTotalLabel : lostTotalLabel;
 
               return (
-                <div key={status} className="card p-4">
+                <div
+                  key={status}
+                  className={`card border p-4 ${
+                    status === 'WON'
+                      ? 'border-emerald-400/35 bg-emerald-500/10'
+                      : 'border-rose-400/35 bg-rose-500/10'
+                  }`}
+                >
                   <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-slate-100">{t(`stageStatus.${status}`)}</p>
+                    <p className={`text-sm font-semibold ${status === 'WON' ? 'text-emerald-200' : 'text-rose-200'}`}>
+                      {t(`stageStatus.${status}`)}
+                    </p>
                     <div className="text-right">
                       <p className="text-xs text-slate-400">
                         {statusDeals.length} {t('crm.deals')}
@@ -2524,7 +2563,11 @@ export default function CrmPage() {
                       <button
                         key={deal.id}
                         type="button"
-                        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left transition hover:bg-white/10"
+                        className={`w-full rounded-lg border px-3 py-2 text-left transition ${
+                          status === 'WON'
+                            ? 'border-emerald-300/25 bg-emerald-500/10 hover:bg-emerald-500/20'
+                            : 'border-rose-300/25 bg-rose-500/10 hover:bg-rose-500/20'
+                        }`}
                         onClick={() => openEditModal(deal)}
                       >
                         <div className="flex items-center justify-between gap-3">
@@ -3423,6 +3466,15 @@ export default function CrmPage() {
               <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
                 {editingDeal ? (
                   <>
+                    {dealStatusById[editingDeal.id] !== 'OPEN' ? (
+                      <button
+                        className="rounded-lg border border-sky-400/30 bg-sky-500/20 px-3 py-2 text-xs font-semibold text-sky-100 transition hover:bg-sky-500/30 disabled:opacity-60"
+                        onClick={() => void handleReopenEditingDeal()}
+                        disabled={dealDuplicating || dealStatusSaving !== null}
+                      >
+                        {dealStatusSaving === 'REOPEN' ? 'REABRIR…' : 'REABRIR'}
+                      </button>
+                    ) : null}
                     <button
                       className="rounded-lg border border-emerald-400/30 bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-500/30 disabled:opacity-60"
                       onClick={() => void handleMarkEditingDealStatus('WON')}
