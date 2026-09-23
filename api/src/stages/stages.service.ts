@@ -18,6 +18,10 @@ export class StagesService {
     });
     if (!pipeline) throw new NotFoundException('Pipeline not found');
 
+    const status = dto.status ?? 'OPEN';
+    const probability = dto.probability ?? 0;
+    this.validateStatusProbability(status, probability);
+
     let position = dto.position;
     if (position === undefined || position === null) {
       const max = await this.prisma.stage.aggregate({
@@ -31,8 +35,8 @@ export class StagesService {
       data: {
         name: dto.name,
         position,
-        probability: dto.probability ?? 0,
-        status: dto.status ?? 'OPEN',
+        probability,
+        status,
         tenantId: user.tenantId,
         pipelineId: dto.pipelineId,
       },
@@ -62,7 +66,23 @@ export class StagesService {
 
   async update(id: string, dto: UpdateStageDto, user: RequestUser) {
     await requireWorkspaceAdmin(this.prisma, user);
-    await this.ensureBelongs(id, user);
+    const stage = await this.ensureBelongs(id, user);
+
+    if (dto.status !== undefined || dto.probability !== undefined) {
+      this.validateStatusProbability(dto.status ?? stage.status, dto.probability ?? stage.probability);
+    }
+
+    if (dto.status !== undefined && dto.status !== stage.status) {
+      const deals = await this.prisma.deal.count({
+        where: { stageId: id, tenantId: user.tenantId },
+      });
+      if (deals > 0) {
+        throw new BadRequestException(
+          'Stage status cannot be changed while it contains deals. Move deals first.',
+        );
+      }
+    }
+
     try {
       return await this.prisma.stage.update({
         where: { id },
@@ -125,7 +145,17 @@ export class StagesService {
   }
 
   private async ensureBelongs(id: string, user: RequestUser) {
-    const exists = await this.prisma.stage.findFirst({ where: { id, tenantId: user.tenantId } });
-    if (!exists) throw new NotFoundException('Stage not found');
+    const stage = await this.prisma.stage.findFirst({ where: { id, tenantId: user.tenantId } });
+    if (!stage) throw new NotFoundException('Stage not found');
+    return stage;
+  }
+
+  private validateStatusProbability(status: 'OPEN' | 'WON' | 'LOST', probability: number) {
+    if (status === 'WON' && probability !== 1) {
+      throw new BadRequestException('A WON stage must have probability 1.');
+    }
+    if (status === 'LOST' && probability !== 0) {
+      throw new BadRequestException('A LOST stage must have probability 0.');
+    }
   }
 }

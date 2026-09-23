@@ -916,14 +916,15 @@ export default function CrmPage() {
       afterStageId && sourceDrafts.some((stage) => stage.id === afterStageId)
         ? afterStageId
         : sourceDrafts[sourceDrafts.length - 1]?.id || '';
+    const selectedReferenceStage = sourceDrafts.find((stage) => stage.id === preferredAfterStageId);
     const referenceStage =
-      sourceDrafts.find((stage) => stage.id === preferredAfterStageId) ||
-      sourceDrafts[sourceDrafts.length - 1];
+      (selectedReferenceStage?.status === 'OPEN' ? selectedReferenceStage : null) ||
+      [...sourceDrafts].reverse().find((stage) => stage.status === 'OPEN');
 
     setNewStageDraft({
       name: '',
       probabilityPct: referenceStage?.probabilityPct ?? '50',
-      status: referenceStage?.status ?? 'OPEN',
+      status: 'OPEN',
       afterStageId: preferredAfterStageId,
     });
   };
@@ -1722,6 +1723,12 @@ export default function CrmPage() {
 
         const probabilityPct = parseProbabilityPct(draft.probabilityPct);
         if (probabilityPct === null) throw new Error('Probability must be between 0 and 100');
+        if (draft.status === 'WON' && probabilityPct !== 100) {
+          throw new Error('A won stage is final and must have 100% probability. Select Open to show it in the Kanban.');
+        }
+        if (draft.status === 'LOST' && probabilityPct !== 0) {
+          throw new Error('A lost stage is final and must have 0% probability. Select Open to show it in the Kanban.');
+        }
         return {
           ...draft,
           name,
@@ -1811,7 +1818,6 @@ export default function CrmPage() {
       const stagesToDelete = existingStages.filter((stage) => !retainedStageIds.has(stage.id));
       const undeletedStageIds = new Set<string>();
       const undeletedStageReasons: string[] = [];
-      const failedUpdateStageNames: string[] = [];
       const moveWarnings: string[] = [];
       const pipelineDeals = await api<Deal[]>(`/deals?pipelineId=${workflowTargetPipelineId}`);
       const dealsByStageId = new Map<string, Deal[]>();
@@ -1897,18 +1903,14 @@ export default function CrmPage() {
           Math.abs((current.probability ?? 0) - draft.probability) > 0.00001;
         if (!changed) continue;
 
-        try {
-          await api(`/stages/${draft.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              name: draft.name,
-              status: draft.status,
-              probability: draft.probability,
-            }),
-          });
-        } catch {
-          failedUpdateStageNames.push(current.name || draft.name);
-        }
+        await api(`/stages/${draft.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            name: draft.name,
+            status: draft.status,
+            probability: draft.probability,
+          }),
+        });
       }
 
       const orderedExistingStageIds = [...existingStages]
@@ -1937,10 +1939,13 @@ export default function CrmPage() {
       const createdStageResult = newStageNameValue
         ? await createWorkflowStageFromDraft(workflowTargetPipelineId, newStageDraft)
         : null;
-      const refreshedStages =
-        createdStageResult?.stages || (await api<Stage[]>(`/stages?pipelineId=${workflowTargetPipelineId}`));
+      const [refreshedStages, refreshedDeals] = await Promise.all([
+        api<Stage[]>(`/stages?pipelineId=${workflowTargetPipelineId}`),
+        api<Deal[]>(`/deals?pipelineId=${workflowTargetPipelineId}`),
+      ]);
       if (workflowTargetPipelineId === pipelineId) {
         setStages(refreshedStages);
+        setDeals(refreshedDeals);
       }
       setStagesByPipelineId((prev) => ({ ...prev, [workflowTargetPipelineId]: refreshedStages }));
       resetWorkflowEditor(refreshedStages, createdStageResult?.created.id || newStageDraft.afterStageId || undefined);
@@ -1948,16 +1953,11 @@ export default function CrmPage() {
       setWorkflowError(null);
       setShowWorkflowModal(false);
       setRequestedStageId(createdStageResult?.created.id || null);
-      if (undeletedStageReasons.length > 0 || failedUpdateStageNames.length > 0 || moveWarnings.length > 0) {
+      if (undeletedStageReasons.length > 0 || moveWarnings.length > 0) {
         const warnings: string[] = [];
         if (undeletedStageReasons.length > 0) {
           warnings.push(
             `${undeletedStageReasons.length} etapa(s) no se pudieron eliminar: ${undeletedStageReasons.join(', ')}`,
-          );
-        }
-        if (failedUpdateStageNames.length > 0) {
-          warnings.push(
-            `${failedUpdateStageNames.length} etapa(s) no se pudieron actualizar: ${failedUpdateStageNames.join(', ')}`,
           );
         }
         if (moveWarnings.length > 0) {
@@ -2814,15 +2814,21 @@ export default function CrmPage() {
                         <select
                           className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                           value={draft.status}
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const status = e.target.value as Stage['status'];
                             updateWorkflowStageDraft(draft.id, {
-                              status: e.target.value as Stage['status'],
-                            })
-                          }
+                              status,
+                              ...(status === 'WON'
+                                ? { probabilityPct: '100' }
+                                : status === 'LOST'
+                                  ? { probabilityPct: '0' }
+                                  : {}),
+                            });
+                          }}
                         >
                           {STAGE_STATUSES.map((status) => (
                             <option key={status} value={status}>
-                              {t(`stageStatus.${status}`)}
+                              {t(`stageStatus.${status}`)} · {status === 'OPEN' ? 'Kanban' : 'final'}
                             </option>
                           ))}
                         </select>
@@ -2842,6 +2848,11 @@ export default function CrmPage() {
                           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
                             %
                           </span>
+                          {draft.status !== 'OPEN' ? (
+                            <span className="mt-1 block text-[11px] text-amber-200">
+                              Final: hidden from active Kanban columns.
+                            </span>
+                          ) : null}
                         </div>
                         <button
                           type="button"
@@ -2901,19 +2912,25 @@ export default function CrmPage() {
                       {t('crm.stageStatus')}
                       <select
                         className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                        value={newStageDraft.status}
-                        onChange={(e) =>
-                          setNewStageDraft((prev) => ({
-                            ...prev,
-                            status: e.target.value as Stage['status'],
-                          }))
-                        }
-                      >
-                        {STAGE_STATUSES.map((status) => (
-                          <option key={status} value={status}>
-                            {t(`stageStatus.${status}`)}
-                          </option>
-                        ))}
+                          value={newStageDraft.status}
+                          onChange={(e) => {
+                            const status = e.target.value as Stage['status'];
+                            setNewStageDraft((prev) => ({
+                              ...prev,
+                              status,
+                              ...(status === 'WON'
+                                ? { probabilityPct: '100' }
+                                : status === 'LOST'
+                                  ? { probabilityPct: '0' }
+                                  : {}),
+                            }));
+                          }}
+                        >
+                          {STAGE_STATUSES.map((status) => (
+                            <option key={status} value={status}>
+                              {t(`stageStatus.${status}`)} · {status === 'OPEN' ? 'Kanban' : 'final'}
+                            </option>
+                          ))}
                       </select>
                     </label>
                     <label className="block text-sm text-slate-300">
