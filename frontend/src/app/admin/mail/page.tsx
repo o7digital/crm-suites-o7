@@ -12,7 +12,11 @@ import { BufferStudioModal, EventCatalogModal, type AnnualEvent, type BufferConf
 
 type NewsletterEvent = AnnualEvent;
 type NewsletterCampaign = Omit<(typeof seed.campaigns)[number], 'events'> & { bodyHtml?: string; events: NewsletterEvent[] };
-type MailchimpSetup = typeof seed.mailchimp & { newsletterCampaigns?: NewsletterCampaign[]; buffer: BufferConfig };
+type MailchimpSetup = Omit<typeof seed.mailchimp, 'gallery'> & {
+  gallery: string[];
+  newsletterCampaigns?: NewsletterCampaign[];
+  buffer: BufferConfig;
+};
 type EditorPanel = 'contenu' | 'evenements' | 'design' | 'mailchimp';
 type PreviewMode = 'desktop' | 'mobile';
 
@@ -28,7 +32,7 @@ type MailchimpDraftResponse = {
   status: string;
 };
 
-const draftStorageKey = 'suites-mine-newsletter-drafts-v2';
+const draftStorageKey = 'crm-newsletter-drafts-v1';
 const emptyMailchimp = { ...clone(seed.mailchimp), buffer: { apiKey: '', organizationId: '' } } as MailchimpSetup;
 const annualEvents = clone(annualEventsSeed) as AnnualEvent[];
 
@@ -173,7 +177,7 @@ export default function AdminMailPage() {
       const response = await api<MailchimpDraftResponse>('/tenant/newsletter/mailchimp/draft', {
         method: 'POST',
         body: JSON.stringify({
-          campaignTitle: `Suites Mine · ${selected.month} 2026`,
+          campaignTitle: `${setup.fromName || 'Newsletter'} · ${selected.month}`,
           subject: selected.subject,
           preheader: selected.preheader,
           html,
@@ -211,7 +215,7 @@ export default function AdminMailPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `suites-mine-${selected.id}.html`;
+    link.download = `newsletter-${selected.id}.html`;
     link.click();
     URL.revokeObjectURL(url);
     setNotice({ tone: 'ok', text: 'Le fichier HTML compatible Mailchimp a été téléchargé.' });
@@ -297,10 +301,9 @@ export default function AdminMailPage() {
         <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.18em] text-slate-400">Marketing · Mailchimp</p>
-            <h1 className="mt-1 text-3xl font-semibold">Studio newsletter Suites Mine</h1>
+            <h1 className="mt-1 text-3xl font-semibold">Studio newsletter</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-              Cinq campagnes 2026 — août, septembre, octobre, novembre et décembre — avec événements vérifiés, édition complète et
-              aperçu fidèle au design Suites Mine. Le catalogue culturel couvre août à décembre et alimente aussi Buffer.
+              Créez, éditez et prévisualisez vos newsletters. Le modèle est vierge : ajoutez votre marque, votre contenu et vos visuels.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -530,7 +533,7 @@ function NewsletterDocumentEditor({
             <input
               aria-label="Nom du document"
               className="w-full min-w-0 bg-transparent text-base font-semibold text-white outline-none sm:w-[360px]"
-              value={`Suites Mine · ${campaign.month} 2026`}
+              value={`Newsletter · ${campaign.month}`}
               readOnly
             />
             <p className="mt-0.5 text-[11px] text-[#d7c6a3]">Brouillon enregistré automatiquement · Cmd/Ctrl + S pour sauvegarder</p>
@@ -618,7 +621,7 @@ function NewsletterDocumentEditor({
             </div>
             <div className="relative min-h-80 bg-[#1a2c25]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={campaign.heroImage || setup.heroImage} alt="Suites Mine" className="absolute inset-0 h-full w-full object-cover" />
+              {campaign.heroImage || setup.heroImage ? <img src={campaign.heroImage || setup.heroImage} alt="Visuel de campagne" className="absolute inset-0 h-full w-full object-cover" /> : null}
               <span className="absolute bottom-6 left-6 rounded-md bg-[#18251f]/95 px-4 py-2 text-xs uppercase tracking-[0.2em] text-[#e6c77d]">
                 {campaign.month}
               </span>
@@ -627,8 +630,8 @@ function NewsletterDocumentEditor({
 
           <section className="flex items-center justify-between gap-6 bg-[#152820] px-12 py-7 text-[#f4ead7]">
             <div>
-              <p className="font-serif text-3xl font-semibold">Suites Mine</p>
-              <p className="mt-2 text-[11px] uppercase tracking-[0.22em] text-[#d7c6a3]">Apart hotel cerca del Ángel</p>
+              <p className="font-serif text-3xl font-semibold">{setup.fromName || 'Votre entreprise'}</p>
+              <p className="mt-2 text-[11px] uppercase tracking-[0.22em] text-[#d7c6a3]">Votre signature de marque</p>
             </div>
             <p className="text-right text-sm text-[#d7c6a3]">Cliquez directement dans le document pour écrire</p>
           </section>
@@ -648,8 +651,8 @@ function NewsletterDocumentEditor({
           <section className="border-t border-[#e3d7c3] bg-[#f7f0e4] px-12 py-12">
             <div className="mb-7 flex items-end justify-between gap-4">
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-[#a77f39]">Qué hacer en CDMX</p>
-                <h2 className="mt-2 font-serif text-3xl text-[#203229]">Agenda de {campaign.month.toLowerCase()}</h2>
+              <p className="text-xs uppercase tracking-[0.2em] text-[#a77f39]">Contenus associés</p>
+                <h2 className="mt-2 font-serif text-3xl text-[#203229]">À découvrir</h2>
               </div>
               <button type="button" onClick={addEvent} className="rounded-lg bg-[#1f3a31] px-4 py-2 text-xs font-semibold text-white">
                 + Ajouter
@@ -688,7 +691,7 @@ function NewsletterDocumentEditor({
           </section>
 
           <footer className="bg-[#152820] px-12 py-8 text-sm text-[#f4ead7]">
-            <strong>Suites Mine</strong>
+            <strong>{setup.fromName || 'Votre entreprise'}</strong>
             <p className="mt-2 text-xs leading-6 text-[#d7c6a3]">{setup.address} · {setup.phone} · {setup.replyTo}</p>
           </footer>
         </main>
@@ -982,13 +985,13 @@ function NewsletterPreview({ campaign, setup, mode }: { campaign: NewsletterCamp
       >
         <div className={isMobile ? '' : 'grid md:grid-cols-2'}>
           <div className="flex min-h-72 flex-col justify-center px-8 py-9">
-            <p className="text-xs uppercase tracking-[0.28em] text-[#a77f39]">Suites Mine</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-[#a77f39]">{setup.fromName || 'Votre entreprise'}</p>
             <h2 className="mt-6 font-serif text-[42px] leading-[1.08] tracking-normal text-[#183129]">{campaign.headline}</h2>
             <p className="mt-6 text-[15px] leading-7 text-[#716554]">{campaign.preheader}</p>
           </div>
           <div className="relative min-h-72 bg-[#1a2c25]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={campaign.heroImage || setup.heroImage} alt="Suites Mine" className="absolute inset-0 h-full w-full object-cover" />
+            {campaign.heroImage || setup.heroImage ? <img src={campaign.heroImage || setup.heroImage} alt="Visuel de campagne" className="absolute inset-0 h-full w-full object-cover" /> : null}
             <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
             <span className="absolute bottom-5 left-5 rounded-md bg-[#18251f]/95 px-4 py-2 text-xs uppercase tracking-[0.2em] text-[#e6c77d]">
               {campaign.month}
@@ -998,8 +1001,8 @@ function NewsletterPreview({ campaign, setup, mode }: { campaign: NewsletterCamp
 
         <div className={`bg-[#152820] px-8 py-6 text-[#f4ead7] ${isMobile ? '' : 'flex items-center justify-between gap-6'}`}>
           <div>
-            <p className="font-serif text-3xl font-semibold">Suites Mine</p>
-            <p className="mt-2 text-[11px] uppercase tracking-[0.22em] text-[#d7c6a3]">Apart hotel cerca del Ángel</p>
+            <p className="font-serif text-3xl font-semibold">{setup.fromName || 'Votre entreprise'}</p>
+            <p className="mt-2 text-[11px] uppercase tracking-[0.22em] text-[#d7c6a3]">Votre signature de marque</p>
           </div>
           <p className={`max-w-sm text-sm leading-6 text-[#d7c6a3] ${isMobile ? 'mt-4' : 'text-right'}`}>{campaign.eyebrow}</p>
         </div>
@@ -1029,8 +1032,8 @@ function NewsletterPreview({ campaign, setup, mode }: { campaign: NewsletterCamp
         </div>
 
         <section className="border-t border-[#e3d7c3] bg-[#fffdf8] px-8 py-9">
-          <p className="text-xs uppercase tracking-[0.2em] text-[#a77f39]">Qué hacer en CDMX</p>
-          <h3 className="mt-2 font-serif text-3xl text-[#203229]">Agenda seleccionada para {campaign.month.toLowerCase()}</h3>
+          <p className="text-xs uppercase tracking-[0.2em] text-[#a77f39]">Contenus associés</p>
+          <h3 className="mt-2 font-serif text-3xl text-[#203229]">À découvrir</h3>
           <div className={`mt-6 grid gap-4 ${!isMobile && campaign.events.length > 1 ? 'sm:grid-cols-2' : ''}`}>
             {campaign.events.map((event) => (
               <article key={event.id} className="overflow-hidden rounded-lg border border-[#ded1bc] bg-[#f8f0e2]">
@@ -1061,7 +1064,7 @@ function NewsletterPreview({ campaign, setup, mode }: { campaign: NewsletterCamp
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {setup.gallery.map((image, index) => (
               // eslint-disable-next-line @next/next/no-img-element
-              <img key={`${image}-${index}`} src={image} alt={`Suites Mine ${index + 1}`} className="h-28 w-full rounded-lg border border-[#d8c8ad] object-cover" />
+              <img key={`${image}-${index}`} src={image} alt={`Visuel ${index + 1}`} className="h-28 w-full rounded-lg border border-[#d8c8ad] object-cover" />
             ))}
           </div>
         </section>
@@ -1069,7 +1072,7 @@ function NewsletterPreview({ campaign, setup, mode }: { campaign: NewsletterCamp
         <footer className="bg-[#152820] px-8 py-7 text-sm text-[#f4ead7]">
           <div className={isMobile ? '' : 'flex items-center justify-between gap-4'}>
             <div>
-              <p className="font-semibold">Suites Mine</p>
+              <p className="font-semibold">{setup.fromName || 'Votre entreprise'}</p>
               <p className="mt-1 text-xs text-[#d7c6a3]">{setup.address}</p>
             </div>
             <div className={`text-xs text-[#d7c6a3] ${isMobile ? 'mt-3' : 'text-right'}`}>
@@ -1084,6 +1087,8 @@ function NewsletterPreview({ campaign, setup, mode }: { campaign: NewsletterCamp
 }
 
 function buildMailchimpHtml(campaign: NewsletterCampaign, setup: MailchimpSetup) {
+  const brandName = setup.fromName || 'Votre entreprise';
+  const heroImage = campaign.heroImage || setup.heroImage;
   const richContent = styleEmailRichHtml(
     sanitizeRichHtml(toMailchimpText(campaign.bodyHtml || paragraphsToRichHtml(campaign.body))),
   );
@@ -1097,7 +1102,7 @@ function buildMailchimpHtml(campaign: NewsletterCampaign, setup: MailchimpSetup)
     .join('');
   const gallery = setup.gallery
     .slice(0, 4)
-    .map((image) => `<td width="25%" style="padding:4px;"><img src="${escapeHtml(image)}" alt="Suites Mine" width="145" style="display:block;width:100%;height:auto;border:0;border-radius:7px;" /></td>`)
+    .map((image) => `<td width="25%" style="padding:4px;"><img src="${escapeHtml(image)}" alt="Visuel" width="145" style="display:block;width:100%;height:auto;border:0;border-radius:7px;" /></td>`)
     .join('');
 
   return `<!doctype html>
@@ -1112,12 +1117,12 @@ function buildMailchimpHtml(campaign: NewsletterCampaign, setup: MailchimpSetup)
   <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(campaign.preheader)}</div>
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#efe7d8;padding:26px 10px;"><tr><td align="center">
     <table class="email-shell" role="presentation" width="680" cellspacing="0" cellpadding="0" style="max-width:680px;width:100%;background:#fbf8f1;border:1px solid #d6c8ad;border-radius:10px;overflow:hidden;">
-      <tr><td class="stack pad" width="50%" valign="middle" style="padding:36px 32px;"><div style="color:#a77f39;font-size:11px;text-transform:uppercase;letter-spacing:3px;">Suites Mine</div><h1 class="hero-title" style="margin:22px 0 18px;font-family:Georgia,serif;font-size:42px;line-height:1.08;color:#183129;">${escapeHtml(campaign.headline)}</h1><p style="margin:0;color:#716554;font-size:15px;line-height:1.7;">${escapeHtml(campaign.preheader)}</p></td><td class="stack" width="50%" valign="middle"><img src="${escapeHtml(campaign.heroImage || setup.heroImage)}" alt="Suites Mine" width="340" style="display:block;width:100%;height:auto;border:0;" /></td></tr>
-      <tr><td colspan="2" style="background:#152820;color:#f4ead7;padding:24px 32px;"><div style="font-family:Georgia,serif;font-size:28px;font-weight:700;">Suites Mine</div><div style="margin-top:7px;color:#d7c6a3;font-size:11px;text-transform:uppercase;letter-spacing:2px;">Apart hotel cerca del Ángel · ${escapeHtml(campaign.eyebrow)}</div></td></tr>
+      <tr><td class="stack pad" width="50%" valign="middle" style="padding:36px 32px;"><div style="color:#a77f39;font-size:11px;text-transform:uppercase;letter-spacing:3px;">${escapeHtml(brandName)}</div><h1 class="hero-title" style="margin:22px 0 18px;font-family:Georgia,serif;font-size:42px;line-height:1.08;color:#183129;">${escapeHtml(campaign.headline)}</h1><p style="margin:0;color:#716554;font-size:15px;line-height:1.7;">${escapeHtml(campaign.preheader)}</p></td><td class="stack" width="50%" valign="middle">${heroImage ? `<img src="${escapeHtml(heroImage)}" alt="Visuel de campagne" width="340" style="display:block;width:100%;height:auto;border:0;" />` : ''}</td></tr>
+      <tr><td colspan="2" style="background:#152820;color:#f4ead7;padding:24px 32px;"><div style="font-family:Georgia,serif;font-size:28px;font-weight:700;">${escapeHtml(brandName)}</div><div style="margin-top:7px;color:#d7c6a3;font-size:11px;text-transform:uppercase;letter-spacing:2px;">${escapeHtml(campaign.eyebrow)}</div></td></tr>
       <tr><td class="stack pad" width="67%" valign="top" style="padding:34px;"><div style="color:#a77f39;font-size:11px;text-transform:uppercase;letter-spacing:2px;">${escapeHtml(campaign.month)}</div><h2 style="margin:12px 0 24px;font-family:Georgia,serif;font-size:30px;line-height:1.2;color:#203229;">${escapeHtml(campaign.subject)}</h2>${richContent}<a href="${escapeHtml(campaign.ctaUrl || setup.reservationUrl)}" style="display:inline-block;margin-top:8px;background:#1f3a31;color:#fff;text-decoration:none;padding:14px 22px;border-radius:7px;font-weight:700;font-size:14px;">${escapeHtml(campaign.cta)}</a></td><td class="stack pad" width="33%" valign="top" style="background:#f3ead9;padding:34px 22px;"><div style="margin-bottom:15px;color:#a77f39;font-size:11px;text-transform:uppercase;letter-spacing:2px;">Incluye</div>${highlights}</td></tr>
-      <tr><td colspan="2" class="pad" style="border-top:1px solid #e3d7c3;background:#fffdf8;padding:34px;"><div style="color:#a77f39;font-size:11px;text-transform:uppercase;letter-spacing:2px;">Qué hacer en CDMX</div><h2 style="margin:10px 0 20px;font-family:Georgia,serif;font-size:28px;color:#203229;">Agenda seleccionada para ${escapeHtml(campaign.month.toLowerCase())}</h2><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${events}</table></td></tr>
+      <tr><td colspan="2" class="pad" style="border-top:1px solid #e3d7c3;background:#fffdf8;padding:34px;"><div style="color:#a77f39;font-size:11px;text-transform:uppercase;letter-spacing:2px;">Contenus associés</div><h2 style="margin:10px 0 20px;font-family:Georgia,serif;font-size:28px;color:#203229;">À découvrir</h2><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${events}</table></td></tr>
       <tr><td colspan="2" class="pad" style="border-top:1px solid #e3d7c3;background:#f7f0e4;padding:28px;"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>${gallery}</tr></table></td></tr>
-      <tr><td colspan="2" class="pad" style="background:#152820;color:#f4ead7;padding:25px 32px;font-size:13px;line-height:1.7;"><strong>Suites Mine</strong><br />${escapeHtml(setup.address)}<br />${escapeHtml(setup.phone)} · <a href="${escapeHtml(setup.websiteUrl)}" style="color:#e6c77d;">${escapeHtml(setup.websiteUrl)}</a><br /><span style="color:#d7c6a3;">*|HTML:LIST_ADDRESS_HTML|* · <a href="*|UNSUB|*" style="color:#d7c6a3;">Cancelar suscripción</a></span></td></tr>
+      <tr><td colspan="2" class="pad" style="background:#152820;color:#f4ead7;padding:25px 32px;font-size:13px;line-height:1.7;"><strong>${escapeHtml(brandName)}</strong><br />${escapeHtml(setup.address)}<br />${escapeHtml(setup.phone)} · <a href="${escapeHtml(setup.websiteUrl)}" style="color:#e6c77d;">${escapeHtml(setup.websiteUrl)}</a><br /><span style="color:#d7c6a3;">*|HTML:LIST_ADDRESS_HTML|* · <a href="*|UNSUB|*" style="color:#d7c6a3;">Cancelar suscripción</a></span></td></tr>
     </table>
   </td></tr></table>
 </body>
