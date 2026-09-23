@@ -198,7 +198,7 @@ export function BufferStudioModal({
   const [config, setConfig] = useState(initialConfig);
   const [channels, setChannels] = useState<BufferChannel[]>([]);
   const [selectedChannelIds, setSelectedChannelIds] = useState<string[]>([]);
-  const [text, setText] = useState(() => initialEvent ? socialTextForEvent(initialEvent) : 'Una pausa en el corazón de CDMX te espera en Suites Mine. ✨\n\nReserva directo: https://www.suitesmine.com/');
+  const [text, setText] = useState(() => initialEvent ? socialTextForEvent(initialEvent) : 'Écrivez ici votre publication pour les réseaux sociaux.');
   const [imageUrl, setImageUrl] = useState(initialEvent?.imageUrl || '');
   const [mode, setMode] = useState<'queue' | 'custom'>('queue');
   const [dueAt, setDueAt] = useState('');
@@ -340,5 +340,5 @@ export function BufferStudioModal({
 }
 
 function socialTextForEvent(event: AnnualEvent) {
-  return `${event.title} arrive à CDMX ✨\n\n📅 ${event.date}\n📍 ${event.venue}\n\nFaites de Suites Mine votre point de départ à deux rues de l’Ángel de la Independencia.\n\nInfos événement : ${event.url}\nRéserver : https://www.suitesmine.com/`;
+  return `${event.title}\n\n📅 ${event.date}\n📍 ${event.venue}\n\n${event.description}\n\nInfos : ${event.url}`;
 }
