@@ -2292,7 +2292,15 @@ export default function CrmPage() {
                     lastDragAtRef.current = Date.now();
                     setDraggedDealId(dealId);
                   }}
-                  onDealDragEnd={() => {
+                  onDealDragEnd={(event) => {
+                    const closingZone = document
+                      .elementFromPoint(event.clientX, event.clientY)
+                      ?.closest<HTMLElement>('[data-close-status]');
+                    const status = closingZone?.dataset.closeStatus as 'WON' | 'LOST' | undefined;
+                    const dealId = event.dataTransfer.getData('text/plain') || draggedDealId;
+                    // Some browsers don't dispatch drop reliably on a fixed overlay. Drag-end
+                    // coordinates provide a second, native-safe way to complete the same action.
+                    if (status && dealId) void handleDropDealToStatus(dealId, status);
                     setDraggedDealId(null);
                     setStatusDropHover(null);
                   }}
@@ -2493,6 +2501,7 @@ export default function CrmPage() {
                   <div
                     key={status}
                     data-testid={`close-zone-${status}`}
+                    data-close-status={status}
                     className={`flex min-h-20 items-center justify-center rounded-xl border-2 border-dashed px-3 text-center transition-all duration-150 ${
                       !targetStage
                         ? 'border-white/10 bg-white/[0.03] text-slate-500'
@@ -3747,7 +3756,7 @@ function StageColumn({
   ) => void;
   onOpenDeal: (deal: Deal) => void;
   onDealDragStart: (dealId: string) => void;
-  onDealDragEnd: () => void;
+  onDealDragEnd: (event: DragEvent<HTMLDivElement>) => void;
   onCloseDeal: (dealId: string, status: 'WON' | 'LOST') => void;
   onRequestAddStageAfter: (stage: Stage) => void;
   highlighted: boolean;
