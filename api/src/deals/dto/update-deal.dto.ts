@@ -16,6 +16,14 @@ export class UpdateDealDto {
 
   @IsOptional()
   @IsDateString()
+  nextActionAt?: string | null;
+
+  @IsOptional()
+  @IsDateString()
+  lastActivityAt?: string | null;
+
+  @IsOptional()
+  @IsDateString()
   expectedCloseDate?: string;
 
   @IsOptional()

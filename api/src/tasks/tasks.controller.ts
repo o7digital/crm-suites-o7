@@ -25,6 +25,11 @@ export class TasksController {
     return this.tasksService.findAll(user, clientId);
   }
 
+  @Get('assignees')
+  assignees(@CurrentUser() user: RequestUser) {
+    return this.tasksService.assignees(user);
+  }
+
   @Get('calendar-feed')
   getCalendarFeed(@CurrentUser() user: RequestUser) {
     return this.tasksCalendarService.getFeedConfig(user);

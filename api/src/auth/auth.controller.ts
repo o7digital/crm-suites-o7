@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -24,5 +24,14 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() user: RequestUser) {
     return { user };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('impersonate/subscriptions/:subscriptionId')
+  impersonateSubscriptionCustomer(
+    @Param('subscriptionId') subscriptionId: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    return this.authService.impersonateSubscriptionCustomer(subscriptionId, user);
   }
 }

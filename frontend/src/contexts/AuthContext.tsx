@@ -12,12 +12,14 @@ type User = {
   name: string;
   tenantId: string;
   tenantName?: string;
+  impersonatedByEmail?: string;
 };
 
 type AuthContextValue = {
   user: User | null;
   token: string | null;
   loading: boolean;
+  isImpersonating: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (payload: {
     tenantId?: string;
@@ -29,10 +31,13 @@ type AuthContextValue = {
     legalCountry?: string;
     legalContractVersion?: string;
   }) => Promise<'signed-in' | 'confirm'>;
+  impersonateSubscription: (subscriptionId: string) => Promise<void>;
+  stopImpersonating: () => void;
   logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const SUPPORT_ORIGINAL_SESSION_KEY = 'supportOriginalSession';
 
 function generateTenantId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -106,6 +111,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isImpersonating, setIsImpersonating] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return Boolean(localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY));
+  });
   const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
   const safeSupabase = useCallback(() => {
@@ -295,6 +304,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined') return;
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem(SUPPORT_ORIGINAL_SESSION_KEY);
     try {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       if (!supabaseUrl) return;
@@ -304,6 +314,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // ignore malformed URL / storage issues
     }
   }, []);
+
+  const applyLocalSession = useCallback((nextToken: string, nextUser: User) => {
+    setToken(nextToken);
+    setUser(nextUser);
+    localStorage.setItem('token', nextToken);
+    localStorage.setItem('user', JSON.stringify(nextUser));
+  }, []);
+
+  const impersonateSubscription = useCallback(
+    async (subscriptionId: string) => {
+      if (!token || !user) throw new Error('You must be signed in');
+      const apiBase = apiBaseForRequests();
+      const res = await fetch(`${apiBase}/auth/impersonate/subscriptions/${subscriptionId}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!res.ok) {
+        let message = `Request failed (${res.status})`;
+        try {
+          const payload = (await res.json()) as { message?: string | string[]; error?: string };
+          if (typeof payload.message === 'string') message = payload.message;
+          if (Array.isArray(payload.message)) message = payload.message.join('; ');
+          if (!payload.message && payload.error) message = payload.error;
+        } catch {
+          // keep fallback message
+        }
+        throw new Error(message);
+      }
+
+      const session = (await res.json()) as { token: string; user: User };
+      if (typeof window !== 'undefined' && !localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY)) {
+        localStorage.setItem(SUPPORT_ORIGINAL_SESSION_KEY, JSON.stringify({ token, user }));
+      }
+      setIsImpersonating(true);
+      applyLocalSession(session.token, session.user);
+    },
+    [applyLocalSession, token, user],
+  );
+
+  const stopImpersonating = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const raw = localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY);
+    if (!raw) return;
+    try {
+      const original = JSON.parse(raw) as { token: string; user: User };
+      applyLocalSession(original.token, original.user);
+    } finally {
+      localStorage.removeItem(SUPPORT_ORIGINAL_SESSION_KEY);
+      setIsImpersonating(false);
+    }
+  }, [applyLocalSession]);
 
   const logout = useCallback(async () => {
     if (hasClerk) {
@@ -321,10 +386,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setToken(null);
     setUser(null);
+    setIsImpersonating(false);
     clearAuthStorage();
   }, [clearAuthStorage, hasClerk, safeSupabase]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY)) {
+      const storedToken = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
+      if (storedToken && storedUser) {
+        try {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser) as User);
+          setIsImpersonating(true);
+          setLoading(false);
+          return;
+        } catch {
+          localStorage.removeItem(SUPPORT_ORIGINAL_SESSION_KEY);
+        }
+      }
+    }
     if (hasClerk) return;
     const supabase = safeSupabase();
     if (!supabase) return;
@@ -340,6 +421,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setToken(null);
         setUser(null);
+        setIsImpersonating(false);
         clearAuthStorage();
       }
       setLoading(false);
@@ -355,27 +437,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       token,
       loading,
+      isImpersonating,
       login,
       register,
+      impersonateSubscription,
+      stopImpersonating,
       logout,
     }),
-    [loading, login, logout, register, token, user],
+    [impersonateSubscription, isImpersonating, loading, login, logout, register, stopImpersonating, token, user],
   );
 
   return (
     <AuthContext.Provider value={value}>
-      {hasClerk ? (
+      {hasClerk && !isImpersonating ? (
         <ClerkSessionSync
           onSession={({ token: nextToken, user: nextUser }) => {
-            setToken(nextToken);
-            setUser(nextUser);
-            localStorage.setItem('token', nextToken);
-            localStorage.setItem('user', JSON.stringify(nextUser));
+            applyLocalSession(nextToken, nextUser);
             void bootstrapTenant(nextToken, { ignoreErrors: true });
           }}
           onSignedOut={() => {
             setToken(null);
             setUser(null);
+            setIsImpersonating(false);
             clearAuthStorage();
           }}
         />

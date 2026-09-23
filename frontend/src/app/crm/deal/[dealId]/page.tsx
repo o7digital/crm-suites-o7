@@ -30,6 +30,9 @@ type Deal = {
   title: string;
   value: number;
   currency: string;
+  status?: Stage['status'];
+  closedAt?: string | null;
+  lossReason?: string | null;
   probability?: number | null;
   expectedCloseDate?: string | null;
   clientId?: string | null;
@@ -282,9 +285,23 @@ export default function DealPage() {
       setError(null);
       setSuccess(null);
       try {
-        const updated = await api<Deal>(`/deals/${dealId}`, {
-          method: 'PATCH',
-          body: JSON.stringify({ stageId: targetStage.id }),
+        let lossReason: string | undefined;
+        if (status === 'LOST') {
+          const answer = window.prompt(
+            'Loss reason: price, no_response, competitor, budget, project_cancelled, timing, other',
+            'other',
+          );
+          if (answer === null) return;
+          const normalized = answer.trim().toLowerCase();
+          const allowed = ['price', 'no_response', 'competitor', 'budget', 'project_cancelled', 'timing', 'other'];
+          if (!allowed.includes(normalized)) {
+            throw new Error('Invalid loss reason');
+          }
+          lossReason = normalized;
+        }
+        const updated = await api<Deal>(`/deals/${dealId}/close`, {
+          method: 'POST',
+          body: JSON.stringify({ status, lossReason }),
         });
         setDeal(updated);
         setForm((prev) => ({ ...prev, stageId: targetStage.id }));
@@ -352,8 +369,10 @@ export default function DealPage() {
                     value={form.stageId}
                     onChange={(e) => setForm((prev) => ({ ...prev, stageId: e.target.value }))}
                   >
-                    {stages.length === 0 ? <option value={deal.stageId}>Current stage</option> : null}
-                    {stages.map((s) => (
+                    {!stages.some((s) => getEffectiveStageStatus(s) === 'OPEN' && s.id === form.stageId) ? (
+                      <option value={deal.stageId}>Current closed stage</option>
+                    ) : null}
+                    {stages.filter((s) => getEffectiveStageStatus(s) === 'OPEN').map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name} · {getEffectiveStageStatus(s)} · {Math.round((s.probability ?? 0) * 100)}%
                       </option>

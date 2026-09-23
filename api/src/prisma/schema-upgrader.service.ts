@@ -14,6 +14,7 @@ export class SchemaUpgraderService {
     await this.ensureDealOwnerId();
     await this.ensureDealProbability();
     await this.ensureDealProposalFields();
+    await this.ensureDealClosingFields();
     await this.ensureTaskTimeTrackingFields();
     await this.ensureProductsSchema();
     await this.ensureClientProfileFields();
@@ -237,6 +238,72 @@ export class SchemaUpgraderService {
     } catch {
       // Ignore permissions / already-added races.
     }
+  }
+
+  private async ensureDealClosingFields() {
+    await this.prisma.$executeRawUnsafe(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_type t
+          JOIN pg_namespace n ON n.oid = t.typnamespace
+          WHERE t.typname = 'DealLossReason' AND n.nspname = 'public'
+        ) THEN
+          CREATE TYPE "DealLossReason" AS ENUM (
+            'price',
+            'no_response',
+            'competitor',
+            'budget',
+            'project_cancelled',
+            'timing',
+            'other'
+          );
+        END IF;
+      END $$;
+    `);
+
+    const columns: Array<{ name: string; type: string }> = [
+      {
+        name: 'status',
+        type: `"StageStatus" NOT NULL DEFAULT 'OPEN'`,
+      },
+      { name: 'closedAt', type: 'TIMESTAMP(3)' },
+      { name: 'closeNote', type: 'TEXT' },
+      { name: 'lossReason', type: '"DealLossReason"' },
+      { name: 'lossComment', type: 'TEXT' },
+      { name: 'followUpAt', type: 'TIMESTAMP(3)' },
+    ];
+
+    for (const column of columns) {
+      if (await this.columnExists('Deal', column.name)) continue;
+      await this.prisma.$executeRawUnsafe(
+        `ALTER TABLE "Deal" ADD COLUMN "${column.name}" ${column.type};`,
+      );
+    }
+
+    await this.prisma.$executeRawUnsafe(`
+      UPDATE "Deal" AS deal
+      SET
+        "status" = stage."status",
+        "closedAt" = CASE
+          WHEN stage."status" IN ('WON', 'LOST') THEN COALESCE(deal."closedAt", deal."updatedAt")
+          ELSE NULL
+        END
+      FROM "Stage" AS stage
+      WHERE deal."stageId" = stage."id"
+        AND (
+          deal."status" IS DISTINCT FROM stage."status"
+          OR (stage."status" IN ('WON', 'LOST') AND deal."closedAt" IS NULL)
+        );
+    `);
+
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "Deal_tenantId_pipelineId_status_idx" ON "Deal"("tenantId", "pipelineId", "status");`,
+    );
+    await this.prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "Deal_tenantId_closedAt_idx" ON "Deal"("tenantId", "closedAt");`,
+    );
   }
 
   private async ensureTaskTimeTrackingFields() {

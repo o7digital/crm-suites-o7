@@ -326,10 +326,11 @@ export default function AdminBenchmarkingPage() {
     setSaveInfo(null);
 
     try {
-      await api('/tenant/settings', {
+      const saved = await api<{ settings: { marketingSetup: MarketingSetup | null } }>('/tenant/settings', {
         method: 'PATCH',
         body: JSON.stringify({ marketingSetup: setup }),
       });
+      setSetup(normalizeMarketingSetup(saved.settings.marketingSetup));
       setSaveInfo('Connector saved for this workspace.');
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Unable to save connector.');
@@ -607,6 +608,7 @@ export default function AdminBenchmarkingPage() {
                           Password
                           <input
                             type="password"
+                            placeholder="Laisser vide pour conserver le secret enregistré"
                             className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                             value={setup.smtp?.password || ''}
                             onChange={(event) =>
@@ -650,6 +652,7 @@ export default function AdminBenchmarkingPage() {
                           API key
                           <input
                             type="password"
+                            placeholder="Laisser vide pour conserver le secret enregistré"
                             className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                             value={setup.mailchimp?.apiKey || ''}
                             onChange={(event) =>
@@ -708,6 +711,7 @@ export default function AdminBenchmarkingPage() {
                           API key
                           <input
                             type="password"
+                            placeholder="Laisser vide pour conserver le secret enregistré"
                             className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                             value={setup.brevo?.apiKey || ''}
                             onChange={(event) =>

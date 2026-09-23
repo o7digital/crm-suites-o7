@@ -154,7 +154,7 @@ export class OliviaIntegrationService {
         const probability =
           typeof payload.probability === 'number' &&
           Number.isFinite(payload.probability)
-            ? Math.max(0, Math.min(1, payload.probability)) * 100
+            ? Math.max(0, Math.min(1, payload.probability))
             : undefined;
 
         const deal = await tx.deal.create({

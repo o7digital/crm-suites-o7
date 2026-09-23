@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { CommandCenter } from '../components/CommandCenter';
 import { AppShell } from '../components/AppShell';
 import { Guard } from '../components/Guard';
 import { useApi, useAuth } from '../contexts/AuthContext';
@@ -325,6 +326,7 @@ export default function DashboardPage() {
   return (
     <Guard>
       <AppShell>
+        <CommandCenter />
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-200">Overview</p>

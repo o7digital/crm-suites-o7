@@ -194,7 +194,7 @@ function normalizeExpirationDate(value: string) {
 }
 
 export default function AdminSubscriptionsPage() {
-  const { token, loading: authLoading } = useAuth();
+  const { token, loading: authLoading, impersonateSubscription } = useAuth();
   const router = useRouter();
   const api = useApi(token);
   const { t, language } = useI18n();
@@ -208,6 +208,7 @@ export default function AdminSubscriptionsPage() {
   const [editingSubscriptionId, setEditingSubscriptionId] = useState<string | null>(null);
   const [changingStatusSubscriptionId, setChangingStatusSubscriptionId] = useState<string | null>(null);
   const [checkoutSubscriptionId, setCheckoutSubscriptionId] = useState<string | null>(null);
+  const [impersonatingSubscriptionId, setImpersonatingSubscriptionId] = useState<string | null>(null);
   const [linkDraftsById, setLinkDraftsById] = useState<Record<string, LinkDraft>>({});
   const [inviteDraftsById, setInviteDraftsById] = useState<Record<string, InviteDraft>>({});
   const [pendingInvitesById, setPendingInvitesById] = useState<Record<string, PendingInvite[]>>({});
@@ -1000,6 +1001,25 @@ export default function AdminSubscriptionsPage() {
     [api],
   );
 
+  const enterCustomerWorkspace = useCallback(
+    async (sub: SubscriptionItem) => {
+      if (!isSubscriptionActive(sub)) return;
+      setImpersonatingSubscriptionId(sub.id);
+      setError(null);
+      setInfo(null);
+      try {
+        await impersonateSubscription(sub.id);
+        router.push('/');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unable to enter customer workspace';
+        setError(message);
+      } finally {
+        setImpersonatingSubscriptionId((prev) => (prev === sub.id ? null : prev));
+      }
+    },
+    [impersonateSubscription, router],
+  );
+
   const rows = useMemo(
     () =>
       items.map((sub) => ({
@@ -1482,6 +1502,16 @@ export default function AdminSubscriptionsPage() {
                               Ouvrir l’Inbox IA
                             </a>
                           ) : null}
+                          <button
+                            type="button"
+                            className="rounded-lg bg-amber-500/20 px-3 py-2 text-xs font-semibold text-amber-100 ring-1 ring-amber-300/40 hover:bg-amber-500/30 disabled:opacity-50"
+                            onClick={() => void enterCustomerWorkspace(sub)}
+                            disabled={!isSubscriptionActive(sub) || impersonatingSubscriptionId === sub.id}
+                          >
+                            {impersonatingSubscriptionId === sub.id
+                              ? 'Ouverture...'
+                              : 'Entrer dans le compte'}
+                          </button>
                           <button
                             type="button"
                             className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10 disabled:opacity-50"

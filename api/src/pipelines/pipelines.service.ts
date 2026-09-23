@@ -3,12 +3,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreatePipelineDto } from './dto/create-pipeline.dto';
 import { UpdatePipelineDto } from './dto/update-pipeline.dto';
 import { RequestUser } from '../common/user.decorator';
+import { requireWorkspaceAdmin } from '../common/workspace-permissions';
 
 @Injectable()
 export class PipelinesService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreatePipelineDto, user: RequestUser) {
+    await requireWorkspaceAdmin(this.prisma, user);
     if (dto.isDefault) {
       await this.prisma.pipeline.updateMany({
         where: { tenantId: user.tenantId },
@@ -42,6 +44,7 @@ export class PipelinesService {
   }
 
   async update(id: string, dto: UpdatePipelineDto, user: RequestUser) {
+    await requireWorkspaceAdmin(this.prisma, user);
     await this.ensureBelongs(id, user);
     if (dto.isDefault) {
       await this.prisma.pipeline.updateMany({
@@ -56,6 +59,7 @@ export class PipelinesService {
   }
 
   async remove(id: string, user: RequestUser) {
+    await requireWorkspaceAdmin(this.prisma, user);
     await this.ensureBelongs(id, user);
 
     await this.prisma.dealStageHistory.deleteMany({

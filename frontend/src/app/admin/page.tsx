@@ -12,7 +12,11 @@ const tiles = [
   { href: '/admin/calendar', title: 'Calendar sync', description: 'Connect Google Calendar and sync CRM tasks.' },
   { href: '/admin/ocr-scan', title: 'OCR - Scan', description: 'Upload and process invoices with OCR extraction.' },
   { href: '/admin/subscriptions', title: 'Subscriptions', description: 'Billing and subscription foundations.' },
-  { href: '/admin/mail', title: 'Mail integration', description: 'Connect O7 Workspace (Mailcow) or SMTP.' },
+  {
+    href: '/admin/mail',
+    title: 'Mailing & réseaux sociaux',
+    description: 'Éditer les newsletters, créer les brouillons Mailchimp et publier via Buffer.',
+  },
   { href: '/admin/benchmarking', title: 'Benchmarking', description: 'Connect providers, build audiences, and send newsletters.' },
   { href: '/admin/reporting', title: 'Reporting', description: 'Sales charts and KPI dashboards.' },
   { href: '/admin/goals', title: 'Objectives', description: 'Targets, quotas, and goal tracking.' },

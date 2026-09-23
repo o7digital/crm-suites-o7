@@ -16,15 +16,13 @@ const isProtectedRoute = createRouteMatcher([
   '/tasks(.*)',
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
-  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
-    return NextResponse.next();
-  }
+// Supabase deployments must not initialize Clerk without its publishable key.
+export default process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ? clerkMiddleware(async (auth, req) => {
   if (isProtectedRoute(req)) {
     await auth.protect();
   }
   return NextResponse.next();
-});
+}) : () => NextResponse.next();
 
 export const config = {
   matcher: [

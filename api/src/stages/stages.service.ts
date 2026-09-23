@@ -5,16 +5,22 @@ import { CreateStageDto } from './dto/create-stage.dto';
 import { UpdateStageDto } from './dto/update-stage.dto';
 import { ReorderStagesDto } from './dto/reorder-stages.dto';
 import { RequestUser } from '../common/user.decorator';
+import { requireWorkspaceAdmin } from '../common/workspace-permissions';
 
 @Injectable()
 export class StagesService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateStageDto, user: RequestUser) {
+    await requireWorkspaceAdmin(this.prisma, user);
     const pipeline = await this.prisma.pipeline.findFirst({
       where: { id: dto.pipelineId, tenantId: user.tenantId },
     });
     if (!pipeline) throw new NotFoundException('Pipeline not found');
+
+    const status = dto.status ?? 'OPEN';
+    const probability = dto.probability ?? 0;
+    this.validateStatusProbability(status, probability);
 
     let position = dto.position;
     if (position === undefined || position === null) {
@@ -29,8 +35,8 @@ export class StagesService {
       data: {
         name: dto.name,
         position,
-        probability: dto.probability ?? 0,
-        status: dto.status ?? 'OPEN',
+        probability,
+        status,
         tenantId: user.tenantId,
         pipelineId: dto.pipelineId,
       },
@@ -38,9 +44,6 @@ export class StagesService {
   }
 
   async findAll(pipelineId: string | undefined, user: RequestUser) {
-    if (pipelineId) {
-      await this.ensureNewSalesContractStage(pipelineId, user);
-    }
     return this.prisma.stage.findMany({
       where: {
         tenantId: user.tenantId,
@@ -62,7 +65,24 @@ export class StagesService {
   }
 
   async update(id: string, dto: UpdateStageDto, user: RequestUser) {
-    await this.ensureBelongs(id, user);
+    await requireWorkspaceAdmin(this.prisma, user);
+    const stage = await this.ensureBelongs(id, user);
+
+    if (dto.status !== undefined || dto.probability !== undefined) {
+      this.validateStatusProbability(dto.status ?? stage.status, dto.probability ?? stage.probability);
+    }
+
+    if (dto.status !== undefined && dto.status !== stage.status) {
+      const deals = await this.prisma.deal.count({
+        where: { stageId: id, tenantId: user.tenantId },
+      });
+      if (deals > 0) {
+        throw new BadRequestException(
+          'Stage status cannot be changed while it contains deals. Move deals first.',
+        );
+      }
+    }
+
     try {
       return await this.prisma.stage.update({
         where: { id },
@@ -77,6 +97,7 @@ export class StagesService {
   }
 
   async reorder(dto: ReorderStagesDto, user: RequestUser) {
+    await requireWorkspaceAdmin(this.prisma, user);
     const ids = dto.items.map((item) => item.id);
     const stages = await this.prisma.stage.findMany({
       where: { id: { in: ids }, tenantId: user.tenantId },
@@ -99,6 +120,7 @@ export class StagesService {
   }
 
   async remove(id: string, user: RequestUser) {
+    await requireWorkspaceAdmin(this.prisma, user);
     await this.ensureBelongs(id, user);
     const deals = await this.prisma.deal.count({ where: { stageId: id, tenantId: user.tenantId } });
     if (deals > 0) {
@@ -123,55 +145,17 @@ export class StagesService {
   }
 
   private async ensureBelongs(id: string, user: RequestUser) {
-    const exists = await this.prisma.stage.findFirst({ where: { id, tenantId: user.tenantId } });
-    if (!exists) throw new NotFoundException('Stage not found');
+    const stage = await this.prisma.stage.findFirst({ where: { id, tenantId: user.tenantId } });
+    if (!stage) throw new NotFoundException('Stage not found');
+    return stage;
   }
 
-  // Safety net for existing tenants where bootstrap did not run after adding this stage.
-  private async ensureNewSalesContractStage(pipelineId: string, user: RequestUser) {
-    const pipeline = await this.prisma.pipeline.findFirst({
-      where: { id: pipelineId, tenantId: user.tenantId },
-      select: { id: true, name: true },
-    });
-    if (!pipeline || pipeline.name !== 'New Sales') return;
-
-    const stages = await this.prisma.stage.findMany({
-      where: { tenantId: user.tenantId, pipelineId },
-      select: { id: true, name: true, position: true, status: true, probability: true },
-      orderBy: { position: 'asc' },
-    });
-    if (stages.length === 0) return;
-
-    const byName = new Map(stages.map((s) => [s.name, s]));
-    const verbalYes = byName.get('Verbal yes');
-    const won = byName.get('Won');
-    const contract = byName.get('Contract');
-    if (!verbalYes || !won) return;
-
-    if (!contract) {
-      // Insert before "Won" and shift following stages.
-      await this.prisma.stage.updateMany({
-        where: { tenantId: user.tenantId, pipelineId, position: { gte: won.position } },
-        data: { position: { increment: 1 } },
-      });
-      await this.prisma.stage.create({
-        data: {
-          tenantId: user.tenantId,
-          pipelineId,
-          name: 'Contract',
-          status: 'OPEN',
-          probability: 0.95,
-          position: won.position,
-        },
-      });
-      return;
+  private validateStatusProbability(status: 'OPEN' | 'WON' | 'LOST', probability: number) {
+    if (status === 'WON' && probability !== 1) {
+      throw new BadRequestException('A WON stage must have probability 1.');
     }
-
-    const patch: Partial<{ status: 'OPEN' | 'WON' | 'LOST'; probability: number }> = {};
-    if (contract.status !== 'OPEN') patch.status = 'OPEN';
-    if (contract.probability !== 0.95) patch.probability = 0.95;
-    if (Object.keys(patch).length > 0) {
-      await this.prisma.stage.update({ where: { id: contract.id }, data: patch });
+    if (status === 'LOST' && probability !== 0) {
+      throw new BadRequestException('A LOST stage must have probability 0.');
     }
   }
 }

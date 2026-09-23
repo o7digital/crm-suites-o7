@@ -1,3 +1,4 @@
+import { transformMarketingSecrets } from './marketing-secrets';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import nodemailer from 'nodemailer';
 import { Prisma } from '@prisma/client';
@@ -5,7 +6,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
 import { UpdateBrandingDto } from './dto/update-branding.dto';
 import { UpdateTenantSettingsDto } from './dto/update-settings.dto';
-import { SendNewsletterDto, SendNewsletterTestDto } from './dto/send-newsletter.dto';
+import { CreateMailchimpDraftDto, SendNewsletterDto, SendNewsletterTestDto } from './dto/send-newsletter.dto';
+import { CreateBufferPostDto } from './dto/buffer.dto';
 
 type ContractClientFieldKey =
   | 'firstName'
@@ -53,15 +55,68 @@ type MarketingBrevoConfig = {
   senderName?: string;
 };
 
+type MarketingBufferConfig = {
+  apiKey?: string;
+  organizationId?: string;
+};
+
 type MarketingSetup = {
   provider: MarketingProvider;
   accountLabel?: string;
   fromName?: string;
   fromEmail?: string;
   replyTo?: string;
+  reservationUrl?: string;
+  websiteUrl?: string;
+  address?: string;
+  phone?: string;
+  heroImage?: string;
+  gallery?: string[];
+  newsletterCampaigns?: MarketingNewsletterCampaign[];
   smtp?: MarketingSmtpConfig | null;
   mailchimp?: MarketingMailchimpConfig | null;
   brevo?: MarketingBrevoConfig | null;
+  buffer?: MarketingBufferConfig | null;
+};
+
+type MarketingNewsletterEvent = {
+  id: string;
+  category: string;
+  title: string;
+  date: string;
+  venue: string;
+  description: string;
+  url: string;
+  sourceLabel: string;
+  imageUrl?: string;
+  posterUrl?: string;
+};
+
+type MarketingNewsletterCampaign = {
+  id: string;
+  month: string;
+  sendWindow: string;
+  segment: string;
+  goal: string;
+  status: string;
+  lastVerified: string;
+  subject: string;
+  preheader: string;
+  headline: string;
+  eyebrow: string;
+  heroImage: string;
+  body: string;
+  bodyHtml?: string;
+  cta: string;
+  ctaUrl: string;
+  highlights: string[];
+  events: MarketingNewsletterEvent[];
+  mailchimp: {
+    campaignType: string;
+    tags: string[];
+    mergeTags: string[];
+    utmCampaign: string;
+  };
 };
 
 type NewsletterRecipient = {
@@ -176,6 +231,23 @@ export class TenantService {
     };
   }
 
+  private readMarketingSetup(raw: unknown) {
+    return this.sanitizeMarketingSetup(transformMarketingSecrets(raw, false));
+  }
+
+  private publicMarketingSetup(raw: unknown) {
+    const setup = this.readMarketingSetup(raw);
+    if (!setup) return setup;
+    for (const provider of ['smtp', 'mailchimp', 'brevo', 'buffer'] as const) {
+      const config = setup[provider] as Record<string, unknown> | undefined;
+      if (!config) continue;
+      const key = provider === 'smtp' ? 'password' : 'apiKey';
+      config[`${key}Configured`] = Boolean(config[key]);
+      delete config[key];
+    }
+    return setup;
+  }
+
   private sanitizeMarketingSetup(raw: unknown): MarketingSetup | null | undefined {
     if (raw === undefined) return undefined;
     if (raw === null) return null;
@@ -191,6 +263,23 @@ export class TenantService {
       if (typeof value !== 'string') return undefined;
       return value.length > 0 ? value.slice(0, max) : undefined;
     };
+    const cleanUrl = (value: unknown, max = 1000) => {
+      const candidate = cleanText(value, max);
+      if (!candidate) return undefined;
+      try {
+        const url = new URL(candidate);
+        return url.protocol === 'https:' || url.protocol === 'http:' ? candidate : undefined;
+      } catch {
+        return undefined;
+      }
+    };
+    const cleanStringList = (value: unknown, maxItems: number, maxLength: number) => {
+      if (!Array.isArray(value)) return [];
+      return value
+        .map((item) => cleanText(item, maxLength))
+        .filter((item): item is string => Boolean(item))
+        .slice(0, maxItems);
+    };
     const cleanPort = (value: unknown) => {
       const parsed = typeof value === 'number' ? value : Number(String(value || ''));
       if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65535) return undefined;
@@ -205,6 +294,8 @@ export class TenantService {
     const mailchimpRaw =
       obj.mailchimp && typeof obj.mailchimp === 'object' ? (obj.mailchimp as Record<string, unknown>) : null;
     const brevoRaw = obj.brevo && typeof obj.brevo === 'object' ? (obj.brevo as Record<string, unknown>) : null;
+    const bufferRaw = obj.buffer && typeof obj.buffer === 'object' ? (obj.buffer as Record<string, unknown>) : null;
+    const rawCampaigns = Array.isArray(obj.newsletterCampaigns) ? obj.newsletterCampaigns : [];
 
     const smtp: MarketingSmtpConfig | null =
       smtpRaw &&
@@ -252,15 +343,97 @@ export class TenantService {
           }
         : null;
 
+    const buffer: MarketingBufferConfig | null =
+      bufferRaw && (cleanSecret(bufferRaw.apiKey, 500) || cleanText(bufferRaw.organizationId, 180))
+        ? {
+            ...(cleanSecret(bufferRaw.apiKey, 500) ? { apiKey: cleanSecret(bufferRaw.apiKey, 500) } : {}),
+            ...(cleanText(bufferRaw.organizationId, 180)
+              ? { organizationId: cleanText(bufferRaw.organizationId, 180) }
+              : {}),
+          }
+        : null;
+
+    const newsletterCampaigns: MarketingNewsletterCampaign[] = [];
+    for (const rawCampaign of rawCampaigns.slice(0, 12)) {
+      if (!rawCampaign || typeof rawCampaign !== 'object') continue;
+      const campaign = rawCampaign as Record<string, unknown>;
+      const id = cleanText(campaign.id, 100);
+      const month = cleanText(campaign.month, 40);
+      if (!id || !month) continue;
+
+      const events: MarketingNewsletterEvent[] = [];
+      const rawEvents = Array.isArray(campaign.events) ? campaign.events : [];
+      for (const rawEvent of rawEvents.slice(0, 20)) {
+        if (!rawEvent || typeof rawEvent !== 'object') continue;
+        const event = rawEvent as Record<string, unknown>;
+        const eventId = cleanText(event.id, 100);
+        const title = cleanText(event.title, 180);
+        if (!eventId || !title) continue;
+        events.push({
+          id: eventId,
+          category: cleanText(event.category, 60) || 'Événement',
+          title,
+          date: cleanText(event.date, 160) || '',
+          venue: cleanText(event.venue, 180) || '',
+          description: cleanText(event.description, 800) || '',
+          url: cleanUrl(event.url) || '',
+          sourceLabel: cleanText(event.sourceLabel, 120) || '',
+          ...(cleanUrl(event.imageUrl) ? { imageUrl: cleanUrl(event.imageUrl) } : {}),
+          ...(cleanUrl(event.posterUrl) ? { posterUrl: cleanUrl(event.posterUrl) } : {}),
+        });
+      }
+
+      const mailchimpRaw =
+        campaign.mailchimp && typeof campaign.mailchimp === 'object'
+          ? (campaign.mailchimp as Record<string, unknown>)
+          : {};
+      newsletterCampaigns.push({
+        id,
+        month,
+        sendWindow: cleanText(campaign.sendWindow, 180) || '',
+        segment: cleanText(campaign.segment, 800) || '',
+        goal: cleanText(campaign.goal, 800) || '',
+        status: cleanText(campaign.status, 40) || 'DRAFT',
+        lastVerified: cleanText(campaign.lastVerified, 20) || '',
+        subject: cleanText(campaign.subject, 160) || '',
+        preheader: cleanText(campaign.preheader, 180) || '',
+        headline: cleanText(campaign.headline, 180) || '',
+        eyebrow: cleanText(campaign.eyebrow, 180) || '',
+        heroImage: cleanUrl(campaign.heroImage) || '',
+        body: cleanText(campaign.body, 20000) || '',
+        ...(cleanText(campaign.bodyHtml, 50000) ? { bodyHtml: cleanText(campaign.bodyHtml, 50000) } : {}),
+        cta: cleanText(campaign.cta, 120) || '',
+        ctaUrl: cleanUrl(campaign.ctaUrl) || '',
+        highlights: cleanStringList(campaign.highlights, 6, 160),
+        events,
+        mailchimp: {
+          campaignType: cleanText(mailchimpRaw.campaignType, 30) || 'regular',
+          tags: cleanStringList(mailchimpRaw.tags, 12, 60),
+          mergeTags: cleanStringList(mailchimpRaw.mergeTags, 12, 60),
+          utmCampaign: cleanText(mailchimpRaw.utmCampaign, 100) || '',
+        },
+      });
+    }
+
     return {
       provider,
       ...(cleanText(obj.accountLabel, 140) ? { accountLabel: cleanText(obj.accountLabel, 140) } : {}),
       ...(cleanText(obj.fromName, 140) ? { fromName: cleanText(obj.fromName, 140) } : {}),
       ...(cleanText(obj.fromEmail, 240) ? { fromEmail: cleanText(obj.fromEmail, 240) } : {}),
       ...(cleanText(obj.replyTo, 240) ? { replyTo: cleanText(obj.replyTo, 240) } : {}),
+      ...(cleanUrl(obj.reservationUrl) ? { reservationUrl: cleanUrl(obj.reservationUrl) } : {}),
+      ...(cleanUrl(obj.websiteUrl) ? { websiteUrl: cleanUrl(obj.websiteUrl) } : {}),
+      ...(cleanText(obj.address, 300) ? { address: cleanText(obj.address, 300) } : {}),
+      ...(cleanText(obj.phone, 80) ? { phone: cleanText(obj.phone, 80) } : {}),
+      ...(cleanUrl(obj.heroImage) ? { heroImage: cleanUrl(obj.heroImage) } : {}),
+      ...(cleanStringList(obj.gallery, 8, 1000).length
+        ? { gallery: cleanStringList(obj.gallery, 8, 1000).filter((item) => Boolean(cleanUrl(item))) }
+        : {}),
+      ...(newsletterCampaigns.length ? { newsletterCampaigns } : {}),
       ...(smtp ? { smtp } : {}),
       ...(mailchimp ? { mailchimp } : {}),
       ...(brevo ? { brevo } : {}),
+      ...(buffer ? { buffer } : {}),
     };
   }
 
@@ -401,6 +574,284 @@ export class TenantService {
     return { sentCount, failed };
   }
 
+  private getMailchimpConfig(setup: MarketingSetup | null) {
+    if (!setup || setup.provider !== 'MAILCHIMP') {
+      throw new BadRequestException('Select Mailchimp as the marketing provider first.');
+    }
+
+    const apiKey = String(setup.mailchimp?.apiKey || '').trim();
+    const keyPrefix = apiKey.includes('-') ? apiKey.split('-').at(-1) : '';
+    const serverPrefix = String(setup.mailchimp?.serverPrefix || keyPrefix || '')
+      .trim()
+      .toLowerCase();
+    const audienceId = String(setup.mailchimp?.audienceId || '').trim();
+    const fromName = String(setup.fromName || '').trim();
+    const replyTo = String(setup.replyTo || setup.fromEmail || '').trim();
+
+    if (!apiKey) throw new BadRequestException('Mailchimp API key is required.');
+    if (!/^[a-z]{2,10}\d+$/.test(serverPrefix)) {
+      throw new BadRequestException('Mailchimp server prefix is invalid (example: us21).');
+    }
+    if (!audienceId) throw new BadRequestException('Mailchimp audience ID is required.');
+    if (!fromName) throw new BadRequestException('Mailchimp sender name is required.');
+    if (!this.isValidEmail(replyTo)) throw new BadRequestException('Mailchimp reply-to email is invalid.');
+
+    return {
+      apiKey,
+      serverPrefix,
+      audienceId,
+      fromName,
+      replyTo,
+      baseUrl: `https://${serverPrefix}.api.mailchimp.com/3.0`,
+    };
+  }
+
+  private async mailchimpRequest<T>(
+    config: ReturnType<TenantService['getMailchimpConfig']>,
+    path: string,
+    init?: RequestInit,
+  ): Promise<T> {
+    let response: Response;
+    try {
+      response = await fetch(`${config.baseUrl}${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Basic ${Buffer.from(`crm:${config.apiKey}`).toString('base64')}`,
+          'Content-Type': 'application/json',
+          ...(init?.headers || {}),
+        },
+      });
+    } catch {
+      throw new ServiceUnavailableException('Mailchimp is temporarily unreachable.');
+    }
+
+    const text = await response.text();
+    let payload: unknown = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = text;
+      }
+    }
+
+    if (!response.ok) {
+      const problem = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null;
+      const rawDetail = problem?.detail ?? problem?.title;
+      const detail = typeof rawDetail === 'string' ? rawDetail : '';
+      throw new BadRequestException(`Mailchimp: ${detail || `request failed (${response.status})`}`);
+    }
+
+    return payload as T;
+  }
+
+  async testMailchimp(user: RequestUser) {
+    await this.ensureAdmin(user);
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: user.tenantId },
+      select: { marketingSetup: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const setup = this.readMarketingSetup(tenant.marketingSetup) ?? null;
+    const config = this.getMailchimpConfig(setup);
+    const ping = await this.mailchimpRequest<{ health_status?: string }>(config, '/ping');
+    return {
+      ok: true,
+      healthStatus: ping.health_status || 'Everything is Chimpy!',
+      serverPrefix: config.serverPrefix,
+      audienceId: config.audienceId,
+    };
+  }
+
+  async createMailchimpDraft(dto: CreateMailchimpDraftDto, user: RequestUser) {
+    await this.ensureAdmin(user);
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: user.tenantId },
+      select: { marketingSetup: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const setup = this.readMarketingSetup(tenant.marketingSetup) ?? null;
+    const config = this.getMailchimpConfig(setup);
+    const campaign = await this.mailchimpRequest<{ id: string; web_id?: number; status?: string }>(config, '/campaigns', {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'regular',
+        recipients: { list_id: config.audienceId },
+        settings: {
+          subject_line: dto.subject.trim(),
+          preview_text: dto.preheader?.trim() || '',
+          title: dto.campaignTitle.trim(),
+          from_name: config.fromName,
+          reply_to: config.replyTo,
+          auto_footer: false,
+          inline_css: true,
+        },
+        tracking: {
+          opens: true,
+          html_clicks: true,
+          text_clicks: true,
+          ...(dto.utmCampaign?.trim() ? { google_analytics: dto.utmCampaign.trim() } : {}),
+        },
+      }),
+    });
+
+    try {
+      await this.mailchimpRequest(config, `/campaigns/${encodeURIComponent(campaign.id)}/content`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          html: dto.html,
+          ...(dto.plainText?.trim() ? { plain_text: dto.plainText } : {}),
+        }),
+      });
+    } catch (err) {
+      await this.mailchimpRequest(config, `/campaigns/${encodeURIComponent(campaign.id)}`, { method: 'DELETE' }).catch(
+        () => undefined,
+      );
+      throw err;
+    }
+
+    return {
+      ok: true,
+      campaignId: campaign.id,
+      webId: campaign.web_id ?? null,
+      status: campaign.status || 'save',
+      editUrl: campaign.web_id
+        ? `https://${config.serverPrefix}.admin.mailchimp.com/campaigns/show/?id=${campaign.web_id}`
+        : null,
+    };
+  }
+
+  private getBufferConfig(setup: MarketingSetup | null) {
+    const apiKey = String(setup?.buffer?.apiKey || '').trim();
+    const organizationId = String(setup?.buffer?.organizationId || '').trim();
+    if (!apiKey) throw new BadRequestException('La clé API Buffer est requise.');
+    return { apiKey, organizationId };
+  }
+
+  private async bufferRequest<T>(apiKey: string, query: string): Promise<T> {
+    let response: Response;
+    try {
+      response = await fetch('https://api.buffer.com', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+      });
+    } catch {
+      throw new ServiceUnavailableException('Buffer est temporairement indisponible.');
+    }
+
+    const payload = (await response.json().catch(() => null)) as
+      | { data?: T; errors?: Array<{ message?: string }> }
+      | null;
+    if (!response.ok || !payload) {
+      throw new BadRequestException(`Buffer: requête refusée (${response.status}).`);
+    }
+    if (payload.errors?.length) {
+      throw new BadRequestException(`Buffer: ${payload.errors.map((error) => error.message).filter(Boolean).join('; ')}`);
+    }
+    if (!payload.data) throw new BadRequestException('Buffer: réponse vide.');
+    return payload.data;
+  }
+
+  private async loadBufferWorkspace(setup: MarketingSetup | null) {
+    const config = this.getBufferConfig(setup);
+    const account = await this.bufferRequest<{
+      account?: { organizations?: Array<{ id: string; name: string }> };
+    }>(
+      config.apiKey,
+      'query GetOrganizations { account { organizations { id name } } }',
+    );
+    const organizations = account.account?.organizations || [];
+    if (!organizations.length) throw new BadRequestException('Buffer: aucune organisation accessible avec cette clé.');
+    const organization =
+      organizations.find((item) => item.id === config.organizationId) || organizations[0];
+    const channelData = await this.bufferRequest<{
+      channels?: Array<{
+        id: string;
+        name: string;
+        displayName?: string | null;
+        service: string;
+        avatar?: string | null;
+        isQueuePaused?: boolean;
+      }>;
+    }>(
+      config.apiKey,
+      `query GetChannels { channels(input: { organizationId: ${JSON.stringify(organization.id)} }) { id name displayName service avatar isQueuePaused } }`,
+    );
+    return { config, organization, organizations, channels: channelData.channels || [] };
+  }
+
+  async getBufferChannels(user: RequestUser) {
+    await this.ensureAdmin(user);
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: user.tenantId },
+      select: { marketingSetup: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    const setup = this.readMarketingSetup(tenant.marketingSetup) ?? null;
+    const workspace = await this.loadBufferWorkspace(setup);
+    return {
+      ok: true,
+      organization: workspace.organization,
+      organizations: workspace.organizations,
+      channels: workspace.channels,
+    };
+  }
+
+  async createBufferPost(dto: CreateBufferPostDto, user: RequestUser) {
+    await this.ensureAdmin(user);
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { id: user.tenantId },
+      select: { marketingSetup: true },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    const setup = this.readMarketingSetup(tenant.marketingSetup) ?? null;
+    const workspace = await this.loadBufferWorkspace(setup);
+    const allowedChannelIds = new Set(workspace.channels.map((channel) => channel.id));
+    const channelIds = [...new Set(dto.channelIds.map((id) => id.trim()).filter((id) => allowedChannelIds.has(id)))];
+    if (!channelIds.length) throw new BadRequestException('Sélectionnez au moins un réseau Buffer connecté.');
+
+    let dueAt = '';
+    if (dto.mode === 'custom') {
+      const parsed = new Date(String(dto.dueAt || ''));
+      if (!Number.isFinite(parsed.getTime())) throw new BadRequestException('La date de programmation Buffer est invalide.');
+      if (parsed.getTime() <= Date.now()) throw new BadRequestException('La date Buffer doit être dans le futur.');
+      dueAt = parsed.toISOString();
+    }
+
+    const results: Array<{ channelId: string; postId: string; dueAt?: string | null }> = [];
+    const failed: Array<{ channelId: string; message: string }> = [];
+    for (const channelId of channelIds) {
+      const scheduling =
+        dto.mode === 'custom'
+          ? `mode: customScheduled, dueAt: ${JSON.stringify(dueAt)}`
+          : 'mode: addToQueue';
+      const assets = dto.imageUrl?.trim()
+        ? `assets: [{ image: { url: ${JSON.stringify(dto.imageUrl.trim())} } }]`
+        : '';
+      const query = `mutation CreatePost { createPost(input: { text: ${JSON.stringify(dto.text.trim())}, channelId: ${JSON.stringify(channelId)}, schedulingType: automatic, ${scheduling} ${assets} }) { ... on PostActionSuccess { post { id dueAt } } ... on MutationError { message } } }`;
+      try {
+        const data = await this.bufferRequest<{
+          createPost?: { post?: { id?: string; dueAt?: string | null }; message?: string };
+        }>(workspace.config.apiKey, query);
+        const result = data.createPost;
+        if (!result?.post?.id) throw new Error(result?.message || 'Buffer n’a pas créé le post.');
+        results.push({ channelId, postId: result.post.id, dueAt: result.post.dueAt });
+      } catch (error) {
+        failed.push({ channelId, message: error instanceof Error ? error.message : 'Échec Buffer' });
+      }
+    }
+    if (!results.length) {
+      throw new BadRequestException(failed.map((item) => item.message).join('; ') || 'Aucun post Buffer créé.');
+    }
+    return { ok: failed.length === 0, created: results, failed };
+  }
+
   async getBranding(user: RequestUser) {
     try {
       const tenant = await this.prisma.tenant.findFirst({
@@ -523,7 +974,10 @@ export class TenantService {
         ? (currency as (typeof this.crmDisplayCurrencies)[number])
         : 'MXN';
       const contractSetup = this.sanitizeContractSetup(tenant.contractSetup);
-      const marketingSetup = this.sanitizeMarketingSetup(tenant.marketingSetup);
+      const role = await this.getUserRole(user);
+      const marketingSetup = role === 'OWNER' || role === 'ADMIN'
+        ? this.publicMarketingSetup(tenant.marketingSetup)
+        : null;
       return {
         tenantId: tenant.id,
         tenantName: tenant.name,
@@ -558,7 +1012,29 @@ export class TenantService {
       ? String(dto.crmDisplayCurrency).toUpperCase()
       : undefined;
     const nextContractSetup = this.sanitizeContractSetup(dto.contractSetup);
-    const nextMarketingSetup = this.sanitizeMarketingSetup(dto.marketingSetup);
+    let nextMarketingSetup = this.sanitizeMarketingSetup(dto.marketingSetup);
+    if (nextMarketingSetup) {
+      const current = await this.prisma.tenant.findFirst({
+        where: { id: user.tenantId },
+        select: { marketingSetup: true },
+      });
+      const saved = this.readMarketingSetup(current?.marketingSetup);
+      // Blank or omitted credentials keep the stored value. Explicit null clears
+      // a provider, and marketingSetup: null clears the complete configuration.
+      const raw = dto.marketingSetup as Record<string, unknown>;
+      for (const provider of ['smtp', 'mailchimp', 'brevo', 'buffer'] as const) {
+        if (raw[provider] === null) continue;
+        const key = provider === 'smtp' ? 'password' : 'apiKey';
+        const oldConfig = saved?.[provider] as Record<string, unknown> | undefined;
+        const nextConfig = nextMarketingSetup[provider] as Record<string, unknown> | undefined;
+        if (oldConfig?.[key] && !nextConfig?.[key]) {
+          nextMarketingSetup = {
+            ...nextMarketingSetup,
+            [provider]: { ...(nextConfig ?? oldConfig), [key]: oldConfig[key] },
+          };
+        }
+      }
+    }
 
     try {
       const updated = await this.prisma.tenant.update({
@@ -580,7 +1056,7 @@ export class TenantService {
                 marketingSetup:
                   nextMarketingSetup === null
                     ? Prisma.DbNull
-                    : (nextMarketingSetup as Prisma.InputJsonValue),
+                    : (transformMarketingSecrets(nextMarketingSetup, true) as Prisma.InputJsonValue),
               }
             : {}),
         },
@@ -604,7 +1080,7 @@ export class TenantService {
         ? (currency as (typeof this.crmDisplayCurrencies)[number])
         : 'MXN';
       const contractSetup = this.sanitizeContractSetup(updated.contractSetup);
-      const marketingSetup = this.sanitizeMarketingSetup(updated.marketingSetup);
+      const marketingSetup = this.publicMarketingSetup(updated.marketingSetup);
 
       return {
         tenantId: updated.id,
@@ -638,7 +1114,7 @@ export class TenantService {
       });
       if (!tenant) throw new NotFoundException('Tenant not found');
 
-      const setup = this.sanitizeMarketingSetup(tenant.marketingSetup) ?? null;
+      const setup = this.readMarketingSetup(tenant.marketingSetup) ?? null;
       const recipient: NewsletterRecipient = {
         email: user.email,
         firstName: String(user.name || '').split(/\s+/).filter(Boolean)[0] || null,
@@ -680,7 +1156,7 @@ export class TenantService {
       });
       if (!tenant) throw new NotFoundException('Tenant not found');
 
-      const setup = this.sanitizeMarketingSetup(tenant.marketingSetup) ?? null;
+      const setup = this.readMarketingSetup(tenant.marketingSetup) ?? null;
       const clients = await this.prisma.client.findMany({
         where: {
           tenantId: user.tenantId,
