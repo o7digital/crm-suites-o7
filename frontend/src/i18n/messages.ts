@@ -507,13 +507,13 @@ const CORE_MESSAGES = {
     "adminSubscriptions.status.paused": "SUSPENDED",
     "adminSubscriptions.status.canceled": "CANCELED",
     "adminSubscriptions.editStatusTitle": "Account status",
-    "adminSubscriptions.editStatusActive": "This account is active. You can deactivate it from here.",
+    "adminSubscriptions.editStatusActive": "This account is active. You can suspend it from here.",
     "adminSubscriptions.editStatusPaused": "This account is suspended. You can reactivate it from here.",
-    "adminSubscriptions.deactivateAction": "Deactivate account",
-    "adminSubscriptions.deactivating": "Deactivating…",
+    "adminSubscriptions.deactivateAction": "Suspend account",
+    "adminSubscriptions.deactivating": "Suspending…",
     "adminSubscriptions.deactivateConfirm":
-      "Deactivate this account? Customer access will be suspended until you activate it again.",
-    "adminSubscriptions.deactivatedInfo": "Customer account deactivated.",
+      "Suspend this account? Customer access will be blocked until you activate it again.",
+    "adminSubscriptions.deactivatedInfo": "Customer account suspended.",
     "adminSubscriptions.activateAction": "Activate account",
     "adminSubscriptions.activating": "Activating…",
     "adminSubscriptions.activateConfirm":
@@ -1122,14 +1122,14 @@ const CORE_MESSAGES = {
     "adminSubscriptions.status.canceled": "ANNULE",
     "adminSubscriptions.editStatusTitle": "Etat du compte",
     "adminSubscriptions.editStatusActive":
-      "Ce compte est actif. Vous pouvez le desactiver ici.",
+      "Ce compte est actif. Vous pouvez le suspendre ici.",
     "adminSubscriptions.editStatusPaused":
       "Ce compte est suspendu. Vous pouvez le reactiver ici.",
-    "adminSubscriptions.deactivateAction": "Desactiver compte",
-    "adminSubscriptions.deactivating": "Desactivation…",
+    "adminSubscriptions.deactivateAction": "Suspendre le compte",
+    "adminSubscriptions.deactivating": "Suspension…",
     "adminSubscriptions.deactivateConfirm":
-      "Desactiver ce compte ? L'acces client sera coupe jusqu'a reactivation.",
-    "adminSubscriptions.deactivatedInfo": "Compte client desactive.",
+      "Suspendre ce compte ? L'acces client sera coupe jusqu'a sa reactivation.",
+    "adminSubscriptions.deactivatedInfo": "Compte client suspendu.",
     "adminSubscriptions.activateAction": "Activer compte",
     "adminSubscriptions.activating": "Activation…",
     "adminSubscriptions.activateConfirm":
@@ -1737,14 +1737,14 @@ const CORE_MESSAGES = {
     "adminSubscriptions.status.canceled": "CANCELADA",
     "adminSubscriptions.editStatusTitle": "Estado de la cuenta",
     "adminSubscriptions.editStatusActive":
-      "Esta cuenta esta activa. Puedes desactivarla desde aqui.",
+      "Esta cuenta esta activa. Puedes suspenderla desde aqui.",
     "adminSubscriptions.editStatusPaused":
       "Esta cuenta esta suspendida. Puedes activarla de nuevo desde aqui.",
-    "adminSubscriptions.deactivateAction": "Desactivar cuenta",
-    "adminSubscriptions.deactivating": "Desactivando…",
+    "adminSubscriptions.deactivateAction": "Suspender cuenta",
+    "adminSubscriptions.deactivating": "Suspendiendo…",
     "adminSubscriptions.deactivateConfirm":
-      "Desactivar esta cuenta? El acceso del cliente quedara suspendido hasta volver a activarla.",
-    "adminSubscriptions.deactivatedInfo": "Cuenta del cliente desactivada.",
+      "Suspender esta cuenta? El acceso del cliente quedara bloqueado hasta volver a activarla.",
+    "adminSubscriptions.deactivatedInfo": "Cuenta del cliente suspendida.",
     "adminSubscriptions.activateAction": "Activar cuenta",
     "adminSubscriptions.activating": "Activando…",
     "adminSubscriptions.activateConfirm":
