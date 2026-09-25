@@ -13,6 +13,7 @@ uploads
 db_data
 .npm
 .vercel
+/deploy/vps/.env
 
 # Local isolated Phase 1 validation artifacts
 .phase1-validation/

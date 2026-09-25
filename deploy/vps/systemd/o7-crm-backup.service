@@ -1,0 +1,14 @@
+[Unit]
+Description=Back up the O7 CRM PostgreSQL database
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/o7/apps/o7-crm
+ExecStart=/opt/o7/apps/o7-crm/backup.sh
+
+[Install]
+WantedBy=multi-user.target

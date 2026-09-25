@@ -1,0 +1,73 @@
+name: o7-crm
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pulsecrm}
+      POSTGRES_USER: ${POSTGRES_USER:-pulsecrm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - database
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    image: o7-crm-api:${APP_VERSION:-staging}
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pulsecrm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pulsecrm}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8102}:8080"
+    volumes:
+      - /opt/o7/data/o7-crm/uploads:/app/uploads
+    networks:
+      - database
+      - o7-apps
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+    name: o7_crm_postgres_data
+
+networks:
+  database:
+    internal: true
+  o7-apps:
+    external: true
+    name: o7-apps
