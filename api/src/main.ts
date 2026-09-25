@@ -9,7 +9,12 @@ async function bootstrap() {
     .split(',')
     .map((x) => x.trim())
     .filter(Boolean);
-  const allowlist = new Set<string>(['http://localhost:3000', 'https://crm-suites-o7.vercel.app', ...explicitOrigins]);
+  const allowlist = new Set<string>([
+    'http://localhost:3000',
+    'https://crm-suites-o7.vercel.app',
+    'https://crm.o7digitalgroup.com',
+    ...explicitOrigins,
+  ]);
   app.enableCors({
     origin(origin, callback) {
       // Allow non-browser and same-origin requests.
