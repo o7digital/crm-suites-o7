@@ -1733,7 +1733,7 @@ const CORE_MESSAGES = {
     "adminSubscriptions.saving": "Guardando…",
     "adminSubscriptions.cancel": "Cancelar",
     "adminSubscriptions.status.active": "ACTIVA",
-    "adminSubscriptions.status.paused": "SUSPENDIDA",
+    "adminSubscriptions.status.paused": "SUSPENDIDO",
     "adminSubscriptions.status.canceled": "CANCELADA",
     "adminSubscriptions.editStatusTitle": "Estado de la cuenta",
     "adminSubscriptions.editStatusActive":

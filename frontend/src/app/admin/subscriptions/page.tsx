@@ -941,7 +941,13 @@ export default function AdminSubscriptionsPage() {
         const suspended = await api<SubscriptionItem>(`/admin/subscriptions/${sub.id}/suspend`, {
           method: 'POST',
         });
-        setItems((prev) => prev.map((row) => (row.id === sub.id ? suspended : row)));
+        setItems((prev) =>
+          prev.map((row) =>
+            row.id === sub.id
+              ? { ...row, ...suspended, status: 'PAUSED', canSuspend: false }
+              : row,
+          ),
+        );
         setInfo(t('adminSubscriptions.deactivatedInfo'));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unable to suspend subscription';
@@ -968,7 +974,13 @@ export default function AdminSubscriptionsPage() {
         const activated = await api<SubscriptionItem>(`/admin/subscriptions/${sub.id}/activate`, {
           method: 'POST',
         });
-        setItems((prev) => prev.map((row) => (row.id === sub.id ? activated : row)));
+        setItems((prev) =>
+          prev.map((row) =>
+            row.id === sub.id
+              ? { ...row, ...activated, status: 'ACTIVE', canSuspend: true }
+              : row,
+          ),
+        );
         setInfo(t('adminSubscriptions.activatedInfo'));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unable to activate subscription';
