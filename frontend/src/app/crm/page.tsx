@@ -2490,6 +2490,18 @@ export default function CrmPage() {
 
         {viewMode === 'KANBAN' && draggedDealId ? (
           <div className="fixed inset-x-3 bottom-3 z-[70] mx-auto max-w-4xl rounded-2xl border border-white/15 bg-slate-950/95 p-3 shadow-2xl shadow-black/60 backdrop-blur-xl transition-all duration-200 md:inset-x-8 md:bottom-6">
+            <button
+              type="button"
+              aria-label={t('common.close')}
+              title={t('common.close')}
+              className="absolute right-3 top-2 flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xl leading-none text-slate-200 transition hover:bg-white/20 hover:text-white focus:outline-none focus:ring-2 focus:ring-violet-400"
+              onClick={() => {
+                setDraggedDealId(null);
+                setStatusDropHover(null);
+              }}
+            >
+              ×
+            </button>
             <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
               {t('crm.close.dropHint')}
             </p>

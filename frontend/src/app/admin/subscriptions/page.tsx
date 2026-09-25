@@ -941,7 +941,13 @@ export default function AdminSubscriptionsPage() {
         const suspended = await api<SubscriptionItem>(`/admin/subscriptions/${sub.id}/suspend`, {
           method: 'POST',
         });
-        setItems((prev) => prev.map((row) => (row.id === sub.id ? suspended : row)));
+        setItems((prev) =>
+          prev.map((row) =>
+            row.id === sub.id
+              ? { ...row, ...suspended, status: 'PAUSED', canSuspend: false }
+              : row,
+          ),
+        );
         setInfo(t('adminSubscriptions.deactivatedInfo'));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unable to suspend subscription';
@@ -968,7 +974,13 @@ export default function AdminSubscriptionsPage() {
         const activated = await api<SubscriptionItem>(`/admin/subscriptions/${sub.id}/activate`, {
           method: 'POST',
         });
-        setItems((prev) => prev.map((row) => (row.id === sub.id ? activated : row)));
+        setItems((prev) =>
+          prev.map((row) =>
+            row.id === sub.id
+              ? { ...row, ...activated, status: 'ACTIVE', canSuspend: true }
+              : row,
+          ),
+        );
         setInfo(t('adminSubscriptions.activatedInfo'));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unable to activate subscription';
@@ -1512,6 +1524,30 @@ export default function AdminSubscriptionsPage() {
                               ? 'Ouverture...'
                               : 'Entrer dans le compte'}
                           </button>
+                          {isSubscriptionActive(sub) ? (
+                            <button
+                              type="button"
+                              className="rounded-lg bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-100 ring-1 ring-red-300/30 hover:bg-red-500/25 disabled:opacity-50"
+                              onClick={() => void suspendSubscription(sub)}
+                              disabled={changingStatusSubscriptionId === sub.id}
+                            >
+                              {changingStatusSubscriptionId === sub.id
+                                ? t('adminSubscriptions.deactivating')
+                                : t('adminSubscriptions.deactivateAction')}
+                            </button>
+                          ) : null}
+                          {isSubscriptionPaused(sub) ? (
+                            <button
+                              type="button"
+                              className="rounded-lg bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-100 ring-1 ring-emerald-300/40 hover:bg-emerald-500/30 disabled:opacity-50"
+                              onClick={() => void activateSubscription(sub)}
+                              disabled={changingStatusSubscriptionId === sub.id}
+                            >
+                              {changingStatusSubscriptionId === sub.id
+                                ? t('adminSubscriptions.activating')
+                                : t('adminSubscriptions.activateAction')}
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10 disabled:opacity-50"

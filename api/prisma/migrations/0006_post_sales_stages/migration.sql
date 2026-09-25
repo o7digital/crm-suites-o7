@@ -1,6 +1,7 @@
 -- Add post-sales stages after WON for existing pipelines
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+-- First, get the won stages we'll need to reference
 WITH won_stage AS (
   SELECT s."id" AS won_id, s."tenantId", s."pipelineId", s."position" AS won_pos
   FROM "Stage" s
@@ -19,7 +20,11 @@ move_lost AS (
 )
 INSERT INTO "Stage" ("id", "name", "position", "probability", "status", "tenantId", "pipelineId", "createdAt", "updatedAt")
 SELECT gen_random_uuid(), 'INVOICE Customer', ws.won_pos + 1, 1.00, 'WON'::"StageStatus", ws."tenantId", ws."pipelineId", NOW(), NOW()
-FROM won_stage ws
+FROM (
+  SELECT s."id" AS won_id, s."tenantId", s."pipelineId", s."position" AS won_pos
+  FROM "Stage" s
+  WHERE s."name" = 'Won'
+) ws
 WHERE NOT EXISTS (
   SELECT 1 FROM "Stage" s
   WHERE s."tenantId" = ws."tenantId"
@@ -29,7 +34,11 @@ WHERE NOT EXISTS (
 
 INSERT INTO "Stage" ("id", "name", "position", "probability", "status", "tenantId", "pipelineId", "createdAt", "updatedAt")
 SELECT gen_random_uuid(), 'TRANSFER PAYMENT', ws.won_pos + 2, 1.00, 'WON'::"StageStatus", ws."tenantId", ws."pipelineId", NOW(), NOW()
-FROM won_stage ws
+FROM (
+  SELECT s."id" AS won_id, s."tenantId", s."pipelineId", s."position" AS won_pos
+  FROM "Stage" s
+  WHERE s."name" = 'Won'
+) ws
 WHERE NOT EXISTS (
   SELECT 1 FROM "Stage" s
   WHERE s."tenantId" = ws."tenantId"
