@@ -21,13 +21,13 @@ type ThemeDraft = {
 type ThemeColorKey = keyof ThemeDraft;
 
 const DEFAULT_THEME: ThemeDraft = {
-  backgroundColor: '#0b1021',
-  surfaceColor: '#0f1629',
-  cardColor: '#151d32',
-  foregroundColor: '#e9edf5',
-  mutedColor: '#9fb3c8',
-  accentColor: '#7c3aed',
-  accentColor2: '#22d3ee',
+  backgroundColor: '#080b0b',
+  surfaceColor: '#101515',
+  cardColor: '#141a19',
+  foregroundColor: '#f4f5ef',
+  mutedColor: '#99a3a0',
+  accentColor: '#d7ff63',
+  accentColor2: '#9fd12f',
 };
 
 const COLOR_FIELDS: Array<{ key: ThemeColorKey; labelKey: string }> = [
@@ -124,7 +124,7 @@ export default function AccountAdjustmentsPage() {
   const previewPrimaryButtonStyle = useMemo<CSSProperties>(
     () => ({
       background: `linear-gradient(120deg, ${themeDraft.accentColor}, ${themeDraft.accentColor2})`,
-      color: '#fff',
+      color: '#0a0d0b',
     }),
     [themeDraft],
   );

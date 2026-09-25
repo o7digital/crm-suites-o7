@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #08090d;
-  --surface: #11141a;
-  --card: #171b22;
-  --foreground: #f4f1ea;
-  --muted: #a7a397;
-  --accent: #8b5cf6;
-  --accent-2: #d9a441;
+  --background: #080b0b;
+  --surface: #101515;
+  --card: #141a19;
+  --foreground: #f4f5ef;
+  --muted: #99a3a0;
+  --accent: #d7ff63;
+  --accent-2: #9fd12f;
   --success: #61d394;
   --warning: #f2b84b;
   --danger: #f87171;
@@ -20,6 +20,18 @@
   --color-muted: var(--muted);
   --color-accent: var(--accent);
   --color-accent-2: var(--accent-2);
+  /* Keep legacy violet utilities on the O7 brand spectrum. */
+  --color-violet-50: #f9ffe8;
+  --color-violet-100: #efffc0;
+  --color-violet-200: #e5ff91;
+  --color-violet-300: #d7ff63;
+  --color-violet-400: #bfea45;
+  --color-violet-500: #9fd12f;
+  --color-violet-600: #78a91f;
+  --color-violet-700: #597d1b;
+  --color-violet-800: #425f1a;
+  --color-violet-900: #354e19;
+  --color-violet-950: #192c08;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -45,6 +57,15 @@ body {
   font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
 }
 
+::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--foreground);
+}
+
+:where(button, a, input, textarea, select):focus-visible {
+  outline-color: var(--accent);
+}
+
 a {
   color: inherit;
 }
@@ -62,18 +83,16 @@ a {
 
 .btn-primary {
   background: linear-gradient(120deg, var(--accent), color-mix(in srgb, var(--accent-2) 44%, var(--accent)));
-  color: white;
+  color: #0a0d0b;
   border-radius: 8px;
   font-weight: 600;
   padding: 10px 14px;
   transition: transform 120ms ease, box-shadow 120ms ease;
-  box-shadow: 0 12px 30px rgba(124, 58, 237, 0.35);
   box-shadow: 0 12px 30px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 18px 38px rgba(124, 58, 237, 0.45);
   box-shadow: 0 18px 38px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 

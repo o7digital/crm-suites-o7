@@ -69,8 +69,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       setVar('--card', '#ffffff');
       setVar('--foreground', '#14110f');
       setVar('--muted', '#605b50');
-      setVar('--accent', branding.accentColor || '#7c3aed');
-      setVar('--accent-2', branding.accentColor2 || '#c4872f');
+      setVar('--accent', branding.accentColor || '#d7ff63');
+      setVar('--accent-2', branding.accentColor2 || '#9fd12f');
       return;
     }
 
