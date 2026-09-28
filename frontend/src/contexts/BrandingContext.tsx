@@ -35,6 +35,26 @@ const DEFAULT_BRANDING: Branding = {
 
 const BrandingContext = createContext<BrandingContextValue | undefined>(undefined);
 
+// Older workspaces saved the previous built-in theme as explicit overrides.
+// Let them inherit the current O7 theme, while retaining any custom palette.
+function normalizeBranding(branding: Branding): Branding {
+  const legacyTheme = {
+    backgroundColor: '#0b1021',
+    surfaceColor: '#0f1629',
+    cardColor: '#151d32',
+    foregroundColor: '#e9edf5',
+    mutedColor: '#9fb3c8',
+    accentColor: '#7c3aed',
+    accentColor2: '#22d3ee',
+  };
+  const keys = Object.keys(legacyTheme) as Array<keyof typeof legacyTheme>;
+  const isLegacyDefault = keys.every(
+    (key) => !branding[key] || branding[key]?.toLowerCase() === legacyTheme[key],
+  );
+  if (!isLegacyDefault) return branding;
+  return { ...DEFAULT_BRANDING, logoDataUrl: branding.logoDataUrl };
+}
+
 function applyCssVars(branding: Branding) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
@@ -72,7 +92,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
       const data = await api<{
         branding: Branding;
       }>('/tenant/branding', { method: 'GET' });
-      setBranding({
+      setBranding(normalizeBranding({
         logoDataUrl: data.branding?.logoDataUrl ?? null,
         backgroundColor: data.branding?.backgroundColor ?? null,
         surfaceColor: data.branding?.surfaceColor ?? null,
@@ -81,7 +101,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
         mutedColor: data.branding?.mutedColor ?? null,
         accentColor: data.branding?.accentColor ?? null,
         accentColor2: data.branding?.accentColor2 ?? null,
-      });
+      }));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to load branding';
       setError(message);
@@ -103,7 +123,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
           method: 'PATCH',
           body: JSON.stringify(patch),
         });
-        setBranding({
+        setBranding(normalizeBranding({
           logoDataUrl: data.branding?.logoDataUrl ?? null,
           backgroundColor: data.branding?.backgroundColor ?? null,
           surfaceColor: data.branding?.surfaceColor ?? null,
@@ -112,7 +132,7 @@ export function BrandingProvider({ children }: { children: React.ReactNode }) {
           mutedColor: data.branding?.mutedColor ?? null,
           accentColor: data.branding?.accentColor ?? null,
           accentColor2: data.branding?.accentColor2 ?? null,
-        });
+        }));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unable to update branding';
         setError(message);

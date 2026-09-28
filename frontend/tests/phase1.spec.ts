@@ -411,3 +411,36 @@ test("sales reporting uses closedAt and explicit status, keeps currencies separa
     fullPage: true,
   });
 });
+
+const legacyBranding = {
+  backgroundColor: '#0b1021',
+  surfaceColor: '#0f1629',
+  cardColor: '#151d32',
+  foregroundColor: '#e9edf5',
+  mutedColor: '#9fb3c8',
+  accentColor: '#7c3aed',
+  accentColor2: '#22d3ee',
+};
+
+for (const scenario of [
+  { name: 'saved legacy theme', branding: legacyBranding, accent: '#d7ff63', background: '#080b0b' },
+  { name: 'saved legacy accents', branding: { accentColor: '#7C3AED', accentColor2: '#22D3EE' }, accent: '#d7ff63', background: '#080b0b' },
+  { name: 'custom customer theme', branding: { ...legacyBranding, accentColor: '#ff9900' }, accent: '#ff9900', background: '#0b1021' },
+]) {
+  test(`branding keeps ${scenario.name} correct after delayed account loading`, async ({ page }) => {
+    await mock(page);
+    await page.route('**/api/tenant/branding', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await route.fulfill({ json: { branding: scenario.branding } });
+    });
+    const response = page.waitForResponse('**/api/tenant/branding');
+    await page.goto('/crm');
+    await response;
+    await expect.poll(() => page.evaluate(() => ({
+      accent: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
+      background: getComputedStyle(document.documentElement).getPropertyValue('--background').trim(),
+    }))).toEqual({ accent: scenario.accent, background: scenario.background });
+    await page.reload();
+    await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim())).toBe(scenario.accent);
+  });
+}
