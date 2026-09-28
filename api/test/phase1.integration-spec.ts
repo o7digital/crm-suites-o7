@@ -236,6 +236,65 @@ it.each(['WON', 'LOST'] as const)(
   },
 );
 
+it('assigns a lost-sale follow-up, shows it in the bureau, retries once and undoes the task', async () => {
+  const f = await fixture();
+  await prisma.deal.update({
+    where: { id: f.deal.id },
+    data: { ownerId: null },
+  });
+  const followUpAt = new Date(Date.now() + 7 * 86400000).toISOString();
+  const dto = {
+    status: 'LOST' as const,
+    lossReason: 'price' as const,
+    createFollowUp: true,
+    followUpAt,
+    operationId: randomUUID(),
+  };
+  const closed = await actions.close(f.deal.id, dto, f.user);
+  const retry = await actions.close(f.deal.id, dto, f.user);
+  expect(retry.closeEventId).toBe(closed.closeEventId);
+  const created = await prisma.task.findMany({
+    where: { opportunityId: f.deal.id },
+  });
+  expect(created).toHaveLength(1);
+  expect(created[0].assigneeId).toBe(f.owner.id);
+  expect(created[0].dueDate?.toISOString()).toBe(followUpAt);
+  const bureau = await command.get(f.user, 'America/Mexico_City');
+  expect(bureau.upcomingFollowUps.count).toBe(1);
+  expect(bureau.upcomingFollowUps.items[0].id).toBe(created[0].id);
+  expect(bureau.noNextAction.count).toBe(0);
+  expect(
+    (await command.get({ ...f.user, userId: f.member.id })).upcomingFollowUps
+      .count,
+  ).toBe(0);
+  await actions.undo(f.deal.id, { eventId: closed.closeEventId }, f.user);
+  expect(await prisma.task.count({ where: { opportunityId: f.deal.id } })).toBe(
+    0,
+  );
+});
+
+it('rejects a past follow-up date even when task creation is disabled', async () => {
+  const f = await fixture();
+  await expect(
+    actions.close(
+      f.deal.id,
+      {
+        status: 'LOST',
+        lossReason: 'price',
+        followUpAt: '2020-01-01',
+        createFollowUp: false,
+      },
+      f.user,
+    ),
+  ).rejects.toThrow(BadRequestException);
+  expect(
+    (await prisma.deal.findUniqueOrThrow({ where: { id: f.deal.id } })).status,
+  ).toBe('OPEN');
+  expect(
+    await prisma.dealActivity.count({ where: { dealId: f.deal.id } }),
+  ).toBe(0);
+});
+
 it('rejects lost without reason, foreign and non-owned closings, and stale Undo', async () => {
   const a = await fixture(),
     b = await fixture();

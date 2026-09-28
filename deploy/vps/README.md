@@ -2,6 +2,13 @@
 
 This stack runs beside Railway until the planned cutover. It does not change DNS or the Vercel production API URL.
 
+## Verified deployment status (2026-09-28)
+
+- `crm.o7digitalgroup.com` and `crm-suites-o7.vercel.app` serve the same Vercel frontend.
+- The Vercel production `NEXT_PUBLIC_API_URL` still points to `https://web-production-6174.up.railway.app/api`; Railway remains the production API and database.
+- SSH access through `o7-vps` confirms healthy API and PostgreSQL containers at `/opt/o7/apps/o7-crm`, with the API responding on `127.0.0.1:8102`.
+- HTTPS verification for `api.crm.o7digitalgroup.com` fails because its certificate does not cover that hostname. The cutover checklist below remains necessary before switching production to the VPS.
+
 ## Layout
 
 - Deployment: `/opt/o7/apps/o7-crm`

@@ -5,6 +5,8 @@ import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useApi, useAuth } from '../../../contexts/AuthContext';
 import { getClientDisplayName } from '@/lib/clients';
+import { SalesFollowUpReport } from '@/components/SalesFollowUpReport';
+import { salesClosedDate, salesDealStatus, type SalesDeal } from '@/lib/sales-reporting';
 
 type Client = {
   id: string;
@@ -22,10 +24,12 @@ type Task = {
   createdAt?: string;
   clientId?: string | null;
   client?: Client | null;
+  opportunityId?: string | null;
+  assignee?: { name: string } | null;
   timeSpentHours?: number | string | null;
 };
 
-type Deal = {
+type Deal = SalesDeal & {
   id: string;
   title: string;
   value: number | string | null;
@@ -133,11 +137,7 @@ function periodLabel(key: string, granularity: Granularity): string {
 }
 
 function getWonDateIso(deal: Deal): string | null {
-  const wonMove = (deal.history || [])
-    .filter((row) => row.toStage?.status === 'WON')
-    .sort((a, b) => String(b.movedAt || '').localeCompare(String(a.movedAt || '')))[0];
-
-  return toIsoDate(wonMove?.movedAt) || toIsoDate(deal.updatedAt) || toIsoDate(deal.createdAt);
+  return toIsoDate(salesClosedDate(deal));
 }
 
 export default function AdminReportingPage() {
@@ -214,7 +214,7 @@ export default function AdminReportingPage() {
     const clientsById = new Map(clients.map((c) => [c.id, c]));
     return deals
       .map((deal) => {
-        if (deal.stage?.status !== 'WON') return null;
+        if (salesDealStatus(deal) !== 'WON') return null;
         const dateIso = getWonDateIso(deal);
         if (!dateIso) return null;
         if (rangeValid && (dateIso < startDate || dateIso > endDate)) return null;
@@ -484,11 +484,12 @@ export default function AdminReportingPage() {
 
         {!loading && rangeValid ? (
           <div className="report-print-area space-y-6">
+            <SalesFollowUpReport deals={deals} tasks={tasks} startDate={startDate} endDate={endDate} />
             <div className="card p-4">
               <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Sales report</h2>
-                  <p className="text-xs text-slate-400">Won deals moved to a won stage from {startDate} to {endDate}</p>
+                  <p className="text-xs text-slate-400">Won deals closed from {startDate} to {endDate}</p>
                 </div>
                 <p className="text-xs text-slate-400">{salesSummary.sales} sale(s)</p>
               </div>

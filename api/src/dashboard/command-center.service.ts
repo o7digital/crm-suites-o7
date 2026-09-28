@@ -117,21 +117,31 @@ export class CommandCenterService {
       ]);
       return { count, items };
     };
-    const [dueToday, overdue, closingThisWeek, noNextAction, staleDeals] =
-      await Promise.all([
-        taskGroup({ dueDate: { gte: window.today, lt: window.tomorrow } }),
-        taskGroup({ dueDate: { lt: window.today } }),
-        dealGroup({
-          expectedCloseDate: { gte: window.weekStart, lt: window.weekEnd },
-        }),
-        dealGroup({ nextActionAt: null }),
-        dealGroup({
-          OR: [
-            { lastActivityAt: { lt: window.staleBefore } },
-            { lastActivityAt: null, createdAt: { lt: window.staleBefore } },
-          ],
-        }),
-      ]);
+    const [
+      dueToday,
+      overdue,
+      upcomingFollowUps,
+      closingThisWeek,
+      noNextAction,
+      staleDeals,
+    ] = await Promise.all([
+      taskGroup({ dueDate: { gte: window.today, lt: window.tomorrow } }),
+      taskGroup({ dueDate: { lt: window.today } }),
+      taskGroup({
+        dueDate: { gte: window.tomorrow },
+        opportunityId: { not: null },
+      }),
+      dealGroup({
+        expectedCloseDate: { gte: window.weekStart, lt: window.weekEnd },
+      }),
+      dealGroup({ nextActionAt: null }),
+      dealGroup({
+        OR: [
+          { lastActivityAt: { lt: window.staleBefore } },
+          { lastActivityAt: null, createdAt: { lt: window.staleBefore } },
+        ],
+      }),
+    ]);
     return {
       timeZone,
       generatedAt: now,
@@ -139,6 +149,7 @@ export class CommandCenterService {
       scope: isAdmin ? 'workspace' : 'assigned',
       dueToday,
       overdue,
+      upcomingFollowUps,
       closingThisWeek,
       noNextAction,
       staleDeals,

@@ -37,6 +37,7 @@ async function mock(page: Page, failClose = false) {
     title: "Phase 1 opportunity",
     value: 5000,
     currency: "USD",
+    clientId: "c1",
     status: "OPEN",
     stageId: "open",
     pipelineId: "p1",
@@ -97,6 +98,7 @@ async function mock(page: Page, failClose = false) {
           [
             "dueToday",
             "overdue",
+            "upcomingFollowUps",
             "closingThisWeek",
             "noNextAction",
             "staleDeals",
@@ -109,7 +111,9 @@ async function mock(page: Page, failClose = false) {
                   id: key,
                   title: `Item ${key}`,
                   pipelineId:
-                    key.includes("Today") || key === "overdue"
+                    key.includes("Today") ||
+                    key === "overdue" ||
+                    key === "upcomingFollowUps"
                       ? undefined
                       : "p1",
                 },
@@ -186,7 +190,7 @@ test("failed closing restores the open card and shows the API error", async ({
   await expect(page.getByTestId("deal-card-d1")).toBeVisible();
   await expect(page.getByText(/Simulated API failure/)).toBeVisible();
 });
-test("Command Center displays five actionable groups without replacing the dashboard", async ({
+test("Command Center displays upcoming sales follow-ups with actionable groups", async ({
   page,
 }) => {
   await mock(page);
@@ -195,9 +199,151 @@ test("Command Center displays five actionable groups without replacing the dashb
   await expect(
     center.getByRole("heading", { name: "Tasks due today" }),
   ).toBeVisible();
-  await expect(center.getByRole("link")).toHaveCount(5);
+  await expect(
+    center.getByRole("heading", { name: "Upcoming sales follow-ups" }),
+  ).toBeVisible();
+  await expect(
+    center.getByRole("link", { name: "Item upcomingFollowUps" }),
+  ).toHaveAttribute("href", "/tasks#task-upcomingFollowUps");
+  await expect(center.getByRole("link")).toHaveCount(6);
   await page.screenshot({
     path: "test-results/command-center.png",
+    fullPage: true,
+  });
+});
+
+test("LOST with a follow-up date creates a task by default and preserves the local date", async ({
+  page,
+}) => {
+  await mock(page);
+  await page.goto("/crm");
+  await drop(page, "LOST");
+  await page.getByTestId("loss-reason").selectOption("price");
+  await page.getByTestId("follow-up-date").fill("2027-01-15");
+  await expect(page.getByTestId("create-follow-up")).toBeChecked();
+  const request = page.waitForRequest((req) =>
+    req.url().endsWith("/deals/d1/close"),
+  );
+  await page.getByTestId("confirm-close").click();
+  const body = (await request).postDataJSON();
+  expect(body.createFollowUp).toBe(true);
+  expect(
+    await page.evaluate((value) => {
+      const date = new Date(value);
+      return [
+        date.getFullYear(),
+        date.getMonth() + 1,
+        date.getDate(),
+        date.getHours(),
+      ];
+    }, body.followUpAt),
+  ).toEqual([2027, 1, 15, 12]);
+  await expect(page.getByTestId("undo-close")).toBeVisible();
+});
+
+test("clearing a follow-up date clears task creation; the checkbox can be opted out", async ({
+  page,
+}) => {
+  await mock(page);
+  await page.goto("/crm");
+  await drop(page, "LOST");
+  await page.getByTestId("follow-up-date").fill("2027-01-15");
+  await page.getByTestId("create-follow-up").uncheck();
+  await expect(page.getByTestId("create-follow-up")).not.toBeChecked();
+  await page.getByTestId("follow-up-date").fill("");
+  await expect(page.getByTestId("create-follow-up")).toBeDisabled();
+  await expect(page.getByTestId("create-follow-up")).not.toBeChecked();
+});
+
+test("sales reporting uses closedAt and explicit status, keeps currencies separate and links lost follow-ups", async ({
+  page,
+}) => {
+  await mock(page);
+  const deals = [
+    {
+      id: "lost1",
+      title: "Lost sale to recover",
+      status: "LOST",
+      closedAt: "2026-09-12T12:00:00Z",
+      updatedAt: "2027-02-01T00:00:00Z",
+      value: 200,
+      currency: "USD",
+      lossReason: "price",
+      clientId: "c1",
+      client: { name: "Client A" },
+      stage: stages[0],
+    },
+    {
+      id: "lost2",
+      title: "MXN loss",
+      status: "LOST",
+      closedAt: "2026-09-12T12:00:00Z",
+      value: 300,
+      currency: "MXN",
+      lossReason: "price",
+      clientId: "c1",
+      stage: stages[2],
+    },
+    {
+      id: "won1",
+      title: "Won sale",
+      status: "WON",
+      closedAt: "2026-09-10T12:00:00Z",
+      value: 400,
+      currency: "USD",
+      clientId: "c1",
+      stage: stages[0],
+    },
+    {
+      id: "outside",
+      title: "Outside period",
+      status: "WON",
+      closedAt: "2026-08-01T12:00:00Z",
+      value: 900,
+      currency: "USD",
+      stage: stages[1],
+    },
+    {
+      id: "dateOnly",
+      title: "Date without task",
+      status: "OPEN",
+      value: 10,
+      followUpAt: "2026-09-15T12:00:00Z",
+      clientId: "c1",
+      stage: stages[0],
+    },
+  ];
+  await page.route("**/api/deals", (route) => route.fulfill({ json: deals }));
+  await page.route("**/api/tasks", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: "follow1",
+          title: "Follow-up: Lost sale to recover",
+          status: "PENDING",
+          opportunityId: "lost1",
+          dueDate: "2026-09-15T12:00:00Z",
+          assignee: { name: "Seller" },
+        },
+      ],
+    }),
+  );
+  await page.goto("/admin/reporting");
+  await page.locator("input[type=date]").nth(0).fill("2026-09-01");
+  await page.locator("input[type=date]").nth(1).fill("2026-09-30");
+  const report = page.getByRole("region", { name: "Sales follow-up report" });
+  await expect(report.getByText("33%")).toBeVisible();
+  await expect(report.getByText("USD 200 · MXN 300")).toBeVisible();
+  await expect(
+    report.getByRole("link", { name: "Overdue", exact: true }),
+  ).toHaveAttribute("href", "/tasks#task-follow1");
+  await expect(report.getByText("Date only — no task")).toBeVisible();
+  await expect(report.getByText("Outside period")).toHaveCount(0);
+  await expect(
+    page.getByText("USD 400", { exact: true }).first(),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "test-results/sales-follow-up-report.png",
     fullPage: true,
   });
 });

@@ -61,6 +61,7 @@ export class DealActionsService {
       where: {
         id: deal.id,
         tenantId: deal.tenantId,
+        status: deal.status,
         updatedAt: deal.updatedAt,
       },
       data,
@@ -147,6 +148,12 @@ export class DealActionsService {
         );
       const followUpAt = dto.followUpAt ? new Date(dto.followUpAt) : null;
       if (
+        followUpAt &&
+        (!Number.isFinite(followUpAt.getTime()) ||
+          followUpAt.getTime() <= Date.now())
+      )
+        throw new BadRequestException('Follow-up date must be in the future');
+      if (
         dto.createFollowUp &&
         (!followUpAt || !deal.clientId || followUpAt.getTime() <= Date.now())
       )
@@ -183,7 +190,7 @@ export class DealActionsService {
             tenantId: user.tenantId,
             clientId: deal.clientId,
             opportunityId: id,
-            assigneeId: deal.ownerId,
+            assigneeId: deal.ownerId || user.userId,
             title: `Follow-up: ${deal.title}`,
             dueDate: followUpAt,
           },

@@ -1508,7 +1508,9 @@ export default function CrmPage() {
           note: details?.note || undefined,
           lossReason: status === 'LOST' ? details?.lossReason : undefined,
           lossComment: status === 'LOST' ? details?.lossComment || undefined : undefined,
-          followUpAt: details?.followUpAt || undefined,
+          followUpAt: details?.followUpAt
+            ? new Date(`${details.followUpAt}T12:00:00`).toISOString()
+            : undefined,
           prepareOnboarding: details?.prepareOnboarding || false,
           createFollowUp: details?.createFollowUp || false,
         }),
@@ -2702,8 +2704,13 @@ export default function CrmPage() {
                     className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-slate-100"
                     type="date"
                     min={tomorrowInputValue()}
+                    data-testid="follow-up-date"
                     value={closingDraft.followUpAt}
-                    onChange={(event) => setClosingDraft((prev) => prev ? { ...prev, followUpAt: event.target.value } : prev)}
+                    onChange={(event) => setClosingDraft((prev) => prev ? {
+                      ...prev,
+                      followUpAt: event.target.value,
+                      createFollowUp: Boolean(event.target.value && prev.deal.clientId),
+                    } : prev)}
                   />
                 </label>
               </div>
@@ -2723,6 +2730,7 @@ export default function CrmPage() {
                   <input
                     type="checkbox"
                     checked={closingDraft.createFollowUp}
+                    data-testid="create-follow-up"
                     disabled={!closingDraft.followUpAt || !closingDraft.deal.clientId}
                     onChange={(event) => setClosingDraft((prev) => prev ? { ...prev, createFollowUp: event.target.checked } : prev)}
                   />
@@ -2732,6 +2740,8 @@ export default function CrmPage() {
                   <p className="text-xs text-amber-200/80">{t('crm.close.followUpNeedsContact')}</p>
                 ) : null}
               </div>
+
+              {error && <p role="alert" className="mt-3 text-sm text-red-300">{error}</p>}
 
               <div className="mt-5 flex justify-end gap-3">
                 <button type="button" className="btn-secondary" onClick={() => setClosingDraft(null)} disabled={closingSaving}>

@@ -16,6 +16,7 @@ type Group = { count: number; items: Item[] };
 const keys = [
   "dueToday",
   "overdue",
+  "upcomingFollowUps",
   "closingThisWeek",
   "noNextAction",
   "staleDeals",
@@ -71,17 +72,17 @@ export function CommandCenter() {
           </button>
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {keys.map((key) => (
             <div key={key} className="card p-4">
               <h3 className="text-sm text-slate-300">{labels[key]}</h3>
               <p
                 className={`my-2 text-3xl font-semibold ${key === "overdue" ? "text-red-300" : ""}`}
               >
-                {data?.[key].count ?? "…"}
+                {data?.[key]?.count ?? (data ? 0 : "…")}
               </p>
               <ul className="space-y-2 text-sm">
-                {data?.[key].items.map((item) => (
+                {data?.[key]?.items.map((item) => (
                   <li key={item.id}>
                     <Link
                       className="text-slate-200 hover:text-cyan-300"
@@ -93,10 +94,15 @@ export function CommandCenter() {
                     >
                       {item.title}
                     </Link>
+                    {item.dueDate && (
+                      <p className="text-xs text-slate-400">
+                        {new Date(item.dueDate).toLocaleDateString(language)}
+                      </p>
+                    )}
                   </li>
                 ))}
               </ul>
-              {data && data[key].count === 0 && (
+              {data && !data[key]?.count && (
                 <p className="text-xs text-slate-400">{labels.empty}</p>
               )}
             </div>
