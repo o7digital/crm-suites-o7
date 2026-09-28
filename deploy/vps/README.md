@@ -38,10 +38,9 @@ curl --fail https://api.crm.o7digitalgroup.com/api/health
 
 `deploy.sh` requires a clean checkout, fetches `dev`, verifies the requested commit belongs to that branch, backs up the database, builds the image and checks health after replacing the API container. It does not restore data automatically. For a code rollback, deploy the previous tested commit; a database rollback requires a separate reviewed restore into a new database.
 
-Deploy frontend changes with the Vercel CLI from a clean, tested checkout linked to project `crm-suites-o7`:
+Deploy frontend changes with the Vercel CLI from the repository root of a clean, tested checkout linked to project `crm-suites-o7`. The root `vercel.json` selects `frontend/package.json`; do not deploy from the frontend directory into a different project:
 
 ```sh
-cd frontend
 vercel deploy --prod --yes
 ```
 
