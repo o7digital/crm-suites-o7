@@ -12,7 +12,12 @@ type Item = {
   expectedCloseDate?: string;
   pipelineId?: string;
 };
-type Group = { count: number; items: Item[] };
+type FollowUpTask = Item & {
+  status: string;
+  opportunityId?: string | null;
+  assigneeId?: string | null;
+};
+type Group = { count: number; items: Item[]; error?: string };
 const keys = [
   "dueToday",
   "overdue",
@@ -41,7 +46,49 @@ export function CommandCenter() {
       `/dashboard/command-center?timeZone=${encodeURIComponent(zone)}`,
       { signal: controller.signal },
     )
-      .then((result) => {
+      .then(async (result) => {
+        // Support the production API while backend releases are rolling out.
+        if (!result.upcomingFollowUps) {
+          try {
+            const [tasks, identity] = await Promise.all([
+              api<FollowUpTask[]>("/tasks", { signal: controller.signal }),
+              result.scope === "assigned"
+                ? api<{ user: { userId: string } }>("/auth/me", {
+                    signal: controller.signal,
+                  })
+                : Promise.resolve(null),
+            ]);
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(0, 0, 0, 0);
+            const upcoming = tasks
+              .filter(
+                (task) =>
+                  task.status !== "DONE" &&
+                  task.dueDate &&
+                  new Date(task.dueDate).getTime() >= tomorrow.getTime() &&
+                  (task.opportunityId ||
+                    task.title.startsWith("Follow-up: ")) &&
+                  (result.scope === "workspace" ||
+                    task.assigneeId === identity?.user.userId),
+              )
+              .sort(
+                (a, b) =>
+                  String(a.dueDate).localeCompare(String(b.dueDate)) ||
+                  a.id.localeCompare(b.id),
+              );
+            result.upcomingFollowUps = {
+              count: upcoming.length,
+              items: upcoming.slice(0, 10),
+            };
+          } catch (err) {
+            result.upcomingFollowUps = {
+              count: 0,
+              items: [],
+              error: err instanceof Error ? err.message : "Unable to load",
+            };
+          }
+        }
         if (!controller.signal.aborted) {
           setData(result);
           setError("");
@@ -79,7 +126,9 @@ export function CommandCenter() {
               <p
                 className={`my-2 text-3xl font-semibold ${key === "overdue" ? "text-red-300" : ""}`}
               >
-                {data?.[key]?.count ?? (data ? 0 : "…")}
+                {data?.[key]?.error
+                  ? "—"
+                  : (data?.[key]?.count ?? (data ? 0 : "…"))}
               </p>
               <ul className="space-y-2 text-sm">
                 {data?.[key]?.items.map((item) => (
@@ -102,7 +151,18 @@ export function CommandCenter() {
                   </li>
                 ))}
               </ul>
-              {data && !data[key]?.count && (
+              {data?.[key]?.error && (
+                <p role="alert" className="text-xs text-red-200">
+                  {data[key].error}{" "}
+                  <button
+                    className="underline"
+                    onClick={() => setRefresh((v) => v + 1)}
+                  >
+                    {labels.retry}
+                  </button>
+                </p>
+              )}
+              {data && !data[key]?.count && !data[key]?.error && (
                 <p className="text-xs text-slate-400">{labels.empty}</p>
               )}
             </div>

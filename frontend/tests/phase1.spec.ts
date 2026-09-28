@@ -212,6 +212,70 @@ test("Command Center displays upcoming sales follow-ups with actionable groups",
   });
 });
 
+test("the bureau loads follow-ups from an older API and respects assigned scope", async ({
+  page,
+}) => {
+  await mock(page);
+  await page.route("**/api/dashboard/command-center?**", (route) =>
+    route.fulfill({
+      json: {
+        scope: "assigned",
+        timeZone: "UTC",
+        ...Object.fromEntries(
+          [
+            "dueToday",
+            "overdue",
+            "closingThisWeek",
+            "noNextAction",
+            "staleDeals",
+          ].map((key) => [key, { count: 0, items: [] }]),
+        ),
+      },
+    }),
+  );
+  await page.route("**/api/auth/me", (route) =>
+    route.fulfill({ json: { user: { userId: "seller1" } } }),
+  );
+  const dueDate = new Date(Date.now() + 7 * 86400000).toISOString();
+  await page.route("**/api/tasks", (route) =>
+    route.fulfill({
+      json: [
+        {
+          id: "visible",
+          title: "Follow-up: Lost sale",
+          status: "PENDING",
+          opportunityId: "lost1",
+          assigneeId: "seller1",
+          dueDate,
+        },
+        {
+          id: "foreign",
+          title: "Another seller",
+          status: "PENDING",
+          opportunityId: "lost1",
+          assigneeId: "seller2",
+          dueDate,
+        },
+        {
+          id: "done",
+          title: "Already completed",
+          status: "DONE",
+          opportunityId: "lost1",
+          assigneeId: "seller1",
+          dueDate,
+        },
+      ],
+    }),
+  );
+  await page.goto("/");
+  const center = page.getByRole("region", { name: "Command Center" });
+  await expect(
+    center.getByRole("link", { name: "Follow-up: Lost sale" }),
+  ).toHaveAttribute("href", "/tasks#task-visible");
+  await expect(center.getByText("Another seller")).toHaveCount(0);
+  await expect(center.getByText("Already completed")).toHaveCount(0);
+});
+
 test("LOST with a follow-up date creates a task by default and preserves the local date", async ({
   page,
 }) => {
