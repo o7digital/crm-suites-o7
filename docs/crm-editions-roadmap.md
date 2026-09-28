@@ -72,4 +72,8 @@ Treat the current Suites Mine implementation as the reference for `HOSPITALITY_V
 
 ## Custom production domain
 
-The intended user-facing domain is `crm.o7digitalgroup.com`, attached to the existing Vercel project. The API will use `api.crm.o7digitalgroup.com` and point to the VPS only at cutover. DNS and production API settings must not be changed until the VPS proxy, TLS certificate, final database synchronization and smoke tests are ready.
+The production domain is `crm.o7digitalgroup.com`, attached to the existing Vercel project. Since 2026-09-28, its API is `https://api.crm.o7digitalgroup.com/api` on the VPS, with PostgreSQL on the same VPS. Vercel production, preview and development settings use that API. Deploy this CRM backend through `deploy/vps/deploy.sh`, never Railway.
+
+The full database was migrated with all 34 tenant workspaces, 25 subscriptions, 190 deals, 74 contacts and 7 tasks. Counts and hashes matched for every table and tenant before cutover; existing subscription plans and editions were preserved. Verified backups exist on the VPS and the operator's computer. See [VPS operations](../deploy/vps/README.md).
+
+Suites Mine remains independent: its frontend still uses `api-suitesmine-production.up.railway.app`. That separate application was not migrated or stopped. Retiring all Railway billing requires a separate migration of Suites Mine and review of other account resources.

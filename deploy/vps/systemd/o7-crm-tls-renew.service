@@ -1,0 +1,8 @@
+[Unit]
+Description=Renew O7 CRM API TLS certificate
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/o7/apps/o7-crm/renew-tls.sh
