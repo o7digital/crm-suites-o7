@@ -157,6 +157,24 @@ export class DealsService {
     return select;
   }
 
+  private dealCompactSelect(caps: DealSchemaCaps, view: string) {
+    if (view === 'options') {
+      return {
+        id: true,
+        title: true,
+      };
+    }
+
+    return {
+      id: true,
+      value: true,
+      currency: true,
+      pipelineId: true,
+      stageId: true,
+      ...(caps.hasProbability ? { probability: true } : {}),
+    };
+  }
+
   private async getUserRole(
     user: RequestUser,
   ): Promise<'OWNER' | 'ADMIN' | 'MEMBER'> {
@@ -362,7 +380,11 @@ export class DealsService {
     });
   }
 
-  async findAll(pipelineId: string | undefined, user: RequestUser) {
+  async findAll(
+    pipelineId: string | undefined,
+    user: RequestUser,
+    view?: string,
+  ) {
     const caps = await this.getSchemaCaps();
     const role = await this.getUserRole(user);
 
@@ -374,7 +396,9 @@ export class DealsService {
           ? { ownerId: user.userId }
           : {}),
       },
-      select: this.dealSelect(caps),
+      select: view === 'dashboard' || view === 'options'
+        ? this.dealCompactSelect(caps, view)
+        : this.dealSelect(caps),
       orderBy: { createdAt: 'desc' },
     });
   }

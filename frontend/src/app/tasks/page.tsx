@@ -45,7 +45,7 @@ export default function TasksPage() {
   const [error, setError] = useState('');
 
   const loadData = useCallback(() => {
-    Promise.all([api<Task[]>('/tasks'), api<Client[]>('/clients'), api<Person[]>('/tasks/assignees'), api<Opportunity[]>('/deals')]).then(([tasksData, clientsData, members, deals]) => {
+    Promise.all([api<Task[]>('/tasks'), api<Client[]>('/clients'), api<Person[]>('/tasks/assignees'), api<Opportunity[]>('/deals?view=options')]).then(([tasksData, clientsData, members, deals]) => {
       setTasks(tasksData);
       setClients(clientsData);
       setPeople(members);

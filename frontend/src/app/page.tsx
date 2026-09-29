@@ -238,7 +238,7 @@ export default function DashboardPage() {
           api<DashboardApiPayload>('/dashboard'),
           api<Pipeline[]>('/pipelines'),
           api<Stage[]>('/stages'),
-          api<Deal[]>('/deals'),
+          api<Deal[]>('/deals?view=dashboard'),
           api<FxRatesSnapshot>('/fx/usd'),
         ]);
 

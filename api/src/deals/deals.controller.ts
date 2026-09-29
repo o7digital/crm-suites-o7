@@ -100,9 +100,10 @@ export class DealsController {
   @Get()
   findAll(
     @Query('pipelineId') pipelineId: string | undefined,
+    @Query('view') view: string | undefined,
     @CurrentUser() user: RequestUser,
   ) {
-    return this.dealsService.findAll(pipelineId, user);
+    return this.dealsService.findAll(pipelineId, user, view);
   }
 
   @Get(':id')
