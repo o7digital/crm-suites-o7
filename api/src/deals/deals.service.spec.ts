@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 describe('DealsService', () => {
   it('creates only the first month of a package in the chosen workflow', async () => {
     const create = jest.fn().mockImplementation(({ data }) => ({ id: 'first-month', ...data }));
+    const createCase = jest.fn().mockResolvedValue({ id: 'case-1' });
     const prisma = {
       pipeline: { findFirst: jest.fn().mockResolvedValue({ id: 'workflow-1' }) },
       stage: { findFirst: jest.fn().mockResolvedValue({
@@ -14,6 +15,7 @@ describe('DealsService', () => {
           create,
           findFirst: jest.fn().mockImplementation(() => create.mock.results[0].value),
         },
+        postSalesCase: { upsert: createCase },
       })),
     } as unknown as PrismaService;
     const service = new DealsService(prisma);
@@ -41,10 +43,29 @@ describe('DealsService', () => {
       }),
     }));
     expect(result.recurrenceGroupId).toEqual(expect.any(String));
+    expect(createCase).toHaveBeenCalledWith(expect.objectContaining({
+      where: { dealId: 'first-month' },
+      create: expect.objectContaining({
+        name: 'Monthly package (Mes 1/3)',
+        dueDate: new Date('2027-01-31T12:00:00.000Z'),
+      }),
+    }));
   });
 
   it('turns an existing open deal into the first monthly occurrence', async () => {
     const update = jest.fn().mockImplementation(({ data }) => ({ id: 'deal-1', ...data }));
+    const createCase = jest.fn().mockResolvedValue({ id: 'case-1' });
+    const tx = {
+      deal: {
+        update,
+        findFirst: jest.fn().mockImplementation(() => ({
+          id: 'deal-1', clientId: null,
+          ownerId: 'owner-1', ...update.mock.results[0].value,
+          title: 'Monthly package',
+        })),
+      },
+      postSalesCase: { upsert: createCase },
+    };
     const prisma = {
       user: { findFirst: jest.fn().mockResolvedValue({ role: 'OWNER' }) },
       stage: { findFirst: jest.fn().mockResolvedValue({ id: 'open-stage' }) },
@@ -53,8 +74,8 @@ describe('DealsService', () => {
           id: 'deal-1', pipelineId: 'workflow-1', stageId: 'open-stage',
           status: 'OPEN', recurrenceGroupId: null,
         }),
-        update,
       },
+      $transaction: jest.fn().mockImplementation((callback) => callback(tx)),
     } as unknown as PrismaService;
     const service = new DealsService(prisma);
     (service as any).schemaCache = {
@@ -73,6 +94,13 @@ describe('DealsService', () => {
       data: expect.objectContaining({
         recurrenceIndex: 1, recurrenceMonths: 4, recurrenceGeneratedThrough: 1,
         recurrenceStageId: 'open-stage', recurrenceStartAt: new Date('2027-01-31T12:00:00.000Z'),
+      }),
+    }));
+    expect(createCase).toHaveBeenCalledWith(expect.objectContaining({
+      where: { dealId: 'deal-1' },
+      create: expect.objectContaining({
+        name: 'Monthly package (Mes 1/4)',
+        dueDate: new Date('2027-01-31T12:00:00.000Z'),
       }),
     }));
   });

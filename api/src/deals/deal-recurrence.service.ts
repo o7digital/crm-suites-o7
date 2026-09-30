@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { monthlyOccurrenceDate } from './recurrence';
+import { monthlyPostSalesName } from './monthly-post-sales';
 
 @Injectable()
 export class DealRecurrenceService implements OnModuleInit, OnModuleDestroy {
@@ -117,6 +118,18 @@ export class DealRecurrenceService implements OnModuleInit, OnModuleDestroy {
                   })),
                 });
               }
+              await tx.postSalesCase.create({
+                data: {
+                  tenantId: root.tenantId,
+                  dealId: deal.id,
+                  clientId: root.clientId,
+                  name: monthlyPostSalesName(root.title, month, months),
+                  status: 'onboarding',
+                  priority: 'medium',
+                  ownerUserId: root.ownerId,
+                  dueDate: occurrenceDate,
+                },
+              });
             }
             return dueThrough - generated;
           });

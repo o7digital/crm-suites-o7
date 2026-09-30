@@ -14,6 +14,7 @@ import { ReopenDealDto } from './dto/reopen-deal.dto';
 import * as fs from 'fs';
 import { randomUUID } from 'crypto';
 import { monthlyStartDate } from './recurrence';
+import { monthlyPostSalesName } from './monthly-post-sales';
 import { duplicateBaseTitle, nextDuplicateTitle } from './duplicate-title';
 
 const DEAL_BASE_SELECT = {
@@ -390,7 +391,7 @@ export class DealsService {
         });
       }
 
-      if (this.isPostSalesHandoffStage(targetStageStatus, targetStageName)) {
+      if (dto.recurrenceMonths || this.isPostSalesHandoffStage(targetStageStatus, targetStageName)) {
         await this.ensurePostSalesCaseForDeal(
           tx,
           deal.id,
@@ -736,7 +737,7 @@ export class DealsService {
         : {}),
     };
 
-    if (targetStageId === existing.stageId) {
+    if (targetStageId === existing.stageId && !dto.recurrenceMonths) {
       return this.prisma.deal.update({
         where: { id },
         data,
@@ -745,14 +746,16 @@ export class DealsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      await tx.dealStageHistory.create({
-        data: {
-          tenantId: user.tenantId,
-          dealId: existing.id,
-          fromStageId: existing.stageId,
-          toStageId: targetStageId,
-        },
-      });
+      if (targetStageId !== existing.stageId) {
+        await tx.dealStageHistory.create({
+          data: {
+            tenantId: user.tenantId,
+            dealId: existing.id,
+            fromStageId: existing.stageId,
+            toStageId: targetStageId,
+          },
+        });
+      }
 
       const updated = await tx.deal.update({
         where: { id: existing.id },
@@ -760,7 +763,7 @@ export class DealsService {
         select: this.dealSelect(caps),
       });
 
-      if (this.isPostSalesHandoffStage(targetStageStatus, targetStageName)) {
+      if (dto.recurrenceMonths || this.isPostSalesHandoffStage(targetStageStatus, targetStageName)) {
         await this.ensurePostSalesCaseForDeal(
           tx,
           existing.id,
@@ -1148,6 +1151,9 @@ export class DealsService {
         id: true,
         title: true,
         clientId: true,
+        recurrenceIndex: true,
+        recurrenceMonths: true,
+        expectedCloseDate: true,
         ...(caps.hasOwnerId ? { ownerId: true } : {}),
       },
     });
@@ -1161,7 +1167,7 @@ export class DealsService {
     await tx.postSalesCase.upsert({
       where: { dealId: deal.id },
       update: {
-        name: deal.title,
+        name: monthlyPostSalesName(deal.title, deal.recurrenceIndex, deal.recurrenceMonths),
         clientId: deal.clientId ?? null,
         ownerUserId,
       },
@@ -1169,10 +1175,11 @@ export class DealsService {
         tenantId,
         clientId: deal.clientId ?? null,
         dealId: deal.id,
-        name: deal.title,
+        name: monthlyPostSalesName(deal.title, deal.recurrenceIndex, deal.recurrenceMonths),
         status: 'onboarding',
         priority: 'medium',
         ownerUserId,
+        dueDate: deal.recurrenceIndex ? deal.expectedCloseDate : null,
       },
     });
   }

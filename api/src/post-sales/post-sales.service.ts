@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
 import { MovePostSalesCaseDto } from './dto/move-post-sales-case.dto';
 import { UpdatePostSalesCaseDto } from './dto/update-post-sales-case.dto';
+import { monthlyPostSalesName } from '../deals/monthly-post-sales';
 
 @Injectable()
 export class PostSalesService {
@@ -99,6 +100,7 @@ export class PostSalesService {
           { stage: { name: { contains: 'operation', mode: 'insensitive' } } },
           { stage: { name: { contains: 'post sales', mode: 'insensitive' } } },
           { stage: { name: { contains: 'post-sales', mode: 'insensitive' } } },
+          { recurrenceGroupId: { not: null } },
         ],
       },
       select: {
@@ -106,6 +108,9 @@ export class PostSalesService {
         title: true,
         clientId: true,
         ownerId: true,
+        recurrenceIndex: true,
+        recurrenceMonths: true,
+        expectedCloseDate: true,
       },
     });
 
@@ -132,10 +137,11 @@ export class PostSalesService {
         tenantId: user.tenantId,
         clientId: deal.clientId ?? null,
         dealId: deal.id,
-        name: deal.title,
+        name: monthlyPostSalesName(deal.title, deal.recurrenceIndex, deal.recurrenceMonths),
         status: 'onboarding',
         priority: 'medium',
         ownerUserId: deal.ownerId ?? user.userId,
+        dueDate: deal.recurrenceIndex ? deal.expectedCloseDate : null,
       })),
       skipDuplicates: true,
     });

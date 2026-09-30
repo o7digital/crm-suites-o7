@@ -22,6 +22,7 @@ describe('DealRecurrenceService', () => {
     };
     const created: Array<Record<string, unknown>> = [];
     const createItems = jest.fn().mockResolvedValue(undefined);
+    const createCase = jest.fn().mockResolvedValue({ id: 'case' });
     const tx = {
       deal: {
         updateMany: jest.fn().mockImplementation(({ where, data }) => {
@@ -35,6 +36,7 @@ describe('DealRecurrenceService', () => {
         }),
       },
       dealItem: { createMany: createItems },
+      postSalesCase: { create: createCase },
     };
     const prisma = {
       deal: { findMany: jest.fn().mockImplementation(() => [root]) },
@@ -57,6 +59,13 @@ describe('DealRecurrenceService', () => {
       }),
     ]);
     expect(createItems).toHaveBeenCalledTimes(2);
+    expect(createCase).toHaveBeenCalledTimes(2);
+    expect(createCase).toHaveBeenNthCalledWith(1, {
+      data: expect.objectContaining({
+        dealId: 'month-2', name: 'Monthly package (Mes 2/3)',
+        dueDate: new Date('2027-02-28T12:00:00.000Z'),
+      }),
+    });
     expect(await service.runOnce(new Date('2027-04-02T00:00:00.000Z'))).toBe(0);
     expect(created).toHaveLength(2);
   });
