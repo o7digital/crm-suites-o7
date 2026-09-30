@@ -326,6 +326,12 @@ model Deal {
   nextActionAt      DateTime?
   boardOrder        Int             @default(0)
   expectedCloseDate DateTime?
+  recurrenceGroupId String?
+  recurrenceIndex Int?
+  recurrenceMonths Int?
+  recurrenceStartAt DateTime?
+  recurrenceStageId String?
+  recurrenceGeneratedThrough Int?
   proposalFilePath  String?
   clientId          String?
   ownerId           String?
@@ -352,6 +358,8 @@ model Deal {
   @@index([tenantId, status, nextActionAt])
   @@index([tenantId, status, lastActivityAt])
   @@index([tenantId, stageId, boardOrder])
+  @@unique([tenantId, recurrenceGroupId, recurrenceIndex])
+  @@index([recurrenceIndex, recurrenceMonths])
 }
 
 model PostSalesCase {

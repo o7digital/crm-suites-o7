@@ -4,6 +4,7 @@ import {
   ArrayUnique,
   IsArray,
   IsDateString,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -52,6 +53,16 @@ export class CreateDealDto {
   @IsOptional()
   @IsDateString()
   expectedCloseDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(60)
+  recurrenceMonths?: number;
+
+  @IsOptional()
+  @IsDateString()
+  recurrenceStartAt?: string;
 
   @IsString()
   pipelineId: string;

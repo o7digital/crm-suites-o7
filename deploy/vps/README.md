@@ -38,6 +38,10 @@ curl --fail https://api.crm.o7digitalgroup.com/api/health
 
 `deploy.sh` requires a clean checkout, fetches `dev`, verifies the requested commit belongs to that branch, backs up the database, builds the image and checks health after replacing the API container. It does not restore data automatically. For a code rollback, deploy the previous tested commit; a database rollback requires a separate reviewed restore into a new database.
 
+### Monthly package schema (0038)
+
+The production database has deal columns from later releases, but its `_prisma_migrations` ledger only records migrations through 0011. Run `backup.sh` and apply the additive, idempotent `0038_deal_monthly_recurrence/migration.sql` directly with `psql` before starting the API version that reads these columns. Verify all six columns and the unique index afterward. Do not run `prisma migrate deploy` against this database until the historical ledger has been reconciled. The API generates due monthly deals at startup and then hourly; each month is created once in the same pipeline.
+
 Deploy frontend changes with the Vercel CLI from the repository root of a clean, tested checkout linked to project `crm-suites-o7`. The root `vercel.json` selects `frontend/package.json`; do not deploy from the frontend directory into a different project:
 
 ```sh

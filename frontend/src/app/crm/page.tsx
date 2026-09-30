@@ -71,6 +71,10 @@ type Deal = {
   followUpAt?: string | null;
   probability?: number | null;
   expectedCloseDate?: string | null;
+  recurrenceGroupId?: string | null;
+  recurrenceIndex?: number | null;
+  recurrenceMonths?: number | null;
+  recurrenceStartAt?: string | null;
   nextActionAt?: string | null;
   lastActivityAt?: string | null;
   boardOrder?: number;
@@ -406,6 +410,9 @@ export default function CrmPage() {
     probabilityOverridesStage: boolean;
     nextActionAt: string;
     expectedCloseDate: string;
+    recurring: boolean;
+    recurrenceMonths: string;
+    recurrenceStartAt: string;
     clientId: string;
     productIds: string[];
     pipelineId: string;
@@ -419,6 +426,9 @@ export default function CrmPage() {
     probabilityOverridesStage: false,
     nextActionAt: '',
     expectedCloseDate: '',
+    recurring: false,
+    recurrenceMonths: '12',
+    recurrenceStartAt: '',
     clientId: '',
     productIds: [],
     pipelineId: '',
@@ -531,7 +541,10 @@ export default function CrmPage() {
         probabilityPct: '',
         probabilityOverridesStage: false,
         nextActionAt: '',
-    expectedCloseDate: '',
+        expectedCloseDate: '',
+        recurring: false,
+        recurrenceMonths: '12',
+        recurrenceStartAt: '',
         clientId: '',
         productIds: [],
         pipelineId: '',
@@ -1089,7 +1102,10 @@ export default function CrmPage() {
       probabilityPct: toProbabilityPct(defaultStage?.probability),
       probabilityOverridesStage: false,
       nextActionAt: '',
-    expectedCloseDate: '',
+      expectedCloseDate: '',
+      recurring: false,
+      recurrenceMonths: '12',
+      recurrenceStartAt: '',
       clientId: '',
       productIds: [],
       pipelineId,
@@ -1114,6 +1130,9 @@ export default function CrmPage() {
       probabilityOverridesStage: deal.probability !== undefined && deal.probability !== null,
       nextActionAt: toDateInputValue(deal.nextActionAt),
       expectedCloseDate: toDateInputValue(deal.expectedCloseDate),
+      recurring: Boolean(deal.recurrenceGroupId),
+      recurrenceMonths: String(deal.recurrenceMonths || 12),
+      recurrenceStartAt: toDateInputValue(deal.recurrenceStartAt),
       clientId: deal.clientId ?? '',
       productIds: (deal.items ?? []).map((it) => it.productId).filter(Boolean),
       pipelineId: deal.pipelineId,
@@ -1158,6 +1177,13 @@ export default function CrmPage() {
       if (!title) throw new Error('Deal name is required');
       if (!Number.isFinite(value)) throw new Error('Amount must be a number');
       if (probabilityPct === null) throw new Error('Probability must be between 0 and 100');
+      const recurrenceMonths = Number(form.recurrenceMonths);
+      if (form.recurring && !editingDeal?.recurrenceGroupId && (
+        !Number.isInteger(recurrenceMonths) || recurrenceMonths < 2 || recurrenceMonths > 60 || !form.recurrenceStartAt
+      )) throw new Error('Choose a first month date and a duration from 2 to 60 months');
+      const recurrence = form.recurring && !editingDeal?.recurrenceGroupId
+        ? { recurrenceMonths, recurrenceStartAt: form.recurrenceStartAt }
+        : {};
 
       const stageId = form.stageId || modalDefaultStageId || defaultStageId;
       if (!stageId) throw new Error('Stage is required');
@@ -1175,7 +1201,10 @@ export default function CrmPage() {
             value,
             currency: form.currency,
             nextActionAt: form.nextActionAt || null,
-            expectedCloseDate: form.expectedCloseDate || undefined,
+            expectedCloseDate: form.recurring && !editingDeal.recurrenceGroupId
+              ? form.recurrenceStartAt
+              : form.expectedCloseDate || undefined,
+            ...recurrence,
             clientId: form.clientId ? form.clientId : null,
             ownerId: form.ownerId ? form.ownerId : null,
             pipelineId: targetPipelineId,
@@ -1239,7 +1268,8 @@ export default function CrmPage() {
             value,
             currency: form.currency,
             nextActionAt: form.nextActionAt || null,
-            expectedCloseDate: form.expectedCloseDate || undefined,
+            expectedCloseDate: form.recurring ? form.recurrenceStartAt : form.expectedCloseDate || undefined,
+            ...recurrence,
             clientId: form.clientId || undefined,
             ownerId: form.ownerId || undefined,
             pipelineId: targetPipelineId,
@@ -3362,7 +3392,7 @@ export default function CrmPage() {
                 </label>
 
                 <label className="block text-sm text-slate-300">
-                  {t('field.amount')}
+                  {t(form.recurring ? 'crm.recurring.monthlyAmount' : 'field.amount')}
                   <input
                     type="number"
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
@@ -3370,15 +3400,69 @@ export default function CrmPage() {
                     onChange={(e) => setForm((prev) => ({ ...prev, value: e.target.value }))}
                   />
                 </label>
-                <label className="block text-sm text-slate-300">
-                  {t('crm.closingDate')}
-                  <input
-                    type="date"
-                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
-                    value={form.expectedCloseDate}
-                    onChange={(e) => setForm((prev) => ({ ...prev, expectedCloseDate: e.target.value }))}
-                  />
-                </label>
+                <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 sm:col-span-2">
+                  <label className="flex items-center gap-3 text-sm text-slate-200">
+                    <input
+                      type="checkbox"
+                      data-testid="recurring-deal"
+                      checked={form.recurring}
+                      disabled={Boolean(editingDeal?.recurrenceGroupId) || Boolean(editingDeal?.status && editingDeal.status !== 'OPEN')}
+                      onChange={(event) => setForm((prev) => ({
+                        ...prev,
+                        recurring: event.target.checked,
+                        recurrenceStartAt: event.target.checked && !prev.recurrenceStartAt
+                          ? todayInputValue()
+                          : prev.recurrenceStartAt,
+                      }))}
+                    />
+                    {t('crm.recurring.enabled')}
+                  </label>
+                  {form.recurring ? (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <label className="text-sm text-slate-300">
+                        {t('crm.recurring.months')}
+                        <input
+                          type="number"
+                          min={2}
+                          max={60}
+                          step={1}
+                          data-testid="recurrence-months"
+                          className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                          value={form.recurrenceMonths}
+                          disabled={Boolean(editingDeal?.recurrenceGroupId)}
+                          onChange={(event) => setForm((prev) => ({ ...prev, recurrenceMonths: event.target.value }))}
+                        />
+                      </label>
+                      <label className="text-sm text-slate-300">
+                        {t('crm.recurring.startDate')}
+                        <input
+                          type="date"
+                          data-testid="recurrence-start-date"
+                          className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                          value={form.recurrenceStartAt}
+                          disabled={Boolean(editingDeal?.recurrenceGroupId)}
+                          onChange={(event) => setForm((prev) => ({ ...prev, recurrenceStartAt: event.target.value }))}
+                        />
+                      </label>
+                    </div>
+                  ) : null}
+                  {form.recurring ? (
+                    <p className="mt-2 text-xs text-slate-400">
+                      {t(editingDeal?.recurrenceGroupId ? 'crm.recurring.configured' : 'crm.recurring.hint')}
+                    </p>
+                  ) : null}
+                </div>
+                {(!form.recurring || editingDeal?.recurrenceGroupId) ? (
+                  <label className="block text-sm text-slate-300">
+                    {t('crm.closingDate')}
+                    <input
+                      type="date"
+                      className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                      value={form.expectedCloseDate}
+                      onChange={(e) => setForm((prev) => ({ ...prev, expectedCloseDate: e.target.value }))}
+                    />
+                  </label>
+                ) : null}
                 <label className="block text-sm text-slate-300">
                   {t('field.currency')}
                   <select
@@ -3942,6 +4026,14 @@ function StageColumn({
               <p className="mt-1 text-[11px] text-slate-400">
                 {t('tasks.client')}: {getClientDisplayName(deal.client)}
                 {deal.client.company ? ` · ${deal.client.company}` : ''}
+              </p>
+            ) : null}
+            {deal.recurrenceIndex && deal.recurrenceMonths ? (
+              <p className="mt-1 text-[11px] font-medium text-lime-200">
+                {t('crm.recurring.enabled')} · {t('crm.recurring.badge', {
+                  index: deal.recurrenceIndex,
+                  months: deal.recurrenceMonths,
+                })}
               </p>
             ) : null}
             {deal.items && deal.items.length > 0 ? (

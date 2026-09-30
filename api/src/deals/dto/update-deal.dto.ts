@@ -1,4 +1,4 @@
-import { IsDateString, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { IsDateString, IsInt, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 
 export class UpdateDealDto {
   @IsOptional()
@@ -25,6 +25,16 @@ export class UpdateDealDto {
   @IsOptional()
   @IsDateString()
   expectedCloseDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(60)
+  recurrenceMonths?: number;
+
+  @IsOptional()
+  @IsDateString()
+  recurrenceStartAt?: string;
 
   @IsOptional()
   @IsString()

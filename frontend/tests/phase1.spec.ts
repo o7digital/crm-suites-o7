@@ -352,6 +352,70 @@ test("a linked pipeline loads while settings and pipeline list are pending", asy
   await expect(page.getByTestId("deal-card-d1")).toBeVisible();
 });
 
+test("a monthly package sends its duration, first date and workflow", async ({ page }) => {
+  await mock(page);
+  await page.route("**/api/deals", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    await route.fulfill({ json: {
+      id: "monthly-1", title: "Monthly package", value: 1200, currency: "USD",
+      status: "OPEN", pipelineId: "p1", stageId: "open",
+      recurrenceIndex: 1, recurrenceMonths: 6,
+    } });
+  });
+  await page.goto("/crm");
+  await page.getByRole("button", { name: "New deal" }).click();
+  await page.getByLabel("Deal name").fill("Monthly package");
+  await page.getByTestId("recurring-deal").check();
+  await page.getByLabel("Monthly amount").fill("1200");
+  await page.getByTestId("recurrence-months").fill("6");
+  await page.getByTestId("recurrence-start-date").fill("2026-11-30");
+  const request = page.waitForRequest((req) =>
+    req.method() === "POST" && new URL(req.url()).pathname === "/api/deals",
+  );
+  await page.getByRole("button", { name: "Create deal" }).click();
+  expect((await request).postDataJSON()).toEqual(expect.objectContaining({
+    title: "Monthly package", value: 1200, pipelineId: "p1", stageId: "open",
+    recurrenceMonths: 6, recurrenceStartAt: "2026-11-30",
+    expectedCloseDate: "2026-11-30",
+  }));
+  await expect(page.getByTestId("deal-card-monthly-1")).toContainText("Month 1/6");
+});
+
+test("an existing open deal can become a monthly package", async ({ page }) => {
+  await mock(page);
+  await page.goto("/crm");
+  await page.getByTestId("deal-card-d1").click();
+  await page.getByTestId("recurring-deal").check();
+  await page.getByTestId("recurrence-months").fill("4");
+  await page.getByTestId("recurrence-start-date").fill("2026-12-15");
+  const request = page.waitForRequest((req) =>
+    req.method() === "PATCH" && new URL(req.url()).pathname === "/api/deals/d1",
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  expect((await request).postDataJSON()).toEqual(expect.objectContaining({
+    recurrenceMonths: 4, recurrenceStartAt: "2026-12-15",
+    pipelineId: "p1", stageId: "open",
+  }));
+});
+
+test("duplicating a lead shows the numbered copy returned by the API", async ({ page }) => {
+  await mock(page);
+  let copy = 0;
+  await page.route("**/api/deals/*/duplicate", async (route) => {
+    copy += 1;
+    await route.fulfill({ json: {
+      id: `copy-${copy}`, title: `Phase 1 opportunity copy ${copy}`,
+      value: 5000, currency: "USD", status: "OPEN", stageId: "open", pipelineId: "p1",
+    } });
+  });
+  await page.goto("/crm");
+  await page.getByTestId("deal-card-d1").click();
+  await page.getByRole("button", { name: "Duplicate deal" }).click();
+  await expect(page.getByLabel("Deal name")).toHaveValue("Phase 1 opportunity copy 1");
+  await page.getByRole("button", { name: "Duplicate deal" }).click();
+  await expect(page.getByLabel("Deal name")).toHaveValue("Phase 1 opportunity copy 2");
+});
+
 test("sales reporting uses closedAt and explicit status, keeps currencies separate and links lost follow-ups", async ({
   page,
 }) => {

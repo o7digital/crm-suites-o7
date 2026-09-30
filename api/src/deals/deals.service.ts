@@ -12,6 +12,9 @@ import { MoveStageDto } from './dto/move-stage.dto';
 import { CloseDealDto } from './dto/close-deal.dto';
 import { ReopenDealDto } from './dto/reopen-deal.dto';
 import * as fs from 'fs';
+import { randomUUID } from 'crypto';
+import { monthlyStartDate } from './recurrence';
+import { duplicateBaseTitle, nextDuplicateTitle } from './duplicate-title';
 
 const DEAL_BASE_SELECT = {
   id: true,
@@ -22,6 +25,11 @@ const DEAL_BASE_SELECT = {
   lastActivityAt: true,
   nextActionAt: true,
   boardOrder: true,
+  recurrenceGroupId: true,
+  recurrenceIndex: true,
+  recurrenceMonths: true,
+  recurrenceStartAt: true,
+  recurrenceGeneratedThrough: true,
   tenantId: true,
   pipelineId: true,
   stageId: true,
@@ -214,6 +222,15 @@ export class DealsService {
 
   async create(dto: CreateDealDto, user: RequestUser) {
     const caps = await this.getSchemaCaps();
+    if (Boolean(dto.recurrenceMonths) !== Boolean(dto.recurrenceStartAt)) {
+      throw new BadRequestException('Monthly packages require a first month date and duration');
+    }
+    const recurrenceStartAt = dto.recurrenceStartAt
+      ? monthlyStartDate(dto.recurrenceStartAt)
+      : null;
+    if (recurrenceStartAt && !Number.isFinite(recurrenceStartAt.getTime())) {
+      throw new BadRequestException('Invalid first month date');
+    }
     if (dto.probability !== undefined && !caps.hasProbability) {
       throw new BadRequestException(
         'CRM schema upgrade pending (missing Deal.probability). Please retry in a minute.',
@@ -250,6 +267,9 @@ export class DealsService {
       stageId = stage.id;
       targetStageStatus = stage.status;
       targetStageName = stage.name;
+    }
+    if (dto.recurrenceMonths && targetStageStatus !== 'OPEN') {
+      throw new BadRequestException('Monthly packages must start in an open stage');
     }
 
     const uniqueProductIds = Array.from(
@@ -329,7 +349,15 @@ export class DealsService {
           currency: (dto.currency ?? 'MXN').toUpperCase(),
           expectedCloseDate: dto.expectedCloseDate
             ? new Date(dto.expectedCloseDate)
-            : undefined,
+            : recurrenceStartAt ?? undefined,
+          ...(dto.recurrenceMonths && recurrenceStartAt ? {
+            recurrenceGroupId: randomUUID(),
+            recurrenceIndex: 1,
+            recurrenceMonths: dto.recurrenceMonths,
+            recurrenceStartAt,
+            recurrenceStageId: stageId,
+            recurrenceGeneratedThrough: 1,
+          } : {}),
           clientId,
           ...(caps.hasOwnerId ? { ownerId } : {}),
           tenantId: user.tenantId,
@@ -459,9 +487,20 @@ export class DealsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const baseTitle = duplicateBaseTitle(source.title);
+      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${user.tenantId}), hashtext(${`${source.pipelineId}:${baseTitle.toLowerCase()}`}))`;
+      const existingCopies = await tx.deal.findMany({
+        where: {
+          tenantId: user.tenantId,
+          pipelineId: source.pipelineId,
+          title: { startsWith: `${baseTitle} copy `, mode: 'insensitive' },
+        },
+        select: { title: true },
+      });
+      const title = nextDuplicateTitle(source.title, existingCopies.map((deal) => deal.title));
       const duplicated = await tx.deal.create({
         data: {
-          title: source.title,
+          title,
           value: source.value,
           currency: source.currency,
           expectedCloseDate: source.expectedCloseDate ?? undefined,
@@ -523,11 +562,28 @@ export class DealsService {
         id: true,
         pipelineId: true,
         stageId: true,
+        recurrenceGroupId: true,
+        recurrenceIndex: true,
         ...(caps.hasClosingFields ? { status: true } : {}),
         ...(caps.hasProbability ? { probability: true } : {}),
       },
     });
     if (!existing) throw new NotFoundException('Deal not found');
+    if (Boolean(dto.recurrenceMonths) !== Boolean(dto.recurrenceStartAt)) {
+      throw new BadRequestException('Monthly packages require a first month date and duration');
+    }
+    if (dto.recurrenceMonths && existing.recurrenceGroupId) {
+      throw new BadRequestException('This deal already belongs to a monthly package');
+    }
+    if (dto.recurrenceMonths && caps.hasClosingFields && existing.status !== 'OPEN') {
+      throw new BadRequestException('Only open deals can become monthly packages');
+    }
+    const recurrenceStartAt = dto.recurrenceStartAt
+      ? monthlyStartDate(dto.recurrenceStartAt)
+      : null;
+    if (recurrenceStartAt && !Number.isFinite(recurrenceStartAt.getTime())) {
+      throw new BadRequestException('Invalid first month date');
+    }
 
     if (dto.clientId) {
       if (!caps.hasClientId) {
@@ -547,6 +603,13 @@ export class DealsService {
     const requestedPipelineId = dto.pipelineId?.trim() || undefined;
     const requestedStageId = dto.stageId?.trim() || undefined;
     const targetPipelineId = requestedPipelineId ?? existing.pipelineId;
+    if (
+      existing.recurrenceGroupId &&
+      existing.recurrenceIndex === 1 &&
+      targetPipelineId !== existing.pipelineId
+    ) {
+      throw new BadRequestException('The first month must stay in its monthly workflow');
+    }
     let targetStageId = requestedStageId ?? existing.stageId;
     let resolvedTargetStageId: string | null = null;
     let targetStageStatus: 'OPEN' | 'WON' | 'LOST' | null = null;
@@ -599,6 +662,23 @@ export class DealsService {
         'Use the deal closing action to record the outcome and audit.',
       );
     }
+    if (dto.recurrenceMonths && targetStageStatus && targetStageStatus !== 'OPEN') {
+      throw new BadRequestException('Monthly packages must start in an open stage');
+    }
+    if (dto.recurrenceMonths && !targetStageStatus) {
+      const currentStage = await this.prisma.stage.findFirst({
+        where: {
+          id: targetStageId,
+          tenantId: user.tenantId,
+          pipelineId: targetPipelineId,
+          status: 'OPEN',
+        },
+        select: { id: true },
+      });
+      if (!currentStage) {
+        throw new BadRequestException('Monthly packages must start in an open stage');
+      }
+    }
 
     let ownerId: string | null | undefined = undefined;
     if (caps.hasOwnerId && dto.ownerId !== undefined) {
@@ -624,7 +704,15 @@ export class DealsService {
       currency: dto.currency ? dto.currency.toUpperCase() : undefined,
       expectedCloseDate: dto.expectedCloseDate
         ? new Date(dto.expectedCloseDate)
-        : undefined,
+        : recurrenceStartAt ?? undefined,
+      ...(dto.recurrenceMonths && recurrenceStartAt ? {
+        recurrenceGroupId: randomUUID(),
+        recurrenceIndex: 1,
+        recurrenceMonths: dto.recurrenceMonths,
+        recurrenceStartAt,
+        recurrenceStageId: targetStageId,
+        recurrenceGeneratedThrough: 1,
+      } : {}),
       ...(caps.hasClientId ? { clientId: dto.clientId } : {}),
       ...(caps.hasOwnerId && dto.ownerId !== undefined ? { ownerId } : {}),
       ...(caps.hasProbability && dto.probability !== undefined

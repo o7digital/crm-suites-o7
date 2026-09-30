@@ -2,6 +2,124 @@ import { DealsService } from './deals.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 describe('DealsService', () => {
+  it('creates only the first month of a package in the chosen workflow', async () => {
+    const create = jest.fn().mockImplementation(({ data }) => ({ id: 'first-month', ...data }));
+    const prisma = {
+      pipeline: { findFirst: jest.fn().mockResolvedValue({ id: 'workflow-1' }) },
+      stage: { findFirst: jest.fn().mockResolvedValue({
+        id: 'open-stage', status: 'OPEN', name: 'Qualified',
+      }) },
+      $transaction: jest.fn().mockImplementation(async (callback) => callback({
+        deal: {
+          create,
+          findFirst: jest.fn().mockImplementation(() => create.mock.results[0].value),
+        },
+      })),
+    } as unknown as PrismaService;
+    const service = new DealsService(prisma);
+    (service as any).schemaCache = {
+      checkedAt: Date.now(),
+      caps: {
+        hasClientId: true, hasClosingFields: true, hasOwnerId: true,
+        hasProductTables: false, hasProposalFilePath: false, hasProbability: true,
+      },
+    };
+
+    const result = await service.create({
+      title: 'Monthly package', value: 1200, pipelineId: 'workflow-1',
+      stageId: 'open-stage', recurrenceMonths: 3, recurrenceStartAt: '2027-01-31',
+    }, { userId: 'owner-1', tenantId: 'tenant-1', email: 'owner@example.com' });
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        pipelineId: 'workflow-1', stageId: 'open-stage', value: 1200,
+        recurrenceIndex: 1, recurrenceMonths: 3, recurrenceGeneratedThrough: 1,
+        recurrenceStageId: 'open-stage',
+        recurrenceStartAt: new Date('2027-01-31T12:00:00.000Z'),
+        expectedCloseDate: new Date('2027-01-31T12:00:00.000Z'),
+      }),
+    }));
+    expect(result.recurrenceGroupId).toEqual(expect.any(String));
+  });
+
+  it('turns an existing open deal into the first monthly occurrence', async () => {
+    const update = jest.fn().mockImplementation(({ data }) => ({ id: 'deal-1', ...data }));
+    const prisma = {
+      user: { findFirst: jest.fn().mockResolvedValue({ role: 'OWNER' }) },
+      stage: { findFirst: jest.fn().mockResolvedValue({ id: 'open-stage' }) },
+      deal: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'deal-1', pipelineId: 'workflow-1', stageId: 'open-stage',
+          status: 'OPEN', recurrenceGroupId: null,
+        }),
+        update,
+      },
+    } as unknown as PrismaService;
+    const service = new DealsService(prisma);
+    (service as any).schemaCache = {
+      checkedAt: Date.now(),
+      caps: {
+        hasClientId: true, hasClosingFields: true, hasOwnerId: true,
+        hasProductTables: false, hasProposalFilePath: false, hasProbability: true,
+      },
+    };
+
+    await service.update('deal-1', {
+      recurrenceMonths: 4, recurrenceStartAt: '2027-01-31',
+    }, { userId: 'owner-1', tenantId: 'tenant-1', email: 'owner@example.com' });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'deal-1' },
+      data: expect.objectContaining({
+        recurrenceIndex: 1, recurrenceMonths: 4, recurrenceGeneratedThrough: 1,
+        recurrenceStageId: 'open-stage', recurrenceStartAt: new Date('2027-01-31T12:00:00.000Z'),
+      }),
+    }));
+  });
+
+  it('duplicates a deal using the next copy number in its workflow', async () => {
+    const create = jest.fn().mockImplementation(({ data }) => ({ id: 'new-copy', ...data }));
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ locked: 1 }]),
+      deal: {
+        findMany: jest.fn().mockResolvedValue([
+          { title: 'Proposal copy 1' }, { title: 'Proposal copy 2' },
+        ]),
+        create,
+        findFirst: jest.fn().mockImplementation(() => create.mock.results[0].value),
+      },
+    };
+    const prisma = {
+      user: { findFirst: jest.fn().mockResolvedValue({ role: 'OWNER' }) },
+      deal: { findFirst: jest.fn().mockResolvedValue({
+        id: 'source', title: 'Proposal copy 1', value: 500,
+        currency: 'USD', pipelineId: 'workflow-1', stageId: 'open-stage',
+        status: 'OPEN', items: [],
+      }) },
+      $transaction: jest.fn().mockImplementation((callback) => callback(tx)),
+    } as unknown as PrismaService;
+    const service = new DealsService(prisma);
+    (service as any).schemaCache = {
+      checkedAt: Date.now(),
+      caps: {
+        hasClientId: true, hasClosingFields: true, hasOwnerId: true,
+        hasProductTables: false, hasProposalFilePath: false, hasProbability: true,
+      },
+    };
+
+    const result = await service.duplicate('source', {
+      userId: 'owner-1', tenantId: 'tenant-1', email: 'owner@example.com',
+    });
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.deal.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ tenantId: 'tenant-1', pipelineId: 'workflow-1' }),
+    }));
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ title: 'Proposal copy 3' }),
+    }));
+    expect(result.title).toBe('Proposal copy 3');
+  });
+
   it('moves a deal to another pipeline during update', async () => {
     const prisma = {
       user: {
