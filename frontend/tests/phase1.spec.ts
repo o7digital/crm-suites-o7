@@ -305,6 +305,20 @@ test("LOST with a follow-up date creates a task by default and preserves the loc
   await expect(page.getByTestId("undo-close")).toBeVisible();
 });
 
+test("checking follow-up without a date schedules it for tomorrow", async ({ page }) => {
+  await mock(page);
+  await page.goto("/crm");
+  await drop(page, "LOST");
+  await page.getByTestId("loss-reason").selectOption("price");
+  await page.getByTestId("create-follow-up").check();
+  await expect(page.getByTestId("follow-up-date")).not.toHaveValue("");
+  const request = page.waitForRequest((req) => req.url().endsWith("/deals/d1/close"));
+  await page.getByTestId("confirm-close").click();
+  const body = (await request).postDataJSON();
+  expect(body.createFollowUp).toBe(true);
+  expect(body.followUpAt).toBeTruthy();
+});
+
 test("clearing a follow-up date clears task creation; the checkbox can be opted out", async ({
   page,
 }) => {
@@ -315,8 +329,27 @@ test("clearing a follow-up date clears task creation; the checkbox can be opted 
   await page.getByTestId("create-follow-up").uncheck();
   await expect(page.getByTestId("create-follow-up")).not.toBeChecked();
   await page.getByTestId("follow-up-date").fill("");
-  await expect(page.getByTestId("create-follow-up")).toBeDisabled();
+  await expect(page.getByTestId("create-follow-up")).toBeEnabled();
   await expect(page.getByTestId("create-follow-up")).not.toBeChecked();
+});
+
+test("a linked pipeline loads while settings and pipeline list are pending", async ({ page }) => {
+  await mock(page);
+  let releaseSettings!: () => void;
+  let releasePipelines!: () => void;
+  await page.route("**/api/tenant/settings", async (route) => {
+    await new Promise<void>((resolve) => { releaseSettings = resolve; });
+    await route.fulfill({ json: { settings: { crmMode: "B2B", crmDisplayCurrency: "USD" } } });
+  });
+  await page.route("**/api/pipelines", async (route) => {
+    await new Promise<void>((resolve) => { releasePipelines = resolve; });
+    await route.fulfill({ json: [{ id: "p1", name: "New Sales", isDefault: true }] });
+  });
+  await page.goto("/crm?pipelineId=p1");
+  await expect(page.getByTestId("deal-card-d1")).toBeVisible();
+  releaseSettings();
+  releasePipelines();
+  await expect(page.getByTestId("deal-card-d1")).toBeVisible();
 });
 
 test("sales reporting uses closedAt and explicit status, keeps currencies separate and links lost follow-ups", async ({

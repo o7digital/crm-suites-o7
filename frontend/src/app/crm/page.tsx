@@ -601,25 +601,34 @@ export default function CrmPage() {
 
   useEffect(() => {
     if (!token) return;
-    setLoading(true);
-    Promise.allSettled([
-      api<{ settings: TenantSettings }>('/tenant/settings', { method: 'GET' }),
-      api<Pipeline[]>('/pipelines'),
-    ])
-      .then(([settingsResult, pipelinesResult]) => {
-        const rawCurrency =
-          settingsResult.status === 'fulfilled'
-            ? String(settingsResult.value.settings?.crmDisplayCurrency || 'MXN').toUpperCase()
-            : 'MXN';
+    let active = true;
+    api<{ settings: TenantSettings }>('/tenant/settings', { method: 'GET' })
+      .then((result) => {
+        if (!active) return;
+        const rawCurrency = String(result.settings?.crmDisplayCurrency || 'MXN').toUpperCase();
         setCrmDisplayCurrency(
           DEAL_CURRENCIES.includes(rawCurrency as DealCurrency) ? (rawCurrency as DealCurrency) : 'MXN',
         );
+      })
+      .catch(() => {
+        // Currency settings do not block the board.
+      });
+    return () => { active = false; };
+  }, [api, token]);
 
-        const data = pipelinesResult.status === 'fulfilled' ? pipelinesResult.value : [];
-        if (pipelinesResult.status === 'rejected') {
-          const message = pipelinesResult.reason instanceof Error ? pipelinesResult.reason.message : 'Unable to load pipelines';
-          setError(message);
-        }
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get('pipelineId');
+    setRequestedStageId(params.get('stageId'));
+    setRequestedDealId(params.get('dealId'));
+    // The URL already identifies the board, so fetch its stages and deals while
+    // the pipeline selector is loading.
+    if (requested) setPipelineId(requested);
+    api<Pipeline[]>('/pipelines')
+      .then((data) => {
+        if (!active) return;
 
         // Keep CRM board focused on the sales + post-sales flow.
         // Hide legacy/alternate B2C board from the main selector.
@@ -627,27 +636,18 @@ export default function CrmPage() {
         if (filtered.length === 0) filtered = data;
 
         setPipelines(filtered);
-        let requested: string | null = null;
-        let requestedStage: string | null = null;
-        let requestedDeal: string | null = null;
-        if (typeof window !== 'undefined') {
-          try {
-            const params = new URLSearchParams(window.location.search);
-            requested = params.get('pipelineId');
-            requestedStage = params.get('stageId');
-            requestedDeal = params.get('dealId');
-          } catch {
-            // ignore malformed URL
-          }
-        }
-        setRequestedStageId(requestedStage || null);
-        setRequestedDealId(requestedDeal || null);
         const match = requested ? filtered.find((p) => p.id === requested) : null;
         const defaultPipeline =
           match || filtered.find((p) => p.name === 'New Sales') || filtered.find((p) => p.isDefault) || filtered[0];
         setPipelineId(defaultPipeline?.id || '');
+        if (!defaultPipeline) setLoading(false);
       })
-      .finally(() => setLoading(false));
+      .catch((err: Error) => {
+        if (!active) return;
+        setError(err.message || 'Unable to load pipelines');
+        if (!requested) setLoading(false);
+      });
+    return () => { active = false; };
   }, [api, token]);
 
   useEffect(() => {
@@ -2731,8 +2731,14 @@ export default function CrmPage() {
                     type="checkbox"
                     checked={closingDraft.createFollowUp}
                     data-testid="create-follow-up"
-                    disabled={!closingDraft.followUpAt || !closingDraft.deal.clientId}
-                    onChange={(event) => setClosingDraft((prev) => prev ? { ...prev, createFollowUp: event.target.checked } : prev)}
+                    disabled={!closingDraft.deal.clientId}
+                    onChange={(event) => setClosingDraft((prev) => prev ? {
+                      ...prev,
+                      createFollowUp: event.target.checked,
+                      followUpAt: event.target.checked && !prev.followUpAt
+                        ? tomorrowInputValue()
+                        : prev.followUpAt,
+                    } : prev)}
                   />
                   {t('crm.close.createFollowUp')}
                 </label>
