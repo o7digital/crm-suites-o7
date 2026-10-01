@@ -568,25 +568,6 @@ export class AdminService {
       throw new BadRequestException('Password must contain at least 8 characters and at most 72 UTF-8 bytes');
     }
     const hash = await bcrypt.hash(password, 12);
-    const supabaseUrl = (process.env.SUPABASE_URL || process.env.SUPABASE_JWT_ISSUER?.replace(/\/auth\/v1\/?$/, '') || '').replace(/\/$/, '');
-    if (userId.startsWith('user_') || supabaseUrl) {
-      const clerk = userId.startsWith('user_');
-      const key = clerk ? process.env.CLERK_SECRET_KEY : process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (!key) {
-        throw new ServiceUnavailableException(`${clerk ? 'CLERK_SECRET_KEY' : 'SUPABASE_SERVICE_ROLE_KEY'} is required on the API server to set login passwords`);
-      }
-      const response = await fetch(clerk
-        ? `https://api.clerk.com/v1/users/${encodeURIComponent(userId)}`
-        : `${supabaseUrl}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
-        method: clerk ? 'PATCH' : 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}`, ...(!clerk ? { apikey: key } : {}) },
-        body: JSON.stringify({ password }),
-        signal: AbortSignal.timeout(15000),
-      });
-      if (!response.ok) {
-        throw new BadRequestException('Authentication provider could not update this password. Check the user account and password requirements.');
-      }
-    }
     await this.prisma.user.update({
       where: { id: target.id }, data: { password: hash },
       select: { id: true },

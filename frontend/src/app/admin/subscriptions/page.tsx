@@ -670,7 +670,7 @@ export default function AdminSubscriptionsPage() {
           .map((result) => result.value);
         inviteSuccessCount = successfulInvites.length;
         inviteFailedCount = inviteResults.length - inviteSuccessCount;
-        inviteNotSentCount = successfulInvites.filter((invite) => invite.emailDelivery !== 'SENT').length;
+        inviteNotSentCount = successfulInvites.filter((invite) => invite.emailDelivery === 'FAILED').length;
         setPendingInvitesById((prev) => ({ ...prev, [created.id]: successfulInvites }));
 
         if (successfulInvites.length > 0) {
@@ -797,7 +797,7 @@ export default function AdminSubscriptionsPage() {
         contactName: invite.name || undefined,
         inviteToken: invite.token,
       }));
-      if (invite.emailDelivery && invite.emailDelivery !== 'SENT') {
+      if (invite.emailDelivery && invite.emailDelivery === 'FAILED') {
         setError(t('adminSubscriptions.invites.emailNotSent', { count: 1 }));
       }
     } catch (err) {
@@ -857,7 +857,7 @@ export default function AdminSubscriptionsPage() {
         await copyUrl(link);
         if (created.emailDelivery === 'SENT') {
           setInfo(t('adminSubscriptions.invites.emailSent', { count: 1 }));
-        } else {
+        } else if (created.emailDelivery === 'FAILED') {
           setError(t('adminSubscriptions.invites.emailNotSent', { count: 1 }));
         }
       } catch (err) {

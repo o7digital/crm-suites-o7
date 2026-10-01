@@ -38,6 +38,7 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const SUPPORT_ORIGINAL_SESSION_KEY = 'supportOriginalSession';
+const LOCAL_SESSION_KEY = 'localAuthSession';
 
 function generateTenantId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -148,6 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tenantName,
     };
 
+    localStorage.removeItem(LOCAL_SESSION_KEY);
     setToken(session.access_token);
     setUser(mappedUser);
     localStorage.setItem('token', session.access_token);
@@ -225,6 +227,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem('user');
         if (active) setIsImpersonating(false);
       }
+      if (localStorage.getItem(LOCAL_SESSION_KEY) && supportToken && supportUser) {
+        try {
+          const storedUser = JSON.parse(supportUser) as User;
+          const response = await fetch(`${apiBaseForRequests()}/auth/me`, {
+            headers: { Authorization: `Bearer ${supportToken}` }, cache: 'no-store',
+          });
+          if (response.ok) {
+            const identity = await response.json() as { user: { userId: string; tenantId: string } };
+            if (identity.user.userId === storedUser.id && identity.user.tenantId === storedUser.tenantId) {
+              if (active) { setToken(supportToken); setUser(storedUser); setLoading(false); }
+              return;
+            }
+          } else if (response.status >= 500) {
+            // Preserve the session during a temporary API outage.
+            if (active) { setToken(supportToken); setUser(storedUser); setLoading(false); }
+            return;
+          }
+        } catch {
+          if (active) { setLoading(false); }
+          return;
+        }
+        localStorage.removeItem(LOCAL_SESSION_KEY);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
       const supabase = safeSupabase();
       if (!supabase) {
         if (active) setLoading(false);
@@ -234,7 +261,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!active) return;
       const session = data.session;
       if (session) {
-        if (!localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY)) syncSession(session);
+        if (!localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY) && !localStorage.getItem(LOCAL_SESSION_KEY)) syncSession(session);
         setLoading(false);
         // Refresh bootstrap data in the background without blocking the UI.
         void bootstrapTenant(session.access_token, { ignoreErrors: true });
@@ -254,8 +281,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (typeof window !== 'undefined') window.location.href = '/sign-in';
         return;
       }
+      const normalizedEmail = email.trim();
+      const response = await fetch(`${apiBaseForRequests()}/auth/login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalizedEmail, password }),
+      });
+      if (response.ok) {
+        const session = await response.json() as { token: string; user: User };
+        localStorage.setItem(LOCAL_SESSION_KEY, 'true');
+        localStorage.setItem('token', session.token);
+        localStorage.setItem('user', JSON.stringify(session.user));
+        setToken(session.token); setUser(session.user); setIsImpersonating(false);
+        return;
+      }
+      if (response.status !== 401) {
+        const payload = await response.json().catch(() => ({})) as { message?: string | string[] };
+        throw new Error(Array.isArray(payload.message) ? payload.message.join('; ') : payload.message || 'Unable to login');
+      }
       const supabase = mustSupabase();
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
       if (error || !data.session) {
         throw new Error(error?.message || 'Unable to login');
       }
@@ -333,6 +377,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     localStorage.removeItem(SUPPORT_ORIGINAL_SESSION_KEY);
+    localStorage.removeItem(LOCAL_SESSION_KEY);
     try {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       if (!supabaseUrl) return;
@@ -434,7 +479,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY)) return;
+      if (localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY) || localStorage.getItem(LOCAL_SESSION_KEY)) return;
       if (session) {
         syncSession(session);
         if (event === 'SIGNED_IN') {

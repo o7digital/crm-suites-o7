@@ -51,16 +51,24 @@ export class AuthService {
   }
 
   async login(data: LoginDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: data.email } });
-    if (!user) {
+    const user = await this.prisma.user.findFirst({ where: { email: { equals: data.email.trim(), mode: 'insensitive' } } });
+    if (!user || !user.password) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const valid = await bcrypt.compare(data.password, user.password);
     if (!valid) {
-      throw new UnauthorizedException('Invalid credentials');
+      // A configured CRM password is authoritative; do not fall back to the old provider password.
+      throw new ForbiddenException('Invalid credentials');
     }
 
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { customerTenantId: user.tenantId }, select: { status: true },
+    });
+    if (subscription && subscription.status !== 'ACTIVE') {
+      throw new ForbiddenException('Subscription is not active for this workspace.');
+    }
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: user.tenantId }, select: { name: true } });
     const now = new Date();
     const updated = await this.prisma.user.update({
       where: { id: user.id },
@@ -71,7 +79,7 @@ export class AuthService {
     });
 
     const token = this.signUser(updated.id, updated.tenantId, updated.email);
-    return { token, user: this.exposeUser(updated) };
+    return { token, user: { ...this.exposeUser(updated), tenantName: tenant?.name } };
   }
 
   async impersonateSubscriptionCustomer(

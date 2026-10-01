@@ -31,7 +31,7 @@ const stages = [
     pipelineId: "p1",
   },
 ];
-async function mock(page: Page, failClose = false) {
+async function mock(page: Page, failClose = false, sessionUser = user) {
   let deal = {
     id: "d1",
     title: "Phase 1 opportunity",
@@ -56,12 +56,14 @@ async function mock(page: Page, failClose = false) {
         JSON.stringify({ token: "test-only-token", user }),
       );
     },
-    { user },
+    { user: sessionUser },
   );
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname.replace(/^\/api/, "");
     let data: unknown = {};
-    if (path === "/pipelines")
+    if (path === "/auth/me")
+      data = { user: { userId: sessionUser.id, tenantId: sessionUser.tenantId } };
+    else if (path === "/pipelines")
       data = [{ id: "p1", name: "New Sales", isDefault: true }];
     else if (path === "/stages") data = stages;
     else if (path === "/deals") data = [deal];
@@ -215,7 +217,7 @@ test("Command Center displays upcoming sales follow-ups with actionable groups",
 test("the bureau loads follow-ups from an older API and respects assigned scope", async ({
   page,
 }) => {
-  await mock(page);
+  await mock(page, false, { ...user, id: "seller1" });
   await page.route("**/api/dashboard/command-center?**", (route) =>
     route.fulfill({
       json: {
@@ -234,7 +236,7 @@ test("the bureau loads follow-ups from an older API and respects assigned scope"
     }),
   );
   await page.route("**/api/auth/me", (route) =>
-    route.fulfill({ json: { user: { userId: "seller1" } } }),
+    route.fulfill({ json: { user: { userId: "seller1", tenantId: user.tenantId } } }),
   );
   const dueDate = new Date(Date.now() + 7 * 86400000).toISOString();
   await page.route("**/api/tasks", (route) =>

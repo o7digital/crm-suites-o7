@@ -173,7 +173,7 @@ export default function AdminUsersPage() {
       const link = buildInviteLink(created);
       if (link) {
         await navigator.clipboard.writeText(link).catch(() => undefined);
-        setInviteMessage(created.emailDelivery === 'SENT' ? `Invitation e-mail sent to ${created.email}` : `Invitation created for ${created.email}. E-mail not sent: ${created.emailDelivery === 'NOT_CONFIGURED' ? 'mail server is not configured' : 'delivery failed'}. You can copy the link.`);
+        setInviteMessage(`Invitation link ready for ${created.email}. Share the link from your email account.`);
       }
       setInviteEmail('');
       setInviteName('');
