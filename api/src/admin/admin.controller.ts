@@ -6,6 +6,7 @@ import { AdminService } from './admin.service';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { CreateUserInviteDto } from './dto/create-user-invite.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
+import { SetUserPasswordDto } from './dto/set-user-password.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 
 @UseGuards(JwtAuthGuard)
@@ -41,6 +42,19 @@ export class AdminController {
   @Patch('users/:id')
   updateUserRole(@Param('id') id: string, @Body() dto: UpdateUserRoleDto, @CurrentUser() user: RequestUser) {
     return this.adminService.updateUserRole(id, dto.role, user);
+  }
+
+  @Patch('users/:id/password')
+  setUserPassword(@Param('id') id: string, @Body() dto: SetUserPasswordDto, @CurrentUser() user: RequestUser) {
+    return this.adminService.setUserPassword(id, dto.password, user);
+  }
+
+  @Patch('subscriptions/:id/users/:userId/password')
+  setSubscriptionUserPassword(
+    @Param('id') id: string, @Param('userId') userId: string,
+    @Body() dto: SetUserPasswordDto, @CurrentUser() user: RequestUser,
+  ) {
+    return this.adminService.setSubscriptionUserPassword(id, userId, dto.password, user);
   }
 
   @Get('subscriptions')

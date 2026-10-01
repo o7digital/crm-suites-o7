@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AdminPasswordForm } from '../../../components/AdminPasswordForm';
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useApi, useAuth } from '../../../contexts/AuthContext';
@@ -20,6 +21,7 @@ type PendingInvite = {
   name: string | null;
   role: 'OWNER' | 'ADMIN' | 'MEMBER';
   token: string;
+  emailDelivery?: 'SENT' | 'NOT_CONFIGURED' | 'FAILED';
   status: 'PENDING';
   createdAt: string;
   updatedAt: string;
@@ -171,7 +173,7 @@ export default function AdminUsersPage() {
       const link = buildInviteLink(created);
       if (link) {
         await navigator.clipboard.writeText(link).catch(() => undefined);
-        setInviteMessage(`Invitation created for ${created.email}${link ? ' (link copied)' : ''}`);
+        setInviteMessage(created.emailDelivery === 'SENT' ? `Invitation e-mail sent to ${created.email}` : `Invitation created for ${created.email}. E-mail not sent: ${created.emailDelivery === 'NOT_CONFIGURED' ? 'mail server is not configured' : 'delivery failed'}. You can copy the link.`);
       }
       setInviteEmail('');
       setInviteName('');
@@ -401,7 +403,7 @@ export default function AdminUsersPage() {
                   {users.map((u) => (
                     <tr key={u.id} className="border-t border-white/5">
                       <td className="py-2 font-medium">{u.name || '—'}</td>
-                      <td className="py-2 text-slate-300">{u.email}</td>
+                      <td className="py-2 text-slate-300">{u.email}<AdminPasswordForm endpoint={`/admin/users/${u.id}/password`} email={u.email} /></td>
                       <td className="py-2">
                         <div className="flex items-center gap-2">
                           <select

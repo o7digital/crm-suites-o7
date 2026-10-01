@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import nodemailer from 'nodemailer';
+import * as bcrypt from 'bcrypt';
 import Stripe = require('stripe');
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
@@ -556,6 +557,32 @@ export class AdminService {
         updatedAt: true,
       },
     });
+  }
+
+  private async setPasswordForTenant(userId: string, tenantId: string, password: string) {
+    const target = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId }, select: { id: true },
+    });
+    if (!target) throw new NotFoundException('User not found');
+    if (typeof password !== 'string' || password.length < 8 || Buffer.byteLength(password, 'utf8') > 72) {
+      throw new BadRequestException('Password must contain at least 8 characters and at most 72 UTF-8 bytes');
+    }
+    await this.prisma.user.update({
+      where: { id: target.id }, data: { password: await bcrypt.hash(password, 12) },
+      select: { id: true },
+    });
+    return { success: true };
+  }
+
+  async setUserPassword(userId: string, password: string, user: RequestUser) {
+    await this.ensureAdmin(user);
+    return this.setPasswordForTenant(userId, user.tenantId, password);
+  }
+
+  async setSubscriptionUserPassword(id: string, userId: string, password: string, user: RequestUser) {
+    await this.ensureSubscriptionManager(user);
+    const subscription = await this.getOwnedSubscription(id, user.tenantId);
+    return this.setPasswordForTenant(userId, subscription.customerTenantId, password);
   }
 
   async getContext(user: RequestUser) {

@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { AdminPasswordForm } from '../../../components/AdminPasswordForm';
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useApi, useAuth } from '../../../contexts/AuthContext';
@@ -1841,6 +1842,7 @@ export default function AdminSubscriptionsPage() {
                                             )}
                                           </div>
                                         </div>
+                                        <AdminPasswordForm endpoint={`/admin/subscriptions/${sub.id}/users/${workspaceUser.id}/password`} email={workspaceUser.email} />
                                       </div>
                                     );
                                   })}
