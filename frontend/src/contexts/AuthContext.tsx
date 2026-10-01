@@ -197,6 +197,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     let active = true;
     (async () => {
+      const originalSession = localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY);
+      const supportToken = localStorage.getItem('token');
+      const supportUser = localStorage.getItem('user');
+      if (originalSession && supportToken && supportUser) {
+        try {
+          const storedUser = JSON.parse(supportUser) as User;
+          const response = await fetch(`${apiBaseForRequests()}/auth/me`, {
+            headers: { Authorization: `Bearer ${supportToken}` },
+            cache: 'no-store',
+          });
+          const identity = response.ok ? (await response.json()) as { user: { tenantId: string; userId: string } } : null;
+          if (identity?.user.tenantId === storedUser.tenantId && identity.user.userId === storedUser.id) {
+            if (active) {
+              setToken(supportToken);
+              setUser(storedUser);
+              setIsImpersonating(true);
+              setLoading(false);
+            }
+            return;
+          }
+        } catch {
+          // Fall back to the original identity if the saved support session cannot be verified.
+        }
+        localStorage.removeItem(SUPPORT_ORIGINAL_SESSION_KEY);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        if (active) setIsImpersonating(false);
+      }
       const supabase = safeSupabase();
       if (!supabase) {
         if (active) setLoading(false);
@@ -206,7 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!active) return;
       const session = data.session;
       if (session) {
-        syncSession(session);
+        if (!localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY)) syncSession(session);
         setLoading(false);
         // Refresh bootstrap data in the background without blocking the UI.
         void bootstrapTenant(session.access_token, { ignoreErrors: true });
@@ -348,6 +376,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const session = (await res.json()) as { token: string; user: User };
+      const verify = await fetch(`${apiBase}/auth/me`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+        cache: 'no-store',
+      });
+      const identity = verify.ok ? (await verify.json()) as { user: { tenantId: string; userId: string } } : null;
+      if (identity?.user.tenantId !== session.user.tenantId || identity.user.userId !== session.user.id) {
+        throw new Error('Impossible de confirmer l’accès au compte client. La session actuelle est conservée.');
+      }
       if (typeof window !== 'undefined' && !localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY)) {
         localStorage.setItem(SUPPORT_ORIGINAL_SESSION_KEY, JSON.stringify({ token, user }));
       }
@@ -391,21 +427,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [clearAuthStorage, hasClerk, safeSupabase]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY)) {
-      const storedToken = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
-      if (storedToken && storedUser) {
-        try {
-          setToken(storedToken);
-          setUser(JSON.parse(storedUser) as User);
-          setIsImpersonating(true);
-          setLoading(false);
-          return;
-        } catch {
-          localStorage.removeItem(SUPPORT_ORIGINAL_SESSION_KEY);
-        }
-      }
-    }
     if (hasClerk) return;
     const supabase = safeSupabase();
     if (!supabase) return;
@@ -413,6 +434,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+      if (localStorage.getItem(SUPPORT_ORIGINAL_SESSION_KEY)) return;
       if (session) {
         syncSession(session);
         if (event === 'SIGNED_IN') {

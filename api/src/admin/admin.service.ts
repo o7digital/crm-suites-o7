@@ -14,6 +14,7 @@ import { InviteStatus, Prisma } from '@prisma/client';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { CreateUserInviteDto } from './dto/create-user-invite.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
+import { supportEmailsForTenant } from '../common/support-email';
 
 @Injectable()
 export class AdminService {
@@ -139,7 +140,7 @@ export class AdminService {
 
     try {
       const [memberCount, pendingInvites] = await Promise.all([
-        this.prisma.user.count({ where: { tenantId } }),
+        this.prisma.user.count({ where: { tenantId, email: { notIn: supportEmailsForTenant(tenantId) } } }),
         this.prisma.userInvite.count({
           where: { tenantId, status: 'PENDING' },
         }),
@@ -244,7 +245,7 @@ export class AdminService {
     try {
       const existing = await this.prisma.subscription.findFirst({
         where: { id, tenantId: ownerTenantId },
-        select: { id: true, customerTenantId: true, status: true },
+        select: { id: true, customerName: true, customerTenantId: true, status: true },
       });
       if (!existing) throw new NotFoundException('Subscription not found');
       return existing;
@@ -490,7 +491,10 @@ export class AdminService {
 
   async createUserInvite(dto: CreateUserInviteDto, user: RequestUser) {
     await this.ensureAdmin(user);
-    return this.createUserInviteForTenant(dto, user.tenantId, user.userId);
+    const invite = await this.createUserInviteForTenant(dto, user.tenantId, user.userId);
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: user.tenantId }, select: { name: true } });
+    const emailDelivery = await this.sendUserInviteEmail(invite, user.tenantId, tenant?.name || 'o7 PulseCRM');
+    return { ...invite, emailDelivery };
   }
 
   async revokeUserInvite(id: string, user: RequestUser) {
@@ -790,11 +794,66 @@ export class AdminService {
         'Cannot invite users to an inactive subscription',
       );
     }
-    return this.createUserInviteForTenant(
+    const invite = await this.createUserInviteForTenant(
       dto,
       subscription.customerTenantId,
       user.userId,
     );
+    const emailDelivery = await this.sendUserInviteEmail(
+      invite,
+      subscription.customerTenantId,
+      subscription.customerName,
+    );
+    return { ...invite, emailDelivery };
+  }
+
+  private async sendUserInviteEmail(
+    invite: { email: string; name: string | null; token: string },
+    tenantId: string,
+    tenantName: string,
+  ): Promise<'SENT' | 'NOT_CONFIGURED' | 'FAILED'> {
+    const host = (process.env.SMTP_HOST || '').trim();
+    const username = (process.env.SMTP_USER || '').trim();
+    const password = process.env.SMTP_PASS || '';
+    const fromEmail = (process.env.SMTP_FROM_EMAIL || process.env.MAIL_FROM || '').trim();
+    const frontendUrl = (process.env.FRONTEND_URL || '').split(',')[0].trim();
+    if (!host || !username || !password || !fromEmail || !frontendUrl) {
+      console.warn('[user-invite] email not sent: SMTP or FRONTEND_URL is incomplete');
+      return 'NOT_CONFIGURED';
+    }
+
+    try {
+      const link = new URL('/register', frontendUrl);
+      link.searchParams.set('tenantId', tenantId);
+      link.searchParams.set('tenantName', tenantName);
+      link.searchParams.set('email', invite.email);
+      if (invite.name) link.searchParams.set('name', invite.name);
+      link.searchParams.set('inviteToken', invite.token);
+      const port = Number(process.env.SMTP_PORT || 587);
+      const transporter = nodemailer.createTransport({
+        host,
+        port: Number.isFinite(port) ? port : 587,
+        secure: String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || port === 465,
+        auth: { user: username, pass: password },
+      });
+      await transporter.sendMail({
+        from: { name: (process.env.SMTP_FROM_NAME || 'o7 PulseCRM').trim(), address: fromEmail },
+        to: invite.email,
+        subject: `Invitation à rejoindre ${tenantName} sur o7 PulseCRM`,
+        text: [
+          invite.name ? `Bonjour ${invite.name},` : 'Bonjour,',
+          '',
+          `Vous êtes invité(e) à rejoindre l’espace ${tenantName} sur o7 PulseCRM.`,
+          `Créez votre compte avec ce lien : ${link.toString()}`,
+          '',
+          'Si vous ne connaissez pas cette invitation, ignorez ce message.',
+        ].join('\n'),
+      });
+      return 'SENT';
+    } catch (err) {
+      console.error('[user-invite] email delivery failed', err instanceof Error ? err.message : err);
+      return 'FAILED';
+    }
   }
 
   async createSubscription(dto: CreateSubscriptionDto, user: RequestUser) {

@@ -610,6 +610,9 @@ const CORE_MESSAGES = {
     "adminSubscriptions.createInvites.created": "{count} invites created.",
     "adminSubscriptions.createInvites.partialError":
       "{failed} invites failed. Check emails/seat limit.",
+    "adminSubscriptions.invites.emailSent": "{count} invitation email(s) sent.",
+    "adminSubscriptions.invites.emailNotSent": "{count} invitation email(s) were not sent. Check SMTP configuration or delivery, then copy the invite link.",
+    "adminSubscriptions.invites.linkRequiresInvite": "Customer details updated. Create an invitation to get a valid registration link.",
     "adminSubscriptions.legal.notice":
       "Registration includes a legal notice (beta + applicable privacy framework by country).",
     "adminSubscriptions.table.customer": "Customer",
@@ -1238,6 +1241,9 @@ const CORE_MESSAGES = {
     "adminSubscriptions.createInvites.created": "{count} invitations creees.",
     "adminSubscriptions.createInvites.partialError":
       "{failed} invitations en echec. Verifiez emails/limite d'utilisateurs.",
+    "adminSubscriptions.invites.emailSent": "{count} e-mail(s) d'invitation envoyés.",
+    "adminSubscriptions.invites.emailNotSent": "{count} e-mail(s) d'invitation non envoyés. Vérifiez la configuration SMTP ou l'envoi, puis copiez le lien d'invitation.",
+    "adminSubscriptions.invites.linkRequiresInvite": "Données du client enregistrées. Créez une invitation pour obtenir un lien d'inscription valide.",
     "adminSubscriptions.legal.notice":
       "L'inscription inclut une notice legale (beta + cadre de confidentialite selon le pays).",
     "adminSubscriptions.table.customer": "Client",
@@ -1861,6 +1867,9 @@ const CORE_MESSAGES = {
       "Se crearon {count} invitaciones.",
     "adminSubscriptions.createInvites.partialError":
       "Fallaron {failed} invitaciones. Revisa emails/limite de usuarios.",
+    "adminSubscriptions.invites.emailSent": "Se enviaron {count} correos de invitación.",
+    "adminSubscriptions.invites.emailNotSent": "No se enviaron {count} correos de invitación. Revisa SMTP o el envío y copia el enlace de invitación.",
+    "adminSubscriptions.invites.linkRequiresInvite": "Datos del cliente guardados. Crea una invitación para obtener un enlace de registro válido.",
     "adminSubscriptions.legal.notice":
       "El registro incluye un aviso legal (beta + marco de privacidad aplicable por pais).",
     "adminSubscriptions.table.customer": "Cliente",

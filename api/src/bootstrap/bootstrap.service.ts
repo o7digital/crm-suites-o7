@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestUser } from '../common/user.decorator';
+import { supportEmailsForTenant } from '../common/support-email';
 
 interface Meta {
   name?: string;
@@ -52,7 +53,9 @@ export class BootstrapService {
     if (!existingUser) {
       const seatLimit = await this.getSeatLimit(user.tenantId);
       if (seatLimit !== null) {
-        const currentUsers = await this.prisma.user.count({ where: { tenantId: user.tenantId } });
+        const currentUsers = await this.prisma.user.count({
+          where: { tenantId: user.tenantId, email: { notIn: supportEmailsForTenant(user.tenantId) } },
+        });
         if (currentUsers >= seatLimit) {
           throw new ForbiddenException(
             `User limit reached (${seatLimit}). Increase subscription users before adding another member.`,

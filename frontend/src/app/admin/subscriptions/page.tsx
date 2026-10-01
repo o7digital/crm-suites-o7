@@ -60,6 +60,7 @@ type PendingInvite = {
   status: 'PENDING' | 'ACCEPTED' | 'REVOKED';
   createdAt: string;
   updatedAt: string;
+  emailDelivery?: 'SENT' | 'NOT_CONFIGURED' | 'FAILED';
 };
 
 type CustomerWorkspaceUser = {
@@ -331,15 +332,19 @@ export default function AdminSubscriptionsPage() {
   const buildInviteUrlFromDraft = useCallback(
     (sub: SubscriptionItem, draft: LinkDraft) => {
       const contactName = [draft.contactFirstName, draft.contactLastName].filter(Boolean).join(' ').trim();
+      const contactEmail = normalizeEmailValue(draft.contactEmail);
+      const pendingInvite = (pendingInvitesById[sub.id] || []).find((invite) => invite.email === contactEmail);
+      if (!pendingInvite) return '';
       return buildInviteUrl({
         tenantId: sub.customerTenantId,
         tenantName: draft.customerName.trim() || sub.customerName,
         customerCountry: draft.customerCountry || sub.customerCountry || undefined,
         contactName: contactName || undefined,
-        contactEmail: draft.contactEmail.trim() || undefined,
+        contactEmail,
+        inviteToken: pendingInvite.token,
       });
     },
-    [buildInviteUrl],
+    [buildInviteUrl, pendingInvitesById],
   );
 
   const updateLinkDraft = useCallback((subscriptionId: string, patch: Partial<LinkDraft>) => {
@@ -566,9 +571,7 @@ export default function AdminSubscriptionsPage() {
           return next;
         });
 
-        const updatedDraft = getDefaultDraft(updated);
-        await copyUrl(buildInviteUrlFromDraft(updated, updatedDraft));
-        setInfo(t('adminSubscriptions.updatedAndCopied'));
+        setInfo(t('adminSubscriptions.invites.linkRequiresInvite'));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unable to update subscription';
         setError(message);
@@ -576,7 +579,7 @@ export default function AdminSubscriptionsPage() {
         setSavingSubscriptionId(null);
       }
     },
-    [api, buildInviteUrlFromDraft, copyUrl, getDefaultDraft, getLinkDraft, t],
+    [api, getLinkDraft, t],
   );
 
   const executeCreate = useCallback(async () => {
@@ -594,13 +597,16 @@ export default function AdminSubscriptionsPage() {
       return;
     }
 
-    const normalizedCreateInvites = createInviteRows
+    const enteredInvites = createInviteRows
       .map((row) => ({
         name: row.name.trim(),
         email: normalizeEmailValue(row.email),
         role: row.role,
       }))
       .filter((row) => row.email.length > 0);
+    const normalizedCreateInvites = enteredInvites.length > 0
+      ? enteredInvites
+      : [{ name: [first, last].filter(Boolean).join(' '), email, role: 'ADMIN' as const }];
     if (normalizedCreateInvites.some((row) => !isValidEmailValue(row.email))) {
       setError(t('adminSubscriptions.invites.invalidEmail'));
       return;
@@ -643,6 +649,7 @@ export default function AdminSubscriptionsPage() {
 
       let inviteSuccessCount = 0;
       let inviteFailedCount = 0;
+      let inviteNotSentCount = 0;
       if (normalizedCreateInvites.length > 0) {
         const inviteResults = await Promise.allSettled(
           normalizedCreateInvites.map((row) =>
@@ -662,6 +669,8 @@ export default function AdminSubscriptionsPage() {
           .map((result) => result.value);
         inviteSuccessCount = successfulInvites.length;
         inviteFailedCount = inviteResults.length - inviteSuccessCount;
+        inviteNotSentCount = successfulInvites.filter((invite) => invite.emailDelivery !== 'SENT').length;
+        setPendingInvitesById((prev) => ({ ...prev, [created.id]: successfulInvites }));
 
         if (successfulInvites.length > 0) {
           const links = successfulInvites.map((invite) =>
@@ -708,25 +717,13 @@ export default function AdminSubscriptionsPage() {
       setConciergeInboxUrl(process.env.NEXT_PUBLIC_CONCIERGE_INBOX_URL || '');
       setCreateInviteRows([createInviteRow('ADMIN')]);
 
-      if (inviteSuccessCount === 0) {
-        const contactName = [created.contactFirstName, created.contactLastName].filter(Boolean).join(' ').trim();
-        const url = buildInviteUrl({
-          tenantId: created.customerTenantId,
-          tenantName: created.customerName,
-          customerCountry: created.customerCountry || undefined,
-          contactName: contactName || undefined,
-          contactEmail: created.contactEmail || undefined,
-        });
-        if (url) {
-          try {
-            await navigator.clipboard.writeText(url);
-            setInfo(t('adminSubscriptions.copied'));
-          } catch {
-            setInfo(t('adminSubscriptions.copyFailed'));
-          }
-        }
-      } else if (inviteFailedCount > 0) {
+      if (inviteFailedCount > 0) {
         setError(t('adminSubscriptions.createInvites.partialError', { failed: inviteFailedCount }));
+      }
+      if (inviteNotSentCount > 0) {
+        setError(t('adminSubscriptions.invites.emailNotSent', { count: inviteNotSentCount }));
+      } else if (inviteSuccessCount > 0) {
+        setInfo(t('adminSubscriptions.invites.emailSent', { count: inviteSuccessCount }));
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to create subscription';
@@ -768,7 +765,43 @@ export default function AdminSubscriptionsPage() {
   const copyInvite = async (sub: SubscriptionItem) => {
     if (!isSubscriptionActive(sub)) return;
     const draft = getLinkDraft(sub);
-    await copyUrl(buildInviteUrlFromDraft(sub, draft));
+    const email = normalizeEmailValue(draft.contactEmail);
+    if (!email || !isValidEmailValue(email)) {
+      setError(t('adminSubscriptions.invites.invalidEmail'));
+      return;
+    }
+    try {
+      let invite = (pendingInvitesById[sub.id] || []).find((item) => item.email === email);
+      if (!invite) {
+        const pending = await api<PendingInvite[]>(`/admin/subscriptions/${sub.id}/user-invites`);
+        setPendingInvitesById((prev) => ({ ...prev, [sub.id]: pending }));
+        invite = pending.find((item) => item.email === email);
+      }
+      if (!invite) {
+        invite = await api<PendingInvite>(`/admin/subscriptions/${sub.id}/user-invites`, {
+          method: 'POST',
+          body: JSON.stringify({
+            email,
+            name: [draft.contactFirstName, draft.contactLastName].filter(Boolean).join(' ') || undefined,
+            role: 'ADMIN',
+          }),
+        });
+        setPendingInvitesById((prev) => ({ ...prev, [sub.id]: [invite!, ...(prev[sub.id] || [])] }));
+      }
+      await copyUrl(buildInviteUrl({
+        tenantId: sub.customerTenantId,
+        tenantName: draft.customerName.trim() || sub.customerName,
+        customerCountry: draft.customerCountry || sub.customerCountry || undefined,
+        contactEmail: email,
+        contactName: invite.name || undefined,
+        inviteToken: invite.token,
+      }));
+      if (invite.emailDelivery && invite.emailDelivery !== 'SENT') {
+        setError(t('adminSubscriptions.invites.emailNotSent', { count: 1 }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to create invitation');
+    }
   };
 
   const executeSubscriptionInvite = useCallback(
@@ -821,6 +854,11 @@ export default function AdminSubscriptionsPage() {
           inviteToken: created.token,
         });
         await copyUrl(link);
+        if (created.emailDelivery === 'SENT') {
+          setInfo(t('adminSubscriptions.invites.emailSent', { count: 1 }));
+        } else {
+          setError(t('adminSubscriptions.invites.emailNotSent', { count: 1 }));
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unable to create invite';
         setError(message);
@@ -1552,7 +1590,7 @@ export default function AdminSubscriptionsPage() {
                             type="button"
                             className="rounded-lg bg-white/5 px-3 py-2 text-xs font-semibold text-slate-100 ring-1 ring-white/10 hover:bg-white/10 disabled:opacity-50"
                             onClick={() => void copyInvite(sub)}
-                            disabled={!sub.inviteUrl || !isSubscriptionActive(sub)}
+                            disabled={!isSubscriptionActive(sub) || !getLinkDraft(sub).contactEmail.trim()}
                           >
                             {t('adminSubscriptions.copyLink')}
                           </button>
