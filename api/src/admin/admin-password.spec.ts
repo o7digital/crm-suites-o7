@@ -18,6 +18,40 @@ describe('Admin password management', () => {
     expect(hash).not.toBe('TestPassword123');
     expect(await bcrypt.compare('TestPassword123', hash)).toBe(true);
   });
+  it('fails clearly when Supabase admin credentials are missing', async () => {
+    const issuer = process.env.SUPABASE_JWT_ISSUER;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    process.env.SUPABASE_JWT_ISSUER = 'https://example.supabase.co/auth/v1';
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    prisma.user.findFirst.mockResolvedValueOnce({ role: 'ADMIN' }).mockResolvedValueOnce({ id: 'target' });
+    try {
+      await expect(service.setUserPassword('target', 'TestPassword123', actor)).rejects.toThrow('SUPABASE_SERVICE_ROLE_KEY');
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    } finally {
+      if (issuer === undefined) delete process.env.SUPABASE_JWT_ISSUER; else process.env.SUPABASE_JWT_ISSUER = issuer;
+      if (key === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY; else process.env.SUPABASE_SERVICE_ROLE_KEY = key;
+    }
+  });
+
+  it.each([true, false])('updates Supabase before saving the local hash (success=%s)', async (ok) => {
+    const issuer = process.env.SUPABASE_JWT_ISSUER;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    process.env.SUPABASE_JWT_ISSUER = 'https://example.supabase.co/auth/v1';
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-admin-key';
+    const request = jest.spyOn(global, 'fetch').mockResolvedValue({ ok } as Response);
+    prisma.user.findFirst.mockResolvedValueOnce({ role: 'ADMIN' }).mockResolvedValueOnce({ id: 'target' });
+    try {
+      if (ok) await expect(service.setUserPassword('target', 'TestPassword123', actor)).resolves.toEqual({ success: true });
+      else await expect(service.setUserPassword('target', 'TestPassword123', actor)).rejects.toBeInstanceOf(BadRequestException);
+      expect(request).toHaveBeenCalledWith('https://example.supabase.co/auth/v1/admin/users/target', expect.objectContaining({ method: 'PUT', body: JSON.stringify({ password: 'TestPassword123' }) }));
+      expect(prisma.user.update).toHaveBeenCalledTimes(ok ? 1 : 0);
+    } finally {
+      request.mockRestore();
+      if (issuer === undefined) delete process.env.SUPABASE_JWT_ISSUER; else process.env.SUPABASE_JWT_ISSUER = issuer;
+      if (key === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY; else process.env.SUPABASE_SERVICE_ROLE_KEY = key;
+    }
+  });
+
   it('rejects members before looking up the target', async () => {
     prisma.user.findFirst.mockResolvedValue({ role: 'MEMBER' });
     await expect(service.setUserPassword('target', 'TestPassword123', actor)).rejects.toBeInstanceOf(ForbiddenException);
