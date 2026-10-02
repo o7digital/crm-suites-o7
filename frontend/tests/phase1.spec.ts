@@ -159,6 +159,39 @@ async function drop(page: Page, status: "WON" | "LOST") {
   await target.dispatchEvent("drop", { dataTransfer: transfer });
 }
 
+test("support can create the first workflow and reopen it for editing", async ({ page }) => {
+  await mock(page);
+  let pipelines: unknown[] = [];
+  let createdStages: unknown[] = [];
+  await page.route("**/api/pipelines", async route => {
+    if (route.request().method() === "POST") {
+      const pipeline = { id: "customer-pipeline", ...route.request().postDataJSON() };
+      pipelines = [pipeline];
+      return route.fulfill({ json: pipeline });
+    }
+    await route.fulfill({ json: pipelines });
+  });
+  await page.route("**/api/stages**", async route => {
+    if (route.request().method() === "POST") {
+      const stage = { id: "customer-stage", ...route.request().postDataJSON() };
+      createdStages.push(stage);
+      return route.fulfill({ json: stage });
+    }
+    await route.fulfill({ json: createdStages });
+  });
+  await page.route("**/api/deals**", route => route.fulfill({ json: [] }));
+  await page.goto("/crm");
+  await expect(page.getByText("No workflow yet. Create the first workflow for this workspace.")).toBeVisible();
+  await page.getByRole("button", { name: "Manage Workflow", exact: true }).click();
+  await page.getByLabel("Workflow name", { exact: true }).fill("RHEO Sales");
+  await page.getByLabel("Stage name", { exact: true }).fill("Qualification");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page).toHaveURL(/pipelineId=customer-pipeline/);
+  expect(createdStages).toEqual([expect.objectContaining({ pipelineId: "customer-pipeline", name: "Qualification" })]);
+  await page.getByRole("button", { name: "Manage Workflow", exact: true }).click();
+  await expect(page.getByLabel("Workflow name", { exact: true })).toHaveValue("RHEO Sales");
+});
+
 test("WON removes the open card optimistically; Undo restores it", async ({
   page,
 }) => {

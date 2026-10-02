@@ -956,6 +956,10 @@ export default function CrmPage() {
   };
 
   const openWorkflowEditor = (afterStageId?: string) => {
+    if (!selectedPipeline) {
+      openNewWorkflowEditor();
+      return;
+    }
     setWorkflowMode('edit');
     setWorkflowEditingPipelineId(pipelineId);
     setWorkflowPipelineName(selectedPipeline?.name || '');
@@ -2172,7 +2176,7 @@ export default function CrmPage() {
                 className="btn-secondary text-sm"
                 type="button"
                 onClick={() => openWorkflowEditor()}
-                disabled={!selectedPipeline}
+                disabled={loading}
               >
                 {t('common.manage')} {t('tasks.section')}
               </button>
@@ -2289,8 +2293,11 @@ export default function CrmPage() {
         )}
 
         {!loading && sortedStages.length === 0 && (
-          <div className="card p-6 text-slate-300">
-            {t('crm.noStages')}
+          <div className="card flex flex-wrap items-center justify-between gap-4 p-6 text-slate-300">
+            <p>{selectedPipeline ? t('crm.noStages') : t('crm.noWorkflow')}</p>
+            <button className="btn-secondary text-sm" type="button" onClick={() => openWorkflowEditor()}>
+              {selectedPipeline ? `${t('common.manage')} ${t('tasks.section')}` : `+ ${t('crm.newWorkflow')}`}
+            </button>
           </div>
         )}
 
