@@ -24,8 +24,8 @@ export function SalesFollowUpReport({
   startDate: string;
   endDate: string;
 }) {
-  const { language, t } = useI18n();
-  const l = salesReportingLabels(language);
+  const { language, t, isMedicalWorkspace } = useI18n();
+  const l = { ...salesReportingLabels(language), ...(isMedicalWorkspace ? { client: t("clients.table.client") } : {}) };
   const inRange = (date: string) =>
     Boolean(date && date >= startDate && date <= endDate);
   const today = localSalesDate(new Date());

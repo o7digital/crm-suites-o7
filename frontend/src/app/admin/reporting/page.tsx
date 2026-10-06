@@ -8,6 +8,7 @@ import { getClientDisplayName } from '@/lib/clients';
 import { SalesFollowUpReport } from '@/components/SalesFollowUpReport';
 import { salesClosedDate, salesDealStatus, type SalesDeal } from '@/lib/sales-reporting';
 import { ReportingCharts } from '@/components/ReportingCharts';
+import { useI18n } from '@/contexts/I18nContext';
 import type { ChartRow } from '@/lib/reporting-charts';
 
 type Client = {
@@ -144,6 +145,7 @@ function getWonDateIso(deal: Deal): string | null {
 
 export default function AdminReportingPage() {
   const { token } = useAuth();
+  const { t } = useI18n();
   const api = useApi(token);
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -524,7 +526,7 @@ export default function AdminReportingPage() {
                   <p className="mt-2 text-2xl font-semibold">{INT.format(salesSummary.sales)}</p>
                 </div>
                 <div className="rounded-lg bg-white/5 p-4 ring-1 ring-white/10">
-                  <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Clients</p>
+                  <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{t('nav.clients')}</p>
                   <p className="mt-2 text-2xl font-semibold">{INT.format(salesSummary.clients)}</p>
                 </div>
                 <div className="rounded-lg bg-white/5 p-4 ring-1 ring-white/10">
@@ -545,13 +547,13 @@ export default function AdminReportingPage() {
               <div className="mt-5 grid gap-4 xl:grid-cols-2">
                 <div className="overflow-x-auto">
                   <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-slate-200">Sales by client</h3>
+                    <h3 className="text-sm font-semibold text-slate-200">Sales by {t('clients.table.client').toLowerCase()}</h3>
                     <p className="text-xs text-slate-400">{salesByClient.length} row(s)</p>
                   </div>
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="text-left text-xs uppercase tracking-[0.12em] text-slate-400">
-                        <th className="px-3 py-2">Client</th>
+                        <th className="px-3 py-2">{t('clients.table.client')}</th>
                         <th className="px-3 py-2">Revenue</th>
                         <th className="px-3 py-2">Sales</th>
                       </tr>
@@ -610,7 +612,7 @@ export default function AdminReportingPage() {
                     <tr className="text-left text-xs uppercase tracking-[0.12em] text-slate-400">
                       <th className="px-3 py-2">Date</th>
                       <th className="px-3 py-2">Deal</th>
-                      <th className="px-3 py-2">Client</th>
+                      <th className="px-3 py-2">{t('clients.table.client')}</th>
                       <th className="px-3 py-2">Stage</th>
                       <th className="px-3 py-2">Amount</th>
                     </tr>
@@ -637,7 +639,7 @@ export default function AdminReportingPage() {
                 <p className="mt-2 text-2xl font-semibold">{INT.format(summary.tasks)}</p>
               </div>
               <div className="card p-4">
-                <p className="text-xs uppercase tracking-[0.12em] text-slate-400">Clients</p>
+                <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{t('nav.clients')}</p>
                 <p className="mt-2 text-2xl font-semibold">{INT.format(summary.clients)}</p>
               </div>
               <div className="card p-4">
@@ -652,14 +654,14 @@ export default function AdminReportingPage() {
 
             <div className="card p-4">
               <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Hours and days by client</h2>
-                <p className="text-xs text-slate-400">{byClient.length} client(s)</p>
+                <h2 className="text-lg font-semibold">Hours and days by {t('clients.table.client').toLowerCase()}</h2>
+                <p className="text-xs text-slate-400">{byClient.length} {t('nav.clients').toLowerCase()}</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs uppercase tracking-[0.12em] text-slate-400">
-                      <th className="px-3 py-2">Client</th>
+                      <th className="px-3 py-2">{t('clients.table.client')}</th>
                       <th className="px-3 py-2">Hours</th>
                       <th className="px-3 py-2">Tasks</th>
                       <th className="px-3 py-2">Active days</th>
@@ -690,7 +692,7 @@ export default function AdminReportingPage() {
                   <thead>
                     <tr className="text-left text-xs uppercase tracking-[0.12em] text-slate-400">
                       <th className="px-3 py-2">Task</th>
-                      <th className="px-3 py-2">Client</th>
+                      <th className="px-3 py-2">{t('clients.table.client')}</th>
                       <th className="px-3 py-2">Date</th>
                       <th className="px-3 py-2">Status</th>
                       <th className="px-3 py-2">Hours</th>
@@ -714,7 +716,7 @@ export default function AdminReportingPage() {
 
             <div className="card p-4">
               <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-lg font-semibold">Client breakdown by {granularity}</h2>
+                <h2 className="text-lg font-semibold">{t('clients.table.client')} breakdown by {granularity}</h2>
                 <p className="text-xs text-slate-400">{byPeriodClient.length} row(s)</p>
               </div>
               <div className="overflow-x-auto">
@@ -722,7 +724,7 @@ export default function AdminReportingPage() {
                   <thead>
                     <tr className="text-left text-xs uppercase tracking-[0.12em] text-slate-400">
                       <th className="px-3 py-2">Period</th>
-                      <th className="px-3 py-2">Client</th>
+                      <th className="px-3 py-2">{t('clients.table.client')}</th>
                       <th className="px-3 py-2">Hours</th>
                       <th className="px-3 py-2">Tasks</th>
                       <th className="px-3 py-2">Active days</th>

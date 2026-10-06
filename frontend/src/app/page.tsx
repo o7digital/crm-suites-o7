@@ -359,7 +359,7 @@ export default function DashboardPage() {
         {data && (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
             <MetricCard
-              title="Clientes"
+              title={t('nav.clients')}
               value={INT.format(data.clients ?? 0)}
               hint={`${INT.format(data.prospects ?? 0)} prospects`}
               tone="green"

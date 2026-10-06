@@ -10,11 +10,11 @@ export function Providers({ children }: { children: ReactNode }) {
   const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
   const content = (
-    <I18nProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <I18nProvider>
         <BrandingProvider>{children}</BrandingProvider>
-      </AuthProvider>
-    </I18nProvider>
+      </I18nProvider>
+    </AuthProvider>
   );
 
   if (hasClerk) {

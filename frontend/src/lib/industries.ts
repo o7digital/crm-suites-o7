@@ -27,6 +27,9 @@ export const INDUSTRIES: IndustryOption[] = [
   { id: 'ENTERTAINMENT', crmMode: 'B2C', label: { fr: 'Loisirs / Divertissement', en: 'Entertainment', es: 'Entretenimiento' } },
   { id: 'HOME_SERVICES', crmMode: 'B2C', label: { fr: 'Services a domicile', en: 'Home services', es: 'Servicios a domicilio' } },
   { id: 'EDUCATION_B2C', crmMode: 'B2C', label: { fr: 'Education (B2C)', en: 'Education (B2C)', es: 'Educacion (B2C)' } },
+  { id: 'DENTISTRY', crmMode: 'B2C', label: { fr: 'Dentiste', en: 'Dentistry', es: 'Odontología / Dentista' } },
+  { id: 'MEDICAL', crmMode: 'B2C', label: { fr: 'Médecin', en: 'Medical practice', es: 'Consultorio médico' } },
+  { id: 'PSYCHIATRY', crmMode: 'B2C', label: { fr: 'Psychiatrie', en: 'Psychiatry', es: 'Psiquiatría' } },
   { id: 'HEALTHCARE_B2C', crmMode: 'B2C', label: { fr: 'Sante (B2C)', en: 'Healthcare (B2C)', es: 'Salud (B2C)' } },
   { id: 'AUTOMOTIVE_B2C', crmMode: 'B2C', label: { fr: 'Automobile (B2C)', en: 'Automotive (B2C)', es: 'Automotriz (B2C)' } },
 

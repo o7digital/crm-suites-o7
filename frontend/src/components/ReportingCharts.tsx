@@ -43,8 +43,8 @@ export function ChartVisual({ points, kind, format, title }: { points: ChartPoin
 
 export function ReportingCharts({ sales, tasks, granularity, startDate, endDate }: { sales: ChartRow[]; tasks: ChartRow[]; granularity: 'month' | 'year'; startDate: string; endDate: string }) {
   const { user } = useAuth();
-  const { language } = useI18n();
-  const l = labels[language as keyof typeof labels] || labels.en;
+  const { language, t } = useI18n();
+  const l = { ...(labels[language as keyof typeof labels] || labels.en), client: t('clients.table.client') };
   const key = user ? `o7-reporting-charts-v1:${user.tenantId}:${user.id}` : null;
   const [saved, setSaved] = useState<{ key: string | null; charts: ChartConfig[] }>({key: null, charts: DEFAULT_CHARTS});
   const [storageError, setStorageError] = useState(false);
