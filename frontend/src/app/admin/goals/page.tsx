@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useApi, useAuth } from '../../../contexts/AuthContext';
+import { isWorkspaceSeller } from '../../../lib/workspace-sellers';
 
 type WorkspaceUser = {
   id: string;
@@ -154,13 +155,15 @@ export default function AdminGoalsPage() {
     let active = true;
     setLoading(true);
     setError(null);
+    setUsers([]);
+    setAdminContext(null);
 
     Promise.allSettled([api<WorkspaceUser[]>('/admin/users'), api<AdminContextResponse>('/admin/context')])
       .then(([usersResult, contextResult]) => {
         if (!active) return;
 
         if (usersResult.status === 'fulfilled') {
-          setUsers(usersResult.value);
+          setUsers(usersResult.value.filter(isWorkspaceSeller));
         } else {
           setError(usersResult.reason instanceof Error ? usersResult.reason.message : 'Unable to load workspace users');
         }
@@ -177,7 +180,7 @@ export default function AdminGoalsPage() {
     return () => {
       active = false;
     };
-  }, [api, token]);
+  }, [api, token, user?.tenantId]);
 
   useEffect(() => {
     if (!storageKey) return;
