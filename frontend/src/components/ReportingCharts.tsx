@@ -12,7 +12,7 @@ const labels = {
 };
 const COLORS = ['#c7f442', '#22d3ee', '#a78bfa', '#fb923c', '#f472b6', '#60a5fa', '#34d399', '#facc15', '#e879f9', '#94a3b8'];
 
-function ChartVisual({ points, kind, format, title }: { points: ChartPoint[]; kind: ChartConfig['kind']; format: (n: number) => string; title: string }) {
+export function ChartVisual({ points, kind, format, title }: { points: ChartPoint[]; kind: ChartConfig['kind']; format: (n: number) => string; title: string }) {
   const total = points.reduce((sum, p) => sum + p.value, 0);
   const max = Math.max(...points.map(p => p.value), 1);
   let offset = 0;

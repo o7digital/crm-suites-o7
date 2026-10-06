@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { DashboardCharts } from '../components/DashboardCharts';
 import { CommandCenter } from '../components/CommandCenter';
 import { AppShell } from '../components/AppShell';
 import { Guard } from '../components/Guard';
@@ -35,6 +36,7 @@ type Deal = {
   currency: string;
   probability?: number | null;
   stageId: string;
+  status?: 'OPEN' | 'WON' | 'LOST';
   pipelineId: string;
 };
 
@@ -120,15 +122,16 @@ function buildDealStatusStats(stages: Stage[], deals: Deal[], fx: FxRatesSnapsho
 
   for (const deal of deals) {
     const stage = stageById.get(deal.stageId);
-    if (!stage) continue;
+    const status = deal.status || stage?.status;
+    if (!status) continue;
 
     const valueUsd = convertDealValueToUsd(deal, fx);
-    if (stage.status === 'WON') {
+    if (status === 'WON') {
       stats.won.count += 1;
       stats.won.valueUsd += valueUsd;
       continue;
     }
-    if (stage.status === 'LOST') {
+    if (status === 'LOST') {
       stats.lost.count += 1;
       stats.lost.valueUsd += valueUsd;
       continue;
@@ -171,7 +174,7 @@ function buildPipelineTotals(
 
   for (const deal of deals) {
     const stage = stageById.get(deal.stageId);
-    if (!stage || stage.status !== 'OPEN') continue;
+    if ((deal.status || stage?.status) !== 'OPEN') continue;
 
     const current =
       totalsByPipeline.get(deal.pipelineId) ?? {
@@ -186,7 +189,7 @@ function buildPipelineTotals(
     const value = Number(deal.value);
     if (Number.isFinite(value)) {
       const currency = (deal.currency || 'USD').toUpperCase();
-      const probability = clampProbability(deal.probability ?? stage.probability);
+      const probability = clampProbability(deal.probability ?? stage?.probability);
       current.currencyTotals[currency] = (current.currencyTotals[currency] || 0) + value * probability;
     }
 
@@ -226,6 +229,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!token) return;
+    setData(null);
+    setLoading(true);
+    setError(null);
     let active = true;
     let inFlight = false;
     let timer: number | null = null;
@@ -295,7 +301,7 @@ export default function DashboardPage() {
       active = false;
       if (timer) window.clearInterval(timer);
     };
-  }, [api, token, user?.tenantName]);
+  }, [api, token, user?.tenantName, user?.tenantId]);
 
   const primaryPipelineTotals = data?.pipelineTotals ?? [];
   const activePipelineTotals = primaryPipelineTotals.filter(
@@ -403,6 +409,8 @@ export default function DashboardPage() {
             />
           </div>
         )}
+
+        {data && <DashboardCharts stats={data.dealStatusStats} tasks={data.tasks} pipelines={data.pipelineTotals} />}
 
         {data && (
           <div className="mt-4 grid gap-4 lg:grid-cols-12">
