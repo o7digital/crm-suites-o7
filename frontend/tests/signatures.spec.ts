@@ -317,3 +317,15 @@ test("unconfigured Mailing connector allows preparation and clearly blocks sendi
     .click();
   await expect(workspace.getByLabel("Document content")).toBeVisible();
 });
+
+test('legacy Vercel static entry reads the original invitation path', async ({page}) => {
+  await page.route(`**/sign/${token}`, async route => {
+    const response = await route.fetch({url:'http://127.0.0.1:3128/sign'});
+    await route.fulfill({response});
+  });
+  const state = await recipient(page);
+  await expect(page.getByRole('heading',{name:'Verify your email'})).toBeVisible();
+  expect(state.pdfReads()).toBe(0);
+  await verify(page);
+  await expect(page.getByRole('textbox',{name:'Signature',exact:true})).toBeVisible();
+});

@@ -4,6 +4,7 @@
     { "src": "frontend/package.json", "use": "@vercel/next" }
   ],
   "routes": [
+    { "src": "/sign/[a-f0-9]{64}/?", "dest": "frontend/sign" },
     { "src": "/clients/([^/]+)", "status": 307, "headers": { "Location": "/clients?clientId=$1" } },
     { "src": "/(.*)", "dest": "frontend/$1" }
   ]
