@@ -24,6 +24,11 @@ export default function LoginPage() {
     if (token) router.replace('/');
   }, [hasClerk, token, router]);
 
+  useEffect(() => {
+    const presetEmail = new URLSearchParams(window.location.search).get('email');
+    if (presetEmail) setEmail(presetEmail);
+  }, []);
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
