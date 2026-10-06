@@ -6,7 +6,7 @@ Add up to five recipients and place signature, initials, signing date and text f
 
 ## Mail configuration
 
-Each workspace sends through its own saved **SMTP or Mailcow** connector (`Tenant.marketingSetup`), including its sender name/address and reply-to address. Configure it in `/admin/parameters/customers`, Mailing settings. No global SMTP fallback and no DocuSign account are used. API-key-only newsletter providers are not supported for these transactional messages.
+Each workspace sends through its own saved **SMTP or Mailcow** connector (`Tenant.marketingSetup`), including its sender name/address and reply-to address. Configure it in `/admin/benchmarking`, **Mail provider setup**. No global SMTP fallback and no DocuSign account are used. API-key-only newsletter providers are not supported for these transactional messages.
 
 An unconfigured connector blocks sending, but permits draft preparation. Invitations and verification codes report SMTP failures. Mail server acceptance is not a delivery/read receipt. Failed final PDF deliveries can be retried from the document.
 

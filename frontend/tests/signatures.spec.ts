@@ -228,7 +228,7 @@ test("sender generates a PDF, saves positioned fields and sends through workspac
       };
       data = document;
     } else if (path === "/signatures/document") data = document;
-    else if (path === "/clients") data = [];
+    else if (path === "/clients") data = [{id:"client",firstName:"Jane",name:"Smith",company:"Client Company Ltd",email:"jane@example.test"}];
     else if (path === "/tenant/settings")
       data = { settings: { crmMode: "B2B", crmDisplayCurrency: "USD" } };
     else if (path === "/tenant/branding") data = { branding: {} };
@@ -246,7 +246,8 @@ test("sender generates a PDF, saves positioned fields and sends through workspac
   await workspace
     .getByLabel("Document title", { exact: true })
     .fill("Agreement");
-  await workspace.getByLabel("Document content").fill("Hello Jane");
+  await workspace.getByLabel("Document content").fill("Hello {{customer_legal_name}}");
+  await workspace.getByLabel("Prefill from a CRM contact").selectOption("client");
   await workspace
     .getByRole("button", { name: "Create PDF", exact: true })
     .click();
@@ -267,7 +268,8 @@ test("sender generates a PDF, saves positioned fields and sends through workspac
   expect(saved.fields[0].recipientId).toBe(saved.recipients[0].id);
   expect(created).toMatchObject({
     title: "Agreement",
-    text: "Hello Jane",
+    text: "Hello {{customer_legal_name}}",
+    variables: expect.objectContaining({customer_legal_name:"Client Company Ltd",customer_contact_email:"jane@example.test"}),
     language: "en",
   });
   await workspace.getByRole("button", { name: "Send for signature" }).click();
@@ -311,7 +313,7 @@ test("unconfigured Mailing connector allows preparation and clearly blocks sendi
   await expect(workspace.getByText(/Configure SMTP\/Mailcow/)).toBeVisible();
   await expect(
     workspace.getByRole("link", { name: "Open Mailing settings" }),
-  ).toHaveAttribute("href", "/admin/parameters/customers");
+  ).toHaveAttribute("href", "/admin/benchmarking");
   await workspace
     .getByRole("button", { name: "Prepare a document", exact: true })
     .click();

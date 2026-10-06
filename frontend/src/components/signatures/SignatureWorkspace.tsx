@@ -17,6 +17,7 @@ type Contact = {
   name: string;
   firstName?: string | null;
   email?: string | null;
+  company?: string | null;
   companyName?: string | null;
 };
 function FieldBox({
@@ -324,7 +325,7 @@ export function SignatureWorkspace({
         {mail && !mail.configured && (
           <div className="mt-3 rounded-lg bg-amber-400/10 p-3 text-sm text-amber-200">
             {l.notConfigured}{" "}
-            <Link className="underline" href="/admin/parameters/customers">
+            <Link className="underline" href="/admin/benchmarking">
               {l.configure}
             </Link>
           </div>
@@ -419,7 +420,7 @@ export function SignatureWorkspace({
                         setVariables((prev) => ({
                           ...prev,
                           customer_legal_name:
-                            client.companyName || getClientDisplayName(client),
+                            client.company || client.companyName || getClientDisplayName(client),
                           customer_contact_name: getClientDisplayName(client),
                           customer_contact_email: client.email || "",
                         }));
