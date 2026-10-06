@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:phase1": "playwright test"
+    "test:phase1": "playwright test",
+    "postinstall": "node scripts/copy-pdf-worker.mjs",
+    "test:signatures": "playwright test --config playwright.signatures.config.ts"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.32.0",
@@ -19,6 +21,7 @@
     "@tiptap/starter-kit": "^3.30.1",
     "framer-motion": "^12.34.0",
     "next": "16.1.6",
+    "pdfjs-dist": "^6.4.299",
     "react": "19.2.3",
     "react-dom": "19.2.3"
   },

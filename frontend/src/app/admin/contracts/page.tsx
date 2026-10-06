@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { SignatureWorkspace } from '../../../components/signatures/SignatureWorkspace';
 import { AppShell } from '../../../components/AppShell';
 import { Guard } from '../../../components/Guard';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -261,6 +262,8 @@ export default function AdminContractsPage() {
           <p className="text-sm uppercase tracking-[0.15em] text-slate-400">Admin</p>
           <h1 className="text-3xl font-semibold">{ui.heading}</h1>
         </div>
+
+        <SignatureWorkspace key={user?.tenantId || 'anonymous'} templates={templates} />
 
         <div className="card p-6 text-slate-300">
           <p className="text-sm text-slate-300">{ui.intro}</p>

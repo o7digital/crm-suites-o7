@@ -1,10 +1,13 @@
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { SchemaUpgraderService } from './prisma/schema-upgrader.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  // Handwritten PNG fields can exceed the default 100 KB JSON limit.
+  app.useBodyParser('json', { limit: '1mb' });
   const explicitOrigins = (process.env.FRONTEND_URLS || process.env.FRONTEND_URL || '')
     .split(',')
     .map((x) => x.trim())

@@ -20,6 +20,7 @@ WORKDIR /app
 COPY --from=builder /app/api/dist ./dist
 COPY --from=builder /app/api/package*.json ./
 COPY --from=builder /app/api/prisma ./prisma
+COPY api/assets ./assets
 RUN npm ci --omit=dev \
   && npx prisma generate
 ENV PORT=8080

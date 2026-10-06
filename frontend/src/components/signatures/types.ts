@@ -1,0 +1,40 @@
+export type Field = {
+  id: string;
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  type: "signature" | "initials" | "date" | "text";
+  recipientId: string;
+  label: string;
+  required: boolean;
+  preset?: string;
+};
+export type Recipient = {
+  id: string;
+  name: string;
+  email: string;
+  signedAt?: string;
+  verifiedAt?: string;
+  delivery?: "PENDING" | "SENT" | "FAILED";
+  deliveryError?: string;
+};
+export type Envelope = {
+  id: string;
+  title: string;
+  tenantName: string;
+  status: "DRAFT" | "SENT" | "COMPLETED" | "VOID";
+  createdAt: string;
+  completedAt?: string;
+  expiresAt?: number;
+  pages: number;
+  pageSizes: { width: number; height: number }[];
+  originalHash: string;
+  signedHash?: string;
+  fields: Field[];
+  recipients: Recipient[];
+  completionDelivery?: "SENT" | "FAILED";
+  language: "fr" | "en" | "es";
+};
+export type Value = { text?: string; image?: string };

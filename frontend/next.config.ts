@@ -13,6 +13,19 @@ const proxiedApiOrigin = normalizeApiOrigin(
 );
 
 const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        source: '/sign/:path*',
+        headers: [
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     if (!proxiedApiOrigin) return [];
     return [
