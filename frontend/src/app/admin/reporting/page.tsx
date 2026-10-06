@@ -7,6 +7,8 @@ import { useApi, useAuth } from '../../../contexts/AuthContext';
 import { getClientDisplayName } from '@/lib/clients';
 import { SalesFollowUpReport } from '@/components/SalesFollowUpReport';
 import { salesClosedDate, salesDealStatus, type SalesDeal } from '@/lib/sales-reporting';
+import { ReportingCharts } from '@/components/ReportingCharts';
+import type { ChartRow } from '@/lib/reporting-charts';
 
 type Client = {
   id: string;
@@ -239,6 +241,23 @@ export default function AdminReportingPage() {
       })
       .filter((x): x is ReportingSale => Boolean(x));
   }, [clients, deals, endDate, rangeValid, startDate]);
+
+  const chartSales = useMemo<ChartRow[]>(() => {
+    const clientsById = new Map(clients.map(c => [c.id, c]));
+    return deals.flatMap(deal => {
+      const status = salesDealStatus(deal);
+      const date = status === 'OPEN' ? toIsoDate(deal.createdAt) : toIsoDate(salesClosedDate(deal));
+      if (!rangeValid || !date || date < startDate || date > endDate) return [];
+      const client = deal.client || clientsById.get(deal.clientId || '');
+      return [{ clientId: deal.clientId || '__no_client__', clientName: client ? getClientDisplayName(client) : '—',
+        date, status, reason: deal.lossReason?.trim() || undefined,
+        currency: String(deal.currency || 'USD').toUpperCase(), value: parseAmount(deal.value) }];
+    });
+  }, [clients, deals, startDate, endDate, rangeValid]);
+
+  const chartTasks = useMemo<ChartRow[]>(() => filteredTasks.map(task => ({
+    clientId: task.clientId, clientName: task.clientName, date: task.dateIso, status: task.status, value: task.hours,
+  })), [filteredTasks]);
 
   const summary = useMemo(() => {
     const uniqueClients = new Set<string>();
@@ -484,6 +503,7 @@ export default function AdminReportingPage() {
 
         {!loading && rangeValid ? (
           <div className="report-print-area space-y-6">
+            <ReportingCharts sales={chartSales} tasks={chartTasks} granularity={granularity} startDate={startDate} endDate={endDate} />
             <SalesFollowUpReport deals={deals} tasks={tasks} startDate={startDate} endDate={endDate} />
             <div className="card p-4">
               <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
