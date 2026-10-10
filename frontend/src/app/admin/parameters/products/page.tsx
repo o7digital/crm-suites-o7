@@ -10,6 +10,8 @@ import {
   ProductFieldsEditor,
   ExtraField,
   normalizeExtraFields,
+  defaultProductFields,
+  withDefaultProductFields,
   extraFieldsError,
   formatExtraField,
 } from '../../../../components/ProductFieldsEditor';
@@ -56,7 +58,7 @@ export default function AdminParametersProductsPage() {
     price: '',
     currency: 'USD',
     isActive: true,
-    extraFields: [],
+    extraFields: defaultProductFields(),
   });
 
   const [editing, setEditing] = useState<Product | null>(null);
@@ -73,7 +75,7 @@ export default function AdminParametersProductsPage() {
     price: '',
     currency: 'USD',
     isActive: true,
-    extraFields: [],
+    extraFields: defaultProductFields(),
   });
 
   const load = useCallback(() => {
@@ -128,7 +130,7 @@ export default function AdminParametersProductsPage() {
         price: '',
         currency: 'USD',
         isActive: true,
-        extraFields: [],
+        extraFields: defaultProductFields(),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to create product';
@@ -179,7 +181,7 @@ export default function AdminParametersProductsPage() {
       price: product.price === null || product.price === undefined ? '' : String(product.price),
       currency: CURRENCIES.includes(product.currency as Currency) ? (product.currency as Currency) : 'USD',
       isActive: product.isActive,
-      extraFields: product.extraFields ?? [],
+      extraFields: withDefaultProductFields(product.extraFields ?? []),
     });
   };
 
@@ -384,9 +386,16 @@ export default function AdminParametersProductsPage() {
 
         {editing ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-            <div className="card max-h-[90vh] w-full max-w-lg overflow-y-auto p-6">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="edit-product-title"
+              className="card max-h-[90vh] w-full max-w-lg overflow-y-auto p-6"
+            >
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">Edit product</h2>
+                <h2 id="edit-product-title" className="text-xl font-semibold">
+                  Edit product
+                </h2>
                 <button className="text-slate-400" onClick={() => setEditing(null)}>
                   ✕
                 </button>
