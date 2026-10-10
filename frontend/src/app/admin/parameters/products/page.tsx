@@ -6,66 +6,13 @@ import { AppShell } from '../../../../components/AppShell';
 import { Guard } from '../../../../components/Guard';
 import { useApi, useAuth } from '../../../../contexts/AuthContext';
 
-type ExtraField = { label: string; value: string };
-
-function ExtraFieldsEditor({
-  fields,
-  onChange,
-  disabled,
-}: {
-  fields: ExtraField[];
-  onChange: (fields: ExtraField[]) => void;
-  disabled: boolean;
-}) {
-  return (
-    <div className="mt-4 space-y-3">
-      <p className="text-sm text-slate-300">Additional fields</p>
-      {fields.map((field, index) => (
-        <div key={index} className="flex flex-wrap items-end gap-2">
-          <label className="min-w-0 flex-1 text-sm text-slate-300">
-            Field name
-            <input
-              aria-label={`Field name ${index + 1}`}
-              maxLength={100}
-              disabled={disabled}
-              className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2"
-              value={field.label}
-              onChange={(e) => onChange(fields.map((f, i) => (i === index ? { ...f, label: e.target.value } : f)))}
-            />
-          </label>
-          <label className="min-w-0 flex-1 text-sm text-slate-300">
-            Value
-            <input
-              aria-label={`Field value ${index + 1}`}
-              maxLength={2000}
-              disabled={disabled}
-              className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2"
-              value={field.value}
-              onChange={(e) => onChange(fields.map((f, i) => (i === index ? { ...f, value: e.target.value } : f)))}
-            />
-          </label>
-          <button
-            type="button"
-            aria-label={`Remove field ${index + 1}`}
-            disabled={disabled}
-            className="btn-secondary text-sm"
-            onClick={() => onChange(fields.filter((_, i) => i !== index))}
-          >
-            Remove
-          </button>
-        </div>
-      ))}
-      <button
-        type="button"
-        className="btn-secondary text-sm"
-        disabled={disabled || fields.length >= 30}
-        onClick={() => onChange([...fields, { label: '', value: '' }])}
-      >
-        + Add a field
-      </button>
-    </div>
-  );
-}
+import {
+  ProductFieldsEditor,
+  ExtraField,
+  normalizeExtraFields,
+  extraFieldsError,
+  formatExtraField,
+} from '../../../../components/ProductFieldsEditor';
 
 type Product = {
   id: string;
@@ -153,8 +100,9 @@ export default function AdminParametersProductsPage() {
 
   const createProduct = async () => {
     if (!createForm.name.trim()) return;
-    if (createForm.extraFields.some((f) => !f.label.trim())) {
-      setError('Each additional field needs a name.');
+    const fieldsError = extraFieldsError(createForm.extraFields);
+    if (fieldsError) {
+      setError(fieldsError);
       return;
     }
     setError(null);
@@ -162,10 +110,7 @@ export default function AdminParametersProductsPage() {
     try {
       const payload: Record<string, unknown> = {
         name: createForm.name.trim(),
-        extraFields: createForm.extraFields.map((f) => ({
-          ...f,
-          label: f.label.trim(),
-        })),
+        extraFields: normalizeExtraFields(createForm.extraFields),
         description: createForm.description.trim() || undefined,
         currency: createForm.currency,
         isActive: createForm.isActive,
@@ -241,8 +186,9 @@ export default function AdminParametersProductsPage() {
   const saveEdit = async () => {
     if (!editing) return;
     if (!editForm.name.trim()) return;
-    if (editForm.extraFields.some((f) => !f.label.trim())) {
-      setError('Each additional field needs a name.');
+    const fieldsError = extraFieldsError(editForm.extraFields);
+    if (fieldsError) {
+      setError(fieldsError);
       return;
     }
     setError(null);
@@ -250,10 +196,7 @@ export default function AdminParametersProductsPage() {
     try {
       const payload: Record<string, unknown> = {
         name: editForm.name.trim(),
-        extraFields: editForm.extraFields.map((f) => ({
-          ...f,
-          label: f.label.trim(),
-        })),
+        extraFields: normalizeExtraFields(editForm.extraFields),
         description: editForm.description.trim() || undefined,
         currency: editForm.currency,
         isActive: editForm.isActive,
@@ -354,7 +297,8 @@ export default function AdminParametersProductsPage() {
               />
             </label>
           </div>
-          <ExtraFieldsEditor
+          <ProductFieldsEditor
+            products={products}
             fields={createForm.extraFields}
             onChange={(extraFields) => setCreateForm((p) => ({ ...p, extraFields }))}
             disabled={busyId === 'create'}
@@ -400,7 +344,7 @@ export default function AdminParametersProductsPage() {
                           {p.extraFields.map((field, index) => (
                             <div key={index} className="break-words">
                               <dt className="inline font-medium">{field.label}: </dt>
-                              <dd className="inline whitespace-pre-wrap">{field.value || '—'}</dd>
+                              <dd className="inline whitespace-pre-wrap">{formatExtraField(field)}</dd>
                             </div>
                           ))}
                         </dl>
@@ -516,7 +460,8 @@ export default function AdminParametersProductsPage() {
                 </label>
               </div>
 
-              <ExtraFieldsEditor
+              <ProductFieldsEditor
+                products={products.filter((product) => product.id !== editing.id)}
                 fields={editForm.extraFields}
                 onChange={(extraFields) => setEditForm((p) => ({ ...p, extraFields }))}
                 disabled={busyId === editing.id}

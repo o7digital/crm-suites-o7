@@ -20,9 +20,11 @@ export class ProductsService {
     return this.prisma.product.create({
       data: {
         name: dto.name,
-        extraFields: dto.extraFields?.map(({ label, value }) => ({
+        extraFields: dto.extraFields?.map(({ label, value, type, options }) => ({
           label,
           value,
+          type: type ?? 'text',
+          ...(type === 'select' ? { options: options ?? [] } : {}),
         })),
         description: dto.description,
         price: dto.price,
@@ -40,9 +42,11 @@ export class ProductsService {
       where: { id },
       data: {
         ...dto,
-        extraFields: dto.extraFields?.map(({ label, value }) => ({
+        extraFields: dto.extraFields?.map(({ label, value, type, options }) => ({
           label,
           value,
+          type: type ?? 'text',
+          ...(type === 'select' ? { options: options ?? [] } : {}),
         })),
         currency: dto.currency ? dto.currency.toUpperCase() : undefined,
       },
