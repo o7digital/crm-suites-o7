@@ -6,6 +6,67 @@ import { AppShell } from '../../../../components/AppShell';
 import { Guard } from '../../../../components/Guard';
 import { useApi, useAuth } from '../../../../contexts/AuthContext';
 
+type ExtraField = { label: string; value: string };
+
+function ExtraFieldsEditor({
+  fields,
+  onChange,
+  disabled,
+}: {
+  fields: ExtraField[];
+  onChange: (fields: ExtraField[]) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="mt-4 space-y-3">
+      <p className="text-sm text-slate-300">Additional fields</p>
+      {fields.map((field, index) => (
+        <div key={index} className="flex flex-wrap items-end gap-2">
+          <label className="min-w-0 flex-1 text-sm text-slate-300">
+            Field name
+            <input
+              aria-label={`Field name ${index + 1}`}
+              maxLength={100}
+              disabled={disabled}
+              className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+              value={field.label}
+              onChange={(e) => onChange(fields.map((f, i) => (i === index ? { ...f, label: e.target.value } : f)))}
+            />
+          </label>
+          <label className="min-w-0 flex-1 text-sm text-slate-300">
+            Value
+            <input
+              aria-label={`Field value ${index + 1}`}
+              maxLength={2000}
+              disabled={disabled}
+              className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+              value={field.value}
+              onChange={(e) => onChange(fields.map((f, i) => (i === index ? { ...f, value: e.target.value } : f)))}
+            />
+          </label>
+          <button
+            type="button"
+            aria-label={`Remove field ${index + 1}`}
+            disabled={disabled}
+            className="btn-secondary text-sm"
+            onClick={() => onChange(fields.filter((_, i) => i !== index))}
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="btn-secondary text-sm"
+        disabled={disabled || fields.length >= 30}
+        onClick={() => onChange([...fields, { label: '', value: '' }])}
+      >
+        + Add a field
+      </button>
+    </div>
+  );
+}
+
 type Product = {
   id: string;
   name: string;
@@ -14,6 +75,7 @@ type Product = {
   currency: string;
   isActive: boolean;
   createdAt: string;
+  extraFields?: ExtraField[];
 };
 
 const CURRENCIES = ['USD', 'EUR', 'MXN', 'CAD'] as const;
@@ -40,12 +102,14 @@ export default function AdminParametersProductsPage() {
     price: string;
     currency: Currency;
     isActive: boolean;
+    extraFields: ExtraField[];
   }>({
     name: '',
     description: '',
     price: '',
     currency: 'USD',
     isActive: true,
+    extraFields: [],
   });
 
   const [editing, setEditing] = useState<Product | null>(null);
@@ -55,12 +119,14 @@ export default function AdminParametersProductsPage() {
     price: string;
     currency: Currency;
     isActive: boolean;
+    extraFields: ExtraField[];
   }>({
     name: '',
     description: '',
     price: '',
     currency: 'USD',
     isActive: true,
+    extraFields: [],
   });
 
   const load = useCallback(() => {
@@ -87,11 +153,19 @@ export default function AdminParametersProductsPage() {
 
   const createProduct = async () => {
     if (!createForm.name.trim()) return;
+    if (createForm.extraFields.some((f) => !f.label.trim())) {
+      setError('Each additional field needs a name.');
+      return;
+    }
     setError(null);
     setBusyId('create');
     try {
       const payload: Record<string, unknown> = {
         name: createForm.name.trim(),
+        extraFields: createForm.extraFields.map((f) => ({
+          ...f,
+          label: f.label.trim(),
+        })),
         description: createForm.description.trim() || undefined,
         currency: createForm.currency,
         isActive: createForm.isActive,
@@ -103,7 +177,14 @@ export default function AdminParametersProductsPage() {
         body: JSON.stringify(payload),
       });
       setProducts((prev) => [created, ...prev]);
-      setCreateForm({ name: '', description: '', price: '', currency: 'USD', isActive: true });
+      setCreateForm({
+        name: '',
+        description: '',
+        price: '',
+        currency: 'USD',
+        isActive: true,
+        extraFields: [],
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to create product';
       setError(message);
@@ -151,19 +232,28 @@ export default function AdminParametersProductsPage() {
       name: product.name || '',
       description: product.description || '',
       price: product.price === null || product.price === undefined ? '' : String(product.price),
-      currency: (CURRENCIES.includes(product.currency as Currency) ? (product.currency as Currency) : 'USD'),
+      currency: CURRENCIES.includes(product.currency as Currency) ? (product.currency as Currency) : 'USD',
       isActive: product.isActive,
+      extraFields: product.extraFields ?? [],
     });
   };
 
   const saveEdit = async () => {
     if (!editing) return;
     if (!editForm.name.trim()) return;
+    if (editForm.extraFields.some((f) => !f.label.trim())) {
+      setError('Each additional field needs a name.');
+      return;
+    }
     setError(null);
     setBusyId(editing.id);
     try {
       const payload: Record<string, unknown> = {
         name: editForm.name.trim(),
+        extraFields: editForm.extraFields.map((f) => ({
+          ...f,
+          label: f.label.trim(),
+        })),
         description: editForm.description.trim() || undefined,
         currency: editForm.currency,
         isActive: editForm.isActive,
@@ -225,7 +315,12 @@ export default function AdminParametersProductsPage() {
               <select
                 className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                 value={createForm.currency}
-                onChange={(e) => setCreateForm((p) => ({ ...p, currency: e.target.value as Currency }))}
+                onChange={(e) =>
+                  setCreateForm((p) => ({
+                    ...p,
+                    currency: e.target.value as Currency,
+                  }))
+                }
               >
                 {CURRENCIES.map((cur) => (
                   <option key={cur} value={cur}>
@@ -239,7 +334,12 @@ export default function AdminParametersProductsPage() {
               <select
                 className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                 value={createForm.isActive ? 'active' : 'inactive'}
-                onChange={(e) => setCreateForm((p) => ({ ...p, isActive: e.target.value === 'active' }))}
+                onChange={(e) =>
+                  setCreateForm((p) => ({
+                    ...p,
+                    isActive: e.target.value === 'active',
+                  }))
+                }
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
@@ -254,6 +354,11 @@ export default function AdminParametersProductsPage() {
               />
             </label>
           </div>
+          <ExtraFieldsEditor
+            fields={createForm.extraFields}
+            onChange={(extraFields) => setCreateForm((p) => ({ ...p, extraFields }))}
+            disabled={busyId === 'create'}
+          />
           <div className="mt-4 flex justify-end">
             <button className="btn-primary" onClick={createProduct} disabled={busyId === 'create'}>
               {busyId === 'create' ? 'Saving…' : 'Create product'}
@@ -290,6 +395,16 @@ export default function AdminParametersProductsPage() {
                       <p className="mt-1 text-xs text-slate-400">
                         {formatPrice(p.price, p.currency)} · Created {new Date(p.createdAt).toLocaleDateString()}
                       </p>
+                      {p.extraFields?.length ? (
+                        <dl className="mt-3 space-y-1 text-sm text-slate-300">
+                          {p.extraFields.map((field, index) => (
+                            <div key={index} className="break-words">
+                              <dt className="inline font-medium">{field.label}: </dt>
+                              <dd className="inline whitespace-pre-wrap">{field.value || '—'}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : null}
                       {p.description ? <p className="mt-2 text-sm text-slate-300">{p.description}</p> : null}
                     </div>
 
@@ -325,7 +440,7 @@ export default function AdminParametersProductsPage() {
 
         {editing ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-            <div className="card w-full max-w-lg p-6">
+            <div className="card max-h-[90vh] w-full max-w-lg overflow-y-auto p-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold">Edit product</h2>
                 <button className="text-slate-400" onClick={() => setEditing(null)}>
@@ -356,7 +471,12 @@ export default function AdminParametersProductsPage() {
                   <select
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={editForm.currency}
-                    onChange={(e) => setEditForm((p) => ({ ...p, currency: e.target.value as Currency }))}
+                    onChange={(e) =>
+                      setEditForm((p) => ({
+                        ...p,
+                        currency: e.target.value as Currency,
+                      }))
+                    }
                   >
                     {CURRENCIES.map((cur) => (
                       <option key={cur} value={cur}>
@@ -370,7 +490,12 @@ export default function AdminParametersProductsPage() {
                   <select
                     className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={editForm.isActive ? 'active' : 'inactive'}
-                    onChange={(e) => setEditForm((p) => ({ ...p, isActive: e.target.value === 'active' }))}
+                    onChange={(e) =>
+                      setEditForm((p) => ({
+                        ...p,
+                        isActive: e.target.value === 'active',
+                      }))
+                    }
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
@@ -381,11 +506,21 @@ export default function AdminParametersProductsPage() {
                   <textarea
                     className="mt-2 min-h-[90px] w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
                     value={editForm.description}
-                    onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))}
+                    onChange={(e) =>
+                      setEditForm((p) => ({
+                        ...p,
+                        description: e.target.value,
+                      }))
+                    }
                   />
                 </label>
               </div>
 
+              <ExtraFieldsEditor
+                fields={editForm.extraFields}
+                onChange={(extraFields) => setEditForm((p) => ({ ...p, extraFields }))}
+                disabled={busyId === editing.id}
+              />
               <div className="mt-6 flex items-center justify-end gap-2">
                 <button className="btn-secondary" onClick={() => setEditing(null)} disabled={busyId === editing.id}>
                   Cancel

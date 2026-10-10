@@ -20,6 +20,10 @@ export class ProductsService {
     return this.prisma.product.create({
       data: {
         name: dto.name,
+        extraFields: dto.extraFields?.map(({ label, value }) => ({
+          label,
+          value,
+        })),
         description: dto.description,
         price: dto.price,
         currency: (dto.currency ?? 'USD').toUpperCase(),
@@ -36,6 +40,10 @@ export class ProductsService {
       where: { id },
       data: {
         ...dto,
+        extraFields: dto.extraFields?.map(({ label, value }) => ({
+          label,
+          value,
+        })),
         currency: dto.currency ? dto.currency.toUpperCase() : undefined,
       },
     });
@@ -45,7 +53,9 @@ export class ProductsService {
     await this.ensureAdmin(user);
     await this.ensureBelongs(id, user);
 
-    const used = await this.prisma.dealItem.count({ where: { productId: id, tenantId: user.tenantId } });
+    const used = await this.prisma.dealItem.count({
+      where: { productId: id, tenantId: user.tenantId },
+    });
     if (used > 0) {
       throw new BadRequestException('Product is used in deals. Deactivate it instead.');
     }
@@ -54,7 +64,10 @@ export class ProductsService {
   }
 
   private async ensureBelongs(id: string, user: RequestUser) {
-    const exists = await this.prisma.product.findFirst({ where: { id, tenantId: user.tenantId }, select: { id: true } });
+    const exists = await this.prisma.product.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: { id: true },
+    });
     if (!exists) throw new NotFoundException('Product not found');
   }
 
@@ -69,4 +82,3 @@ export class ProductsService {
     }
   }
 }
-

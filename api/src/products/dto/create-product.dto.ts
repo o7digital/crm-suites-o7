@@ -1,5 +1,17 @@
-import { Transform } from 'class-transformer';
-import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 
 function trimString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
@@ -23,7 +35,26 @@ function optionalNumber(value: unknown): number | null | undefined {
   return Number(trimmed);
 }
 
+export class ProductExtraFieldDto {
+  @IsString()
+  @Transform(({ value }) => trimString(value))
+  @MinLength(1)
+  @MaxLength(100)
+  label: string;
+
+  @IsString()
+  @MaxLength(2000)
+  value: string;
+}
+
 export class CreateProductDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(30)
+  @ValidateNested({ each: true })
+  @Type(() => ProductExtraFieldDto)
+  extraFields?: ProductExtraFieldDto[];
+
   @IsString()
   @MaxLength(160)
   @Transform(({ value }) => trimString(value))

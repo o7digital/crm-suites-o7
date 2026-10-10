@@ -17,6 +17,7 @@ export class SchemaUpgraderService {
     await this.ensureDealClosingFields();
     await this.ensureTaskTimeTrackingFields();
     await this.ensureProductsSchema();
+    await this.prisma.$executeRawUnsafe(`ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "extraFields" JSONB NOT NULL DEFAULT '[]';`);
     await this.ensureClientProfileFields();
     await this.ensureClientOwnerUserId();
     await this.ensureClientCollaboratorsSchema();
