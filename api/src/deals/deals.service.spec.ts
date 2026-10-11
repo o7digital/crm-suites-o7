@@ -1,3 +1,4 @@
+jest.mock('./monthly-workflow', () => ({ monthlyWorkflow: jest.fn(async () => ({ pipelineId: 'monthly-workflow', stageId: 'monthly-stage' })) }));
 import { DealsService } from './deals.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -35,9 +36,9 @@ describe('DealsService', () => {
     expect(create).toHaveBeenCalledTimes(1);
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        pipelineId: 'workflow-1', stageId: 'open-stage', value: 1200,
+        pipelineId: 'monthly-workflow', stageId: 'monthly-stage', value: 1200,
         recurrenceIndex: 1, recurrenceMonths: 3, recurrenceGeneratedThrough: 1,
-        recurrenceStageId: 'open-stage',
+        recurrenceStageId: 'monthly-stage',
         recurrenceStartAt: new Date('2027-01-31T12:00:00.000Z'),
         expectedCloseDate: new Date('2027-01-31T12:00:00.000Z'),
       }),
@@ -65,6 +66,7 @@ describe('DealsService', () => {
         })),
       },
       postSalesCase: { upsert: createCase },
+      dealStageHistory: { create: jest.fn() },
     };
     const prisma = {
       user: { findFirst: jest.fn().mockResolvedValue({ role: 'OWNER' }) },
@@ -93,7 +95,7 @@ describe('DealsService', () => {
       where: { id: 'deal-1' },
       data: expect.objectContaining({
         recurrenceIndex: 1, recurrenceMonths: 4, recurrenceGeneratedThrough: 1,
-        recurrenceStageId: 'open-stage', recurrenceStartAt: new Date('2027-01-31T12:00:00.000Z'),
+        recurrenceStageId: 'monthly-stage', recurrenceStartAt: new Date('2027-01-31T12:00:00.000Z'),
       }),
     }));
     expect(createCase).toHaveBeenCalledWith(expect.objectContaining({
@@ -158,7 +160,7 @@ describe('DealsService', () => {
           id: 'deal-1',
           pipelineId: 'pipeline-post-sales',
           stageId: 'stage-post-sales',
-          ...(monthlyRoot ? { recurrenceGroupId: 'monthly-group', recurrenceIndex: 1 } : {}),
+          ...(monthlyRoot ? { recurrenceGroupId: 'monthly-group', recurrenceIndex: 1, recurrenceMonths: 36 } : {}),
         }),
       },
       pipeline: {
@@ -228,7 +230,7 @@ describe('DealsService', () => {
         tenantId: 'tenant-1',
         dealId: 'deal-1',
         fromStageId: 'stage-post-sales',
-        toStageId: 'stage-new-sales',
+        toStageId: monthlyRoot ? 'monthly-stage' : 'stage-new-sales',
       },
     });
     expect(tx.deal.update).toHaveBeenCalledWith(
@@ -236,14 +238,14 @@ describe('DealsService', () => {
         where: { id: 'deal-1' },
         data: expect.objectContaining({
           title: 'Moved deal',
-          pipelineId: 'pipeline-new-sales',
-          stageId: 'stage-new-sales',
+          pipelineId: monthlyRoot ? 'monthly-workflow' : 'pipeline-new-sales',
+          stageId: monthlyRoot ? 'monthly-stage' : 'stage-new-sales',
         }),
       }),
     );
     if (monthlyRoot) {
       expect(tx.deal.update).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ recurrenceStageId: 'stage-new-sales' }),
+        data: expect.objectContaining({ recurrenceStageId: 'monthly-stage' }),
       }));
     } else {
       expect(tx.deal.update.mock.calls[0][0].data).not.toHaveProperty('recurrenceStageId');

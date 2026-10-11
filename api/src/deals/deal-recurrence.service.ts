@@ -79,7 +79,7 @@ export class DealRecurrenceService implements OnModuleInit, OnModuleDestroy {
 
           const added = await this.prisma.$transaction(async (tx) => {
             const claim = await tx.deal.updateMany({
-              where: { id: root.id, recurrenceGeneratedThrough: generated },
+              where: { id: root.id, pipelineId: root.pipelineId, recurrenceGeneratedThrough: generated },
               data: { recurrenceGeneratedThrough: dueThrough },
             });
             if (claim.count !== 1) return 0;

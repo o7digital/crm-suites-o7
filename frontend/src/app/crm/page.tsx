@@ -1113,9 +1113,9 @@ export default function CrmPage() {
       probabilityOverridesStage: false,
       nextActionAt: '',
       expectedCloseDate: '',
-      recurring: false,
+      recurring: selectedPipeline?.name.trim().toLowerCase() === 'post sale',
       recurrenceMonths: '12',
-      recurrenceStartAt: '',
+      recurrenceStartAt: selectedPipeline?.name.trim().toLowerCase() === 'post sale' ? todayInputValue() : '',
       clientId: '',
       productIds: [],
       pipelineId,
@@ -1189,12 +1189,13 @@ export default function CrmPage() {
       if (probabilityPct === null) throw new Error('Probability must be between 0 and 100');
       const recurrenceMonths = Number(form.recurrenceMonths);
       if (form.recurring && !editingDeal?.recurrenceGroupId && (
-        !Number.isInteger(recurrenceMonths) || recurrenceMonths < 2 || recurrenceMonths > 60 || !form.recurrenceStartAt
-      )) throw new Error('Choose a first month date and a duration from 2 to 60 months');
+        !Number.isInteger(recurrenceMonths) || recurrenceMonths < 2 || recurrenceMonths > 72 || !form.recurrenceStartAt
+      )) throw new Error('Choose a first month date and a duration from 2 to 72 months');
       const recurrence = form.recurring && !editingDeal?.recurrenceGroupId
         ? { recurrenceMonths, recurrenceStartAt: form.recurrenceStartAt }
         : {};
 
+      let savedPipelineId = targetPipelineId;
       const stageId = form.stageId || modalDefaultStageId;
       if (modalStagesLoading || !modalDealStages.some((stage) => stage.id === stageId)) {
         throw new Error('Select an open stage in the destination pipeline');
@@ -1225,9 +1226,10 @@ export default function CrmPage() {
           }),
         });
 
+        savedPipelineId = updated.pipelineId;
         let finalDeal: Deal = { ...editingDeal, ...updated };
 
-        if (targetPipelineId === pipelineId) {
+        if (savedPipelineId === pipelineId) {
           setDeals((prev) =>
             prev.map((deal) =>
               deal.id === editingDeal.id ? { ...deal, ...finalDeal } : deal,
@@ -1245,7 +1247,7 @@ export default function CrmPage() {
             });
             finalDeal = { ...finalDeal, ...withProposal };
             setProposalError(null);
-            if (targetPipelineId === pipelineId) {
+            if (savedPipelineId === pipelineId) {
               setDeals((prev) =>
                 prev.map((deal) =>
                   deal.id === editingDeal.id ? { ...deal, ...finalDeal } : deal,
@@ -1256,21 +1258,21 @@ export default function CrmPage() {
             const message = err instanceof Error ? err.message : 'Unable to upload proposal PDF';
             setProposalError(message);
             setEditingDeal(finalDeal);
-            if (targetPipelineId !== pipelineId) {
-              setPipelineId(targetPipelineId);
+            if (savedPipelineId !== pipelineId) {
+              setPipelineId(savedPipelineId);
               setRequestedStageId(finalDeal.stageId);
               setHighlightStageId(null);
-              router.replace(`/crm?pipelineId=${targetPipelineId}`);
+              router.replace(`/crm?pipelineId=${savedPipelineId}`);
             }
             throw err;
           }
         }
 
-        if (pipelineChanged) {
-          setPipelineId(targetPipelineId);
+        if (pipelineChanged || savedPipelineId !== pipelineId) {
+          setPipelineId(savedPipelineId);
           setRequestedStageId(finalDeal.stageId);
           setHighlightStageId(null);
-          router.replace(`/crm?pipelineId=${targetPipelineId}`);
+          router.replace(`/crm?pipelineId=${savedPipelineId}`);
         }
       } else {
         const created = await api<Deal>('/deals', {
@@ -1292,7 +1294,8 @@ export default function CrmPage() {
         });
 
         // Optimistically add the deal so it's not lost even if the PDF upload fails.
-        if (targetPipelineId === pipelineId) {
+        savedPipelineId = created.pipelineId;
+        if (savedPipelineId === pipelineId) {
           setDeals((prev) => [created, ...prev]);
         }
 
@@ -1305,32 +1308,33 @@ export default function CrmPage() {
               body: proposalForm,
             });
             setProposalError(null);
-            if (targetPipelineId === pipelineId) {
+            if (created.pipelineId === pipelineId) {
               setDeals((prev) => prev.map((d) => (d.id === created.id ? { ...d, ...withProposal } : d)));
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : 'Unable to upload proposal PDF';
             setProposalError(message);
             // Keep the modal open in edit mode so the user can retry the upload.
-            if (targetPipelineId !== pipelineId) {
-              setPipelineId(targetPipelineId);
+            if (created.pipelineId !== pipelineId) {
+              setPipelineId(created.pipelineId);
               setRequestedStageId(null);
               setHighlightStageId(null);
-              router.replace(`/crm?pipelineId=${targetPipelineId}`);
+              router.replace(`/crm?pipelineId=${created.pipelineId}`);
             }
             setEditingDeal(created);
             return;
           }
         }
 
-        if (targetPipelineId !== pipelineId) {
+        if (created.pipelineId !== pipelineId) {
           // Created in a different pipeline: switch the board so the user immediately sees it.
-          setPipelineId(targetPipelineId);
+          setPipelineId(created.pipelineId);
           setRequestedStageId(null);
           setHighlightStageId(null);
-          router.replace(`/crm?pipelineId=${targetPipelineId}`);
+          router.replace(`/crm?pipelineId=${created.pipelineId}`);
         }
       }
+      if (form.recurring) setPipelines(await api<Pipeline[]>('/pipelines'));
       setShowModal(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to save deal';
@@ -2309,6 +2313,10 @@ export default function CrmPage() {
           </div>
         )}
 
+        {selectedPipeline?.name.trim().toLowerCase() === 'post sale' ? (
+          <p className="mb-4 text-sm text-sky-200">{t('crm.recurring.enabled')} · 12 / 24 / 36 / 48 / 60 / 72</p>
+        ) : null}
+
         {viewMode === 'KANBAN' && (statusFilter === 'ALL' || statusFilter === 'OPEN') ? (
           <>
           {/* Keep all stages on one line (no wrap). Horizontal scroll if needed. */}
@@ -2695,7 +2703,9 @@ export default function CrmPage() {
             onClose={() => setWorkflowTransferDeal(null)}
             onTransferred={(updated) => {
               setWorkflowTransferDeal(null);
-              setDeals((prev) => prev.filter((deal) => deal.id !== updated.id));
+              setDeals((prev) => updated.pipelineId === pipelineId
+                ? prev.map((deal) => deal.id === updated.id ? { ...deal, ...updated } : deal)
+                : prev.filter((deal) => deal.id !== updated.id));
               setPipelineId(updated.pipelineId);
               setRequestedStageId(updated.stageId);
               setHighlightStageId(null);
@@ -3467,23 +3477,21 @@ export default function CrmPage() {
                           : prev.recurrenceStartAt,
                       }))}
                     />
-                    {t('crm.recurring.enabled')}
+                    {t('crm.recurring.enabled')} · Post Sale
                   </label>
                   {form.recurring ? (
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <label className="text-sm text-slate-300">
                         {t('crm.recurring.months')}
-                        <input
-                          type="number"
-                          min={2}
-                          max={60}
-                          step={1}
+                        <select
                           data-testid="recurrence-months"
                           className="mt-1 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2"
                           value={form.recurrenceMonths}
                           disabled={Boolean(editingDeal?.recurrenceGroupId)}
                           onChange={(event) => setForm((prev) => ({ ...prev, recurrenceMonths: event.target.value }))}
-                        />
+                        >
+                          {[...new Set([12, 24, 36, 48, 60, 72, Number(form.recurrenceMonths)])].sort((a, b) => a - b).map((months) => <option key={months} value={months}>{months}</option>)}
+                        </select>
                       </label>
                       <label className="text-sm text-slate-300">
                         {t('crm.recurring.startDate')}
@@ -3500,7 +3508,7 @@ export default function CrmPage() {
                   ) : null}
                   {form.recurring ? (
                     <p className="mt-2 text-xs text-slate-400">
-                      {t(editingDeal?.recurrenceGroupId ? 'crm.recurring.configured' : 'crm.recurring.hint')}
+                      {editingDeal?.recurrenceGroupId ? t('crm.recurring.configured') : `Post Sale · ${t('crm.recurring.months')}: 12 / 24 / 36 / 48 / 60 / 72`}
                     </p>
                   ) : null}
                 </div>

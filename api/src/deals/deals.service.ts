@@ -14,6 +14,7 @@ import { ReopenDealDto } from './dto/reopen-deal.dto';
 import * as fs from 'fs';
 import { randomUUID } from 'crypto';
 import { monthlyStartDate } from './recurrence';
+import { monthlyWorkflow } from './monthly-workflow';
 import { monthlyPostSalesName } from './monthly-post-sales';
 import { duplicateBaseTitle, nextDuplicateTitle } from './duplicate-title';
 
@@ -341,6 +342,9 @@ export class DealsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const monthly = dto.recurrenceMonths ? await monthlyWorkflow(tx, user.tenantId, dto.recurrenceMonths) : null;
+      const resolvedStageId = monthly?.stageId ?? stageId;
+      if (!resolvedStageId) throw new BadRequestException('Stage is required');
       const deal = await tx.deal.create({
         data: {
           title: dto.title,
@@ -356,14 +360,14 @@ export class DealsService {
             recurrenceIndex: 1,
             recurrenceMonths: dto.recurrenceMonths,
             recurrenceStartAt,
-            recurrenceStageId: stageId,
+            recurrenceStageId: resolvedStageId,
             recurrenceGeneratedThrough: 1,
           } : {}),
           clientId,
           ...(caps.hasOwnerId ? { ownerId } : {}),
           tenantId: user.tenantId,
-          pipelineId: dto.pipelineId,
-          stageId,
+          pipelineId: monthly?.pipelineId ?? dto.pipelineId,
+          stageId: resolvedStageId,
           ...(caps.hasClosingFields
             ? {
                 status: targetStageStatus ?? 'OPEN',
@@ -565,6 +569,7 @@ export class DealsService {
         stageId: true,
         recurrenceGroupId: true,
         recurrenceIndex: true,
+        recurrenceMonths: true,
         ...(caps.hasClosingFields ? { status: true } : {}),
         ...(caps.hasProbability ? { probability: true } : {}),
       },
@@ -603,7 +608,7 @@ export class DealsService {
 
     const requestedPipelineId = dto.pipelineId?.trim() || undefined;
     const requestedStageId = dto.stageId?.trim() || undefined;
-    const targetPipelineId = requestedPipelineId ?? existing.pipelineId;
+    let targetPipelineId = requestedPipelineId ?? existing.pipelineId;
     let targetStageId = requestedStageId ?? existing.stageId;
     let resolvedTargetStageId: string | null = null;
     let targetStageStatus: 'OPEN' | 'WON' | 'LOST' | null = null;
@@ -735,7 +740,8 @@ export class DealsService {
         : {}),
     };
 
-    if (targetStageId === existing.stageId && !dto.recurrenceMonths) {
+    const monthlyDuration = dto.recurrenceMonths || (existing.recurrenceGroupId ? existing.recurrenceMonths : null);
+    if (targetStageId === existing.stageId && !monthlyDuration) {
       return this.prisma.deal.update({
         where: { id },
         data,
@@ -744,6 +750,14 @@ export class DealsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      if (monthlyDuration) {
+        const monthly = await monthlyWorkflow(tx, user.tenantId, monthlyDuration);
+        targetPipelineId = monthly.pipelineId;
+        targetStageId = monthly.stageId;
+        data.pipelineId = targetPipelineId;
+        data.stageId = targetStageId;
+        if (dto.recurrenceMonths || existing.recurrenceIndex === 1) data.recurrenceStageId = targetStageId;
+      }
       if (targetStageId !== existing.stageId) {
         await tx.dealStageHistory.create({
           data: {

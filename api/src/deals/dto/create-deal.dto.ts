@@ -57,7 +57,7 @@ export class CreateDealDto {
   @IsOptional()
   @IsInt()
   @Min(2)
-  @Max(60)
+  @Max(72)
   recurrenceMonths?: number;
 
   @IsOptional()

@@ -20,12 +20,12 @@ test('ADD drop selects a workflow, cancels safely, and retries a failed transfer
     else if (path === '/admin/context') data = { role: 'OWNER', canManageSubscriptions: false };
     else if (path === '/tenant/settings') data = { settings: { crmMode: 'B2B', crmDisplayCurrency: 'USD' } };
     else if (path === '/tenant/branding') data = { branding: {} };
-    else if (path === '/pipelines') data = [{ id: 'source', name: 'Source', isDefault: true }, { id: 'target', name: 'Destination' }];
+    else if (path === '/pipelines') data = [{ id: 'source', name: 'Source', isDefault: true }, { id: 'target', name: 'Post Sale' }];
     else if (path === '/stages') {
       const pipelineId = url.searchParams.get('pipelineId');
       if (pipelineId === 'target') await new Promise((resolve) => setTimeout(resolve, 400));
       data = [
-        { id: `${pipelineId}-stage`, name: 'Lead', pipelineId, position: 1, status: 'OPEN', probability: .05 },
+        { id: `${pipelineId}-stage`, name: pipelineId === 'target' ? '36 months' : 'Lead', pipelineId, position: 1, status: 'OPEN', probability: .05 },
         { id: `${pipelineId}-won`, name: 'Won', pipelineId, position: 2, status: 'WON', probability: 1 },
       ];
     } else if (path === '/deals') data = url.searchParams.get('pipelineId') === deal.pipelineId ? [deal] : [];
