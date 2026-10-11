@@ -8,7 +8,7 @@ export async function monthlyWorkflow(
   tenantId: string,
   months: number,
 ) {
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${tenantId}), hashtext('monthly-post-sale'))`;
+  await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtext(${tenantId}), hashtext('monthly-post-sale'))`;
   let pipeline = await tx.pipeline.findFirst({
     where: { tenantId, name: { equals: 'Post Sale', mode: 'insensitive' } },
     orderBy: { createdAt: 'asc' },
