@@ -756,6 +756,15 @@ export class DealsService {
         targetStageId = monthly.stageId;
         data.pipelineId = targetPipelineId;
         data.stageId = targetStageId;
+        // Reclassification must not reopen or overwrite a recorded outcome.
+        if (existing.status && existing.status !== 'OPEN') {
+          data.status = existing.status;
+          delete data.closedAt;
+          delete data.closeNote;
+          delete data.lossReason;
+          delete data.lossComment;
+          delete data.followUpAt;
+        }
         if (dto.recurrenceMonths || existing.recurrenceIndex === 1) data.recurrenceStageId = targetStageId;
       }
       if (targetStageId !== existing.stageId) {

@@ -150,7 +150,7 @@ describe('DealsService', () => {
     expect(result.title).toBe('Proposal copy 3');
   });
 
-  it.each([false, true])('moves a deal to another pipeline (monthly root: %s)', async (monthlyRoot) => {
+  it.each([[false, 'OPEN'], [true, 'OPEN'], [true, 'WON'], [true, 'LOST']])('routes a deal (monthly root: %s, outcome: %s)', async (monthlyRoot, outcome) => {
     const prisma = {
       user: {
         findFirst: jest.fn().mockResolvedValue({ role: 'OWNER' }),
@@ -160,7 +160,7 @@ describe('DealsService', () => {
           id: 'deal-1',
           pipelineId: 'pipeline-post-sales',
           stageId: 'stage-post-sales',
-          ...(monthlyRoot ? { recurrenceGroupId: 'monthly-group', recurrenceIndex: 1, recurrenceMonths: 36 } : {}),
+          ...(monthlyRoot ? { recurrenceGroupId: 'monthly-group', recurrenceIndex: 1, recurrenceMonths: 36, status: outcome } : {}),
         }),
       },
       pipeline: {
@@ -249,6 +249,10 @@ describe('DealsService', () => {
       }));
     } else {
       expect(tx.deal.update.mock.calls[0][0].data).not.toHaveProperty('recurrenceStageId');
+    }
+    if (monthlyRoot && outcome !== 'OPEN') {
+      expect(tx.deal.update.mock.calls[0][0].data.status).toBe(outcome);
+      expect(tx.deal.update.mock.calls[0][0].data).not.toHaveProperty('closedAt');
     }
     expect(result).toEqual({
       id: 'deal-1',
