@@ -13,6 +13,7 @@ import { useI18n } from '../../contexts/I18nContext';
 import { phase1Labels } from '@/lib/pulse-phase1';
 import { DealActivityHistory } from '@/components/DealActivityHistory';
 import { WindowControls } from '../../components/WindowControls';
+import { WorkflowTransferDialog } from '../../components/WorkflowTransferDialog';
 
 type Pipeline = {
   id: string;
@@ -459,7 +460,8 @@ export default function CrmPage() {
   const [vendorFilter, setVendorFilter] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<CrmViewMode>('KANBAN');
   const [forecastYear, setForecastYear] = useState<number>(new Date().getFullYear());
-  const [statusDropHover, setStatusDropHover] = useState<Stage['status'] | null>(null);
+  const [statusDropHover, setStatusDropHover] = useState<Stage['status'] | 'ADD' | null>(null);
+  const [workflowTransferDeal, setWorkflowTransferDeal] = useState<Deal | null>(null);
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
   const [closingDraft, setClosingDraft] = useState<ClosingDraft | null>(null);
   const [closingSaving, setClosingSaving] = useState(false);
@@ -2346,6 +2348,10 @@ export default function CrmPage() {
                     // Some browsers don't dispatch drop reliably on a fixed overlay. Drag-end
                     // coordinates provide a second, native-safe way to complete the same action.
                     if (status && dealId) void handleDropDealToStatus(dealId, status);
+                    else if (dealId && document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-workflow-add]')) {
+                      const deal = deals.find((item) => item.id === dealId);
+                      if (deal) setWorkflowTransferDeal(deal);
+                    }
                     setDraggedDealId(null);
                     setStatusDropHover(null);
                   }}
@@ -2548,9 +2554,26 @@ export default function CrmPage() {
               ×
             </button>
             <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-              {t('crm.close.dropHint')}
+              ADD · WIN · LOST
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div
+                data-testid="workflow-zone-ADD"
+                data-workflow-add="true"
+                className={`flex min-h-20 items-center justify-center rounded-xl border-2 border-dashed px-3 text-center transition-all duration-150 ${statusDropHover === 'ADD' ? 'scale-[1.02] border-sky-200 bg-sky-400/25 text-sky-50' : 'border-sky-400/50 bg-sky-500/10 text-sky-100'}`}
+                onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; setStatusDropHover('ADD'); }}
+                onDragLeave={() => { if (statusDropHover === 'ADD') setStatusDropHover(null); }}
+                onDrop={(event) => {
+                  event.preventDefault(); event.stopPropagation();
+                  const dealId = event.dataTransfer.getData('text/plain') || draggedDealId;
+                  const deal = deals.find((item) => item.id === dealId);
+                  lastDragAtRef.current = Date.now();
+                  setDraggedDealId(null); setStatusDropHover(null);
+                  if (deal) setWorkflowTransferDeal(deal);
+                }}
+              >
+                <p className="text-sm font-bold tracking-[0.08em] md:text-lg">＋ ADD</p>
+              </div>
               {(['WON', 'LOST'] as const).map((status) => {
                 const targetStage = status === 'WON' ? firstWonStage : firstLostStage;
                 const isHover = statusDropHover === status;
@@ -2663,6 +2686,22 @@ export default function CrmPage() {
               );
             })}
           </div>
+        ) : null}
+
+        {workflowTransferDeal ? (
+          <WorkflowTransferDialog
+            deal={workflowTransferDeal}
+            pipelines={pipelines}
+            onClose={() => setWorkflowTransferDeal(null)}
+            onTransferred={(updated) => {
+              setWorkflowTransferDeal(null);
+              setDeals((prev) => prev.filter((deal) => deal.id !== updated.id));
+              setPipelineId(updated.pipelineId);
+              setRequestedStageId(updated.stageId);
+              setHighlightStageId(null);
+              router.replace(`/crm?pipelineId=${updated.pipelineId}`);
+            }}
+          />
         ) : null}
 
         {closingDraft ? (
