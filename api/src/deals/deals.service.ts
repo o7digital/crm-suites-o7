@@ -604,13 +604,6 @@ export class DealsService {
     const requestedPipelineId = dto.pipelineId?.trim() || undefined;
     const requestedStageId = dto.stageId?.trim() || undefined;
     const targetPipelineId = requestedPipelineId ?? existing.pipelineId;
-    if (
-      existing.recurrenceGroupId &&
-      existing.recurrenceIndex === 1 &&
-      targetPipelineId !== existing.pipelineId
-    ) {
-      throw new BadRequestException('The first month must stay in its monthly workflow');
-    }
     let targetStageId = requestedStageId ?? existing.stageId;
     let resolvedTargetStageId: string | null = null;
     let targetStageStatus: 'OPEN' | 'WON' | 'LOST' | null = null;
@@ -723,6 +716,11 @@ export class DealsService {
         ? { pipelineId: targetPipelineId }
         : {}),
       ...(targetStageId !== existing.stageId ? { stageId: targetStageId } : {}),
+      // Future months follow the first occurrence's new workflow and entry stage.
+      ...(existing.recurrenceGroupId && existing.recurrenceIndex === 1 &&
+      targetPipelineId !== existing.pipelineId
+        ? { recurrenceStageId: targetStageId }
+        : {}),
       ...(caps.hasClosingFields && targetStageStatus
         ? targetStageStatus === 'OPEN'
           ? {

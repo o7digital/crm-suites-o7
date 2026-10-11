@@ -148,7 +148,7 @@ describe('DealsService', () => {
     expect(result.title).toBe('Proposal copy 3');
   });
 
-  it('moves a deal to another pipeline during update', async () => {
+  it.each([false, true])('moves a deal to another pipeline (monthly root: %s)', async (monthlyRoot) => {
     const prisma = {
       user: {
         findFirst: jest.fn().mockResolvedValue({ role: 'OWNER' }),
@@ -158,6 +158,7 @@ describe('DealsService', () => {
           id: 'deal-1',
           pipelineId: 'pipeline-post-sales',
           stageId: 'stage-post-sales',
+          ...(monthlyRoot ? { recurrenceGroupId: 'monthly-group', recurrenceIndex: 1 } : {}),
         }),
       },
       pipeline: {
@@ -240,6 +241,13 @@ describe('DealsService', () => {
         }),
       }),
     );
+    if (monthlyRoot) {
+      expect(tx.deal.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ recurrenceStageId: 'stage-new-sales' }),
+      }));
+    } else {
+      expect(tx.deal.update.mock.calls[0][0].data).not.toHaveProperty('recurrenceStageId');
+    }
     expect(result).toEqual({
       id: 'deal-1',
       title: 'Moved deal',

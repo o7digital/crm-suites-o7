@@ -1055,8 +1055,11 @@ export default function CrmPage() {
     if (!modalPipelineId) return;
 
     // Fetch stages for the selected pipeline if we don't have them yet.
-    if (stagesByPipelineId[modalPipelineId]) return;
-    if (modalPipelineId === pipelineId && stages.length > 0) return;
+    if (stagesByPipelineId[modalPipelineId] || (modalPipelineId === pipelineId && stages.length > 0)) {
+      setModalStagesLoading(false);
+      setModalStagesError(null);
+      return;
+    }
 
     let active = true;
     setModalStagesLoading(true);
@@ -1064,13 +1067,14 @@ export default function CrmPage() {
     api<Stage[]>(`/stages?pipelineId=${modalPipelineId}`)
       .then((data) => {
         if (!active) return;
+        setModalStagesLoading(false);
         setStagesByPipelineId((prev) => ({ ...prev, [modalPipelineId]: data }));
       })
       .catch((err) => {
         if (!active) return;
         const message = err instanceof Error ? err.message : 'Unable to load stages';
         setModalStagesError(message);
-        setStagesByPipelineId((prev) => ({ ...prev, [modalPipelineId]: [] }));
+        setModalStagesLoading(false);
       })
       .finally(() => {
         if (!active) return;
@@ -1189,8 +1193,10 @@ export default function CrmPage() {
         ? { recurrenceMonths, recurrenceStartAt: form.recurrenceStartAt }
         : {};
 
-      const stageId = form.stageId || modalDefaultStageId || defaultStageId;
-      if (!stageId) throw new Error('Stage is required');
+      const stageId = form.stageId || modalDefaultStageId;
+      if (modalStagesLoading || !modalDealStages.some((stage) => stage.id === stageId)) {
+        throw new Error('Select an open stage in the destination pipeline');
+      }
       const probability =
         probabilityPct === parseProbabilityPct(selectedStageProbabilityPct)
           ? null
@@ -3633,7 +3639,7 @@ export default function CrmPage() {
                 <button className="btn-secondary" onClick={() => setShowModal(false)} disabled={dealDuplicating}>
                   {t('common.cancel')}
                 </button>
-                <button className="btn-primary" onClick={handleSaveDeal} disabled={dealDuplicating}>
+                <button className="btn-primary" onClick={handleSaveDeal} disabled={dealDuplicating || modalStagesLoading || modalDealStages.length === 0}>
                   {editingDeal ? t('common.save') : t('crm.createDeal')}
                 </button>
               </div>
