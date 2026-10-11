@@ -20,6 +20,8 @@ export class ProductsService {
     return this.prisma.product.create({
       data: {
         name: dto.name,
+        productType: dto.productType ?? 'Product',
+        periodicity: dto.periodicity ?? 'One-time',
         extraFields: dto.extraFields?.map(({ label, value, type, options }) => ({
           label,
           value,

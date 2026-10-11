@@ -13,6 +13,8 @@ test('creates, edits, reloads and reuses typed product fields while preserving l
     {
       id: 'legacy',
       name: 'Legacy product',
+      productType: 'Product',
+      periodicity: 'One-time',
       currency: 'USD',
       isActive: true,
       createdAt: '2026-01-01T00:00:00Z',
@@ -53,18 +55,17 @@ test('creates, edits, reloads and reuses typed product fields while preserving l
 
   await page.goto('/admin/parameters/products');
   await expect(page.getByText('Legacy text', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Field name 1', { exact: true })).toHaveValue('Periodicity');
-  await expect(page.getByLabel('Field name 2', { exact: true })).toHaveValue('Type');
-  await page.getByLabel('Field value 1', { exact: true }).selectOption('Monthly');
-  await page.getByLabel('Field value 2', { exact: true }).selectOption('Subscription');
+  await page.getByLabel('Product type', { exact: true }).selectOption('Subscription');
+  await page.getByLabel('Product periodicity', { exact: true }).selectOption('Monthly');
+  await expect(page.getByRole('button', { name: 'Remove field 1', exact: true })).toHaveCount(0);
   await page.getByText('Name', { exact: true }).locator('input').fill('O7 Pulse Basic test');
   await page.getByLabel('Add common fields', { exact: true }).selectOption('o7');
-  await page.getByLabel('Field value 3', { exact: true }).selectOption('O7 Pulse');
-  await page.getByLabel('Field value 4', { exact: true }).selectOption('Basic');
+  await page.getByLabel('Field value 1', { exact: true }).selectOption('O7 Pulse');
+  await page.getByLabel('Field value 2', { exact: true }).selectOption('Basic');
   for (const field of [
-    { index: 5, label: 'Seats', type: 'number', value: '12.5' },
-    { index: 6, label: 'Renewal', type: 'date', value: '2026-12-31' },
-    { index: 7, label: 'Enabled', type: 'boolean', value: 'false' },
+    { index: 3, label: 'Seats', type: 'number', value: '12.5' },
+    { index: 4, label: 'Renewal', type: 'date', value: '2026-12-31' },
+    { index: 5, label: 'Enabled', type: 'boolean', value: 'false' },
   ]) {
     await page.getByRole('button', { name: '+ Add a field', exact: true }).click();
     await page.getByLabel(`Field name ${field.index}`, { exact: true }).fill(field.label);
@@ -78,10 +79,8 @@ test('creates, edits, reloads and reuses typed product fields while preserving l
     .locator('.card')
     .filter({ has: page.locator('p.font-semibold').filter({ hasText: /^O7 Pulse Basic test$/ }) });
   await expect(card.getByText('No', { exact: true })).toBeVisible();
-  expect(products[0].extraFields.filter((field) => ['Periodicity', 'Type'].includes(field.label))).toEqual([
-    expect.objectContaining({ label: 'Periodicity', value: 'Monthly' }),
-    expect.objectContaining({ label: 'Type', value: 'Subscription' }),
-  ]);
+  expect(products[0].productType).toBe('Subscription');
+  expect(products[0].periodicity).toBe('Monthly');
   expect(products[0].extraFields).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ type: 'number', value: '12.5' }),
@@ -90,36 +89,40 @@ test('creates, edits, reloads and reuses typed product fields while preserving l
     ]),
   );
   await card.getByRole('button', { name: 'Edit', exact: true }).click();
-  await page.getByLabel('Field choices 4', { exact: true }).fill('Basic\nAdvanced\nPremium\nCustom plan');
-  await page.getByLabel('Field value 4', { exact: true }).selectOption('Custom plan');
-  await page.getByLabel('Field value 5', { exact: true }).fill('0');
+  await page.getByRole('dialog').getByLabel('Product type', { exact: true }).selectOption('Rental');
+  await page.getByRole('dialog').getByLabel('Product periodicity', { exact: true }).selectOption('Yearly');
+  await page.getByLabel('Field choices 2', { exact: true }).fill('Basic\nAdvanced\nPremium\nCustom plan');
+  await page.getByLabel('Field value 2', { exact: true }).selectOption('Custom plan');
+  await page.getByLabel('Field value 3', { exact: true }).fill('0');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(card.getByText('Custom plan', { exact: true })).toBeVisible();
+  expect(products[0].productType).toBe('Rental');
+  expect(products[0].periodicity).toBe('Yearly');
   await page.reload();
   await expect(card.getByText('Custom plan', { exact: true })).toBeVisible();
   await card.getByRole('button', { name: 'Edit', exact: true }).click();
-  await page.getByLabel('Field choices 4', { exact: true }).fill('');
+  await page.getByLabel('Field choices 2', { exact: true }).fill('');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('Add at least one choice for "Edition".', { exact: true })).toBeAttached();
   expect(mutations).toBe(2);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
 
   await page.getByLabel('Reuse fields from a product', { exact: true }).selectOption('p1');
-  await expect(page.getByLabel('Field type 5', { exact: true })).toHaveValue('number');
-  await expect(page.getByLabel('Field value 4', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Field type 3', { exact: true })).toHaveValue('number');
+  await expect(page.getByLabel('Field value 2', { exact: true })).toHaveValue('');
   await page.getByText('Name', { exact: true }).locator('input').fill('Another edition');
   await page.getByRole('button', { name: 'Create product', exact: true }).click();
   await expect(page.locator('p.font-semibold').filter({ hasText: /^Another edition$/ })).toBeVisible();
   expect(products[0].extraFields.every((field) => field.value === '')).toBe(true);
-  expect(products[0].extraFields[3].options).toContain('Custom plan');
+  expect(products[0].extraFields[1].options).toContain('Custom plan');
 
   const legacy = page
     .locator('.card')
     .filter({ has: page.locator('p.font-semibold').filter({ hasText: /^Legacy product$/ }) });
   await legacy.getByRole('button', { name: 'Edit', exact: true }).click();
-  await expect(page.getByRole('dialog').getByLabel('Field type 1', { exact: true })).toHaveValue('text');
-  await expect(page.getByRole('dialog').getByLabel('Field value 1', { exact: true })).toHaveValue('Legacy text');
-  await page.getByRole('dialog').getByRole('button', { name: 'Remove field 1', exact: true }).click();
+  await expect(page.getByLabel('Field type 1', { exact: true })).toHaveValue('text');
+  await expect(page.getByLabel('Field value 1', { exact: true })).toHaveValue('Legacy text');
+  await page.getByRole('button', { name: 'Remove field 1', exact: true }).click();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(legacy.getByText('Legacy text', { exact: true })).toHaveCount(0);
 });

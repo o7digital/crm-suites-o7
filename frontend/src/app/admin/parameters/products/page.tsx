@@ -10,8 +10,6 @@ import {
   ProductFieldsEditor,
   ExtraField,
   normalizeExtraFields,
-  defaultProductFields,
-  withDefaultProductFields,
   extraFieldsError,
   formatExtraField,
 } from '../../../../components/ProductFieldsEditor';
@@ -23,6 +21,8 @@ type Product = {
   price?: string | number | null;
   currency: string;
   isActive: boolean;
+  productType: string;
+  periodicity: string;
   createdAt: string;
   extraFields?: ExtraField[];
 };
@@ -51,6 +51,8 @@ export default function AdminParametersProductsPage() {
     price: string;
     currency: Currency;
     isActive: boolean;
+    productType: string;
+    periodicity: string;
     extraFields: ExtraField[];
   }>({
     name: '',
@@ -58,7 +60,9 @@ export default function AdminParametersProductsPage() {
     price: '',
     currency: 'USD',
     isActive: true,
-    extraFields: defaultProductFields(),
+    productType: 'Product',
+    periodicity: 'One-time',
+    extraFields: [],
   });
 
   const [editing, setEditing] = useState<Product | null>(null);
@@ -68,6 +72,8 @@ export default function AdminParametersProductsPage() {
     price: string;
     currency: Currency;
     isActive: boolean;
+    productType: string;
+    periodicity: string;
     extraFields: ExtraField[];
   }>({
     name: '',
@@ -75,7 +81,9 @@ export default function AdminParametersProductsPage() {
     price: '',
     currency: 'USD',
     isActive: true,
-    extraFields: defaultProductFields(),
+    productType: 'Product',
+    periodicity: 'One-time',
+    extraFields: [],
   });
 
   const load = useCallback(() => {
@@ -112,6 +120,8 @@ export default function AdminParametersProductsPage() {
     try {
       const payload: Record<string, unknown> = {
         name: createForm.name.trim(),
+        productType: createForm.productType,
+        periodicity: createForm.periodicity,
         extraFields: normalizeExtraFields(createForm.extraFields),
         description: createForm.description.trim() || undefined,
         currency: createForm.currency,
@@ -130,7 +140,9 @@ export default function AdminParametersProductsPage() {
         price: '',
         currency: 'USD',
         isActive: true,
-        extraFields: defaultProductFields(),
+        productType: 'Product',
+        periodicity: 'One-time',
+        extraFields: [],
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to create product';
@@ -181,7 +193,9 @@ export default function AdminParametersProductsPage() {
       price: product.price === null || product.price === undefined ? '' : String(product.price),
       currency: CURRENCIES.includes(product.currency as Currency) ? (product.currency as Currency) : 'USD',
       isActive: product.isActive,
-      extraFields: withDefaultProductFields(product.extraFields ?? []),
+      productType: product.productType ?? 'Product',
+      periodicity: product.periodicity ?? 'One-time',
+      extraFields: product.extraFields ?? [],
     });
   };
 
@@ -198,6 +212,8 @@ export default function AdminParametersProductsPage() {
     try {
       const payload: Record<string, unknown> = {
         name: editForm.name.trim(),
+        productType: editForm.productType,
+        periodicity: editForm.periodicity,
         extraFields: normalizeExtraFields(editForm.extraFields),
         description: editForm.description.trim() || undefined,
         currency: editForm.currency,
@@ -290,6 +306,36 @@ export default function AdminParametersProductsPage() {
                 <option value="inactive">Inactive</option>
               </select>
             </label>
+            <label className="block text-sm text-slate-300">
+              Type
+              <select
+                aria-label="Product type"
+                className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                value={createForm.productType}
+                onChange={(e) => setCreateForm((p) => ({ ...p, productType: e.target.value }))}
+              >
+                {['Product', 'Service', 'Rental', 'Subscription'].map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm text-slate-300">
+              Periodicity
+              <select
+                aria-label="Product periodicity"
+                className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                value={createForm.periodicity}
+                onChange={(e) => setCreateForm((p) => ({ ...p, periodicity: e.target.value }))}
+              >
+                {['One-time', 'Monthly', 'Quarterly', 'Yearly'].map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="block text-sm text-slate-300 md:col-span-2">
               Description (optional)
               <textarea
@@ -339,6 +385,7 @@ export default function AdminParametersProductsPage() {
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-slate-400">
+                        {p.productType ?? 'Product'} · {p.periodicity ?? 'One-time'} ·{' '}
                         {formatPrice(p.price, p.currency)} · Created {new Date(p.createdAt).toLocaleDateString()}
                       </p>
                       {p.extraFields?.length ? (
@@ -452,6 +499,36 @@ export default function AdminParametersProductsPage() {
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
+                  </select>
+                </label>
+                <label className="block text-sm text-slate-300">
+                  Type
+                  <select
+                    aria-label="Product type"
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                    value={editForm.productType}
+                    onChange={(e) => setEditForm((p) => ({ ...p, productType: e.target.value }))}
+                  >
+                    {['Product', 'Service', 'Rental', 'Subscription'].map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm text-slate-300">
+                  Periodicity
+                  <select
+                    aria-label="Product periodicity"
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                    value={editForm.periodicity}
+                    onChange={(e) => setEditForm((p) => ({ ...p, periodicity: e.target.value }))}
+                  >
+                    {['One-time', 'Monthly', 'Quarterly', 'Yearly'].map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="block text-sm text-slate-300 md:col-span-2">

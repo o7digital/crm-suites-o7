@@ -2,11 +2,34 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { CreateProductDto } from './dto/create-product.dto';
+import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
 
 const user = { tenantId: 'tenant-a', userId: 'admin' } as any;
 
 describe('Product additional fields', () => {
+  it('validates standard product type and periodicity', async () => {
+    expect(
+      await validate(
+        plainToInstance(CreateProductDto, { name: 'Pulse', productType: 'Subscription', periodicity: 'Monthly' }),
+      ),
+    ).toHaveLength(0);
+    expect(
+      (
+        await validate(
+          plainToInstance(CreateProductDto, { name: 'Pulse', productType: 'invalid', periodicity: 'invalid' }),
+        )
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('rejects null standard fields on updates while preserving optional price clearing', async () => {
+    expect(
+      (await validate(plainToInstance(UpdateProductDto, { productType: null, periodicity: null }))).length,
+    ).toBeGreaterThan(0);
+    expect(await validate(plainToInstance(UpdateProductDto, { price: null }))).toHaveLength(0);
+  });
+
   it('accepts legacy text fields and validates typed values and dropdown choices', async () => {
     const valid = [
       { label: 'Legacy', value: 'anything' },
@@ -42,9 +65,17 @@ describe('Product additional fields', () => {
     };
     const service = new ProductsService(prisma as any);
     const field = { label: 'Edition', type: 'select' as const, options: ['Basic', 'Premium'], value: 'Premium' };
-    await service.create({ name: 'Olivia', extraFields: [field] }, user);
+    await service.create(
+      { name: 'Olivia', productType: 'Subscription', periodicity: 'Monthly', extraFields: [field] },
+      user,
+    );
     expect(prisma.product.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ extraFields: [field], tenantId: user.tenantId }),
+      data: expect.objectContaining({
+        extraFields: [field],
+        tenantId: user.tenantId,
+        productType: 'Subscription',
+        periodicity: 'Monthly',
+      }),
     });
     await service.update('product', { extraFields: [field] }, user);
     expect(prisma.product.update).toHaveBeenCalledWith({
@@ -82,6 +113,8 @@ describe('Product additional fields', () => {
       data: expect.objectContaining({
         tenantId: user.tenantId,
         extraFields: [{ label: 'Size', value: 'XL', type: 'text' }],
+        productType: 'Product',
+        periodicity: 'One-time',
       }),
     });
     await service.update('product', { extraFields: [] }, user);

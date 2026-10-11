@@ -48,6 +48,10 @@ Deploy frontend changes with the Vercel CLI from the repository root of a clean,
 vercel deploy --prod --yes
 ```
 
+### Standard product fields (0041)
+
+Before deploying the API that reads `Product.productType` and `Product.periodicity`, back up the database and apply `0041_product_standard_fields/migration.sql` directly with `psql`. The legacy schema upgrader is disabled on VPS1. This additive migration transfers recognized values from the former additional dropdown fields, preserves custom values, and is safe to rerun. Apply it before replacing the API container; do not use `prisma migrate deploy` while the historical ledger remains unreconciled.
+
 ## TLS and proxy
 
 `nginx-api.conf` is installed as `/opt/o7/mailcow/data/conf/nginx/o7-crm-api.conf`. Include the server block in `nginx-internal-api.conf` inside the existing central proxy's `http` block, preserving its other routes. If replacing the central proxy config inode, recreate that proxy container: its single-file bind mount otherwise retains the previous file.

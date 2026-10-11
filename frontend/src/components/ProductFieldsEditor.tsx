@@ -7,19 +7,6 @@ export type ExtraField = {
   options?: string[];
 };
 
-export function defaultProductFields(): ExtraField[] {
-  return [
-    { label: 'Periodicity', type: 'select', value: '', options: ['One-time', 'Monthly', 'Quarterly', 'Yearly'] },
-    { label: 'Type', type: 'select', value: '', options: ['Product', 'Service', 'Rental', 'Subscription'] },
-  ];
-}
-
-export function withDefaultProductFields(fields: ExtraField[]): ExtraField[] {
-  const names = new Set(fields.map((field) => field.label.trim().toLowerCase()));
-  const missing = defaultProductFields().filter((field) => !names.has(field.label.toLowerCase()));
-  return [...fields, ...missing.slice(0, Math.max(0, 30 - fields.length))];
-}
-
 export function normalizeExtraFields(fields: ExtraField[]): ExtraField[] {
   return fields.map((field) => ({
     label: field.label.trim(),

@@ -12,6 +12,7 @@ import {
   Min,
   MinLength,
   ValidateNested,
+  ValidateIf,
   Validate,
 } from 'class-validator';
 import { PRODUCT_FIELD_TYPES, ProductFieldValueValidator } from './product-field-value.validator';
@@ -67,6 +68,14 @@ export class ProductExtraFieldDto {
 }
 
 export class CreateProductDto {
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsIn(['Product', 'Service', 'Rental', 'Subscription'])
+  productType?: string;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsIn(['One-time', 'Monthly', 'Quarterly', 'Yearly'])
+  periodicity?: string;
+
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(30)
