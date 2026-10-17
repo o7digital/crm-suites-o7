@@ -1,0 +1,51 @@
+import { expect, test } from '@playwright/test';
+
+for (const view of ['modal', 'detail']) {
+  test(`manual probability persists when matching the stage and changing stage (${view})`, async ({ page }) => {
+    const stages = [
+      { id: 's1', name: 'Lead', pipelineId: 'p1', position: 1, status: 'OPEN', probability: .55 },
+      { id: 's2', name: 'Qualified', pipelineId: 'p1', position: 2, status: 'OPEN', probability: .8 },
+    ];
+    let deal = { id: 'd1', title: 'Manual probability', value: 1000, currency: 'USD', pipelineId: 'p1', stageId: 's1', status: 'OPEN', probability: null as number | null, stage: stages[0] };
+    const mutations: Record<string, unknown>[] = [];
+    await page.addInitScript(() => {
+      localStorage.setItem('localAuthSession', 'true');
+      localStorage.setItem('token', 'test');
+      localStorage.setItem('user', JSON.stringify({ id: 'u1', tenantId: 't1', role: 'OWNER', email: 'test@example.test' }));
+      localStorage.setItem('o7_language', 'en');
+    });
+    await page.route('**/api/**', async route => {
+      const path = new URL(route.request().url()).pathname.replace(/^\/api/, '');
+      let data: unknown = [];
+      if (path === '/auth/me') data = { user: { userId: 'u1', tenantId: 't1' } };
+      else if (path === '/admin/context') data = { role: 'OWNER' };
+      else if (path === '/tenant/settings') data = { settings: { crmMode: 'B2B', crmDisplayCurrency: 'USD' } };
+      else if (path === '/tenant/branding') data = { branding: {} };
+      else if (path === '/pipelines') data = [{ id: 'p1', name: 'Sales', isDefault: true }];
+      else if (path === '/stages') data = stages;
+      else if (path === '/deals') data = [deal];
+      else if (path === '/deals/d1') {
+        if (route.request().method() === 'PATCH') {
+          const body = route.request().postDataJSON();
+          mutations.push(body);
+          deal = { ...deal, ...body, stage: stages.find(s => s.id === body.stageId) || deal.stage };
+        }
+        data = deal;
+      }
+      await route.fulfill({ json: data });
+    });
+    await page.goto(view === 'modal' ? '/crm?pipelineId=p1&dealId=d1' : '/crm/deal/d1');
+    const probability = page.getByRole('spinbutton', { name: /^Probability/ });
+    await expect(probability).toHaveValue('55');
+    await probability.fill('70');
+    await probability.fill('55');
+    await page.getByRole('combobox', { name: 'Stage', exact: true }).selectOption('s2');
+    await expect(probability).toHaveValue('55');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => mutations.length).toBe(1);
+    expect(mutations[0].probability).toBe(.55);
+    await page.reload();
+    if (view === 'modal') await page.goto('/crm?pipelineId=p1&dealId=d1');
+    await expect(probability).toHaveValue('55');
+  });
+}

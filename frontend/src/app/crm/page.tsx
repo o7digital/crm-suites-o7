@@ -1201,9 +1201,7 @@ export default function CrmPage() {
         throw new Error('Select an open stage in the destination pipeline');
       }
       const probability =
-        probabilityPct === parseProbabilityPct(selectedStageProbabilityPct)
-          ? null
-          : probabilityPct / 100;
+        form.probabilityOverridesStage ? probabilityPct / 100 : null;
 
       if (editingDeal) {
         const pipelineChanged = targetPipelineId !== editingDeal.pipelineId;
@@ -3419,12 +3417,6 @@ export default function CrmPage() {
 
                 <label className="block text-sm text-slate-300">
                   {t('crm.probability')}
-                  <div>
-                  {editingDeal && <DealActivityHistory dealId={editingDeal.id} />}
-                  <label className="text-sm text-slate-300">{phase1.nextAction}</label>
-                  <input type="date" value={form.nextActionAt} onChange={e => setForm(prev => ({ ...prev, nextActionAt: e.target.value }))} className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm ring-1 ring-white/10" />
-                  {editingDeal && <p className="mt-2 text-xs text-slate-400">{phase1.lastActivity}: {editingDeal.lastActivityAt ? new Date(editingDeal.lastActivityAt).toLocaleString() : '—'}</p>}
-                </div>
                 <div className="relative mt-2">
                     <input
                       type="number"
@@ -3434,15 +3426,10 @@ export default function CrmPage() {
                       value={form.probabilityPct}
                       onChange={(e) => {
                         const nextValue = e.target.value;
-                        const nextProbabilityPct = parseProbabilityPct(nextValue);
-                        const stageProbabilityPct = parseProbabilityPct(selectedStageProbabilityPct);
                         setForm((prev) => ({
                           ...prev,
                           probabilityPct: nextValue,
-                          probabilityOverridesStage:
-                            nextProbabilityPct === null || stageProbabilityPct === null
-                              ? true
-                              : nextProbabilityPct !== stageProbabilityPct,
+                          probabilityOverridesStage: true,
                         }));
                       }}
                     />
@@ -3451,6 +3438,13 @@ export default function CrmPage() {
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500">{t('crm.probabilityHint')}</p>
+                </label>
+
+                {editingDeal && <DealActivityHistory dealId={editingDeal.id} />}
+                <label className="block text-sm text-slate-300">
+                  {phase1.nextAction}
+                  <input type="date" value={form.nextActionAt} onChange={e => setForm(prev => ({ ...prev, nextActionAt: e.target.value }))} className="mt-2 w-full rounded-lg bg-white/5 px-3 py-2 text-sm ring-1 ring-white/10" />
+                  {editingDeal && <p className="mt-2 text-xs text-slate-400">{phase1.lastActivity}: {editingDeal.lastActivityAt ? new Date(editingDeal.lastActivityAt).toLocaleString() : '—'}</p>}
                 </label>
 
                 <label className="block text-sm text-slate-300">
