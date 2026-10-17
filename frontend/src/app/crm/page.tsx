@@ -306,6 +306,11 @@ function parseProbabilityPct(value: string) {
   return parsed;
 }
 
+function getEffectiveDealProbability(deal: Deal, stage?: Stage) {
+  const raw = Number(deal.probability ?? stage?.probability ?? deal.stage?.probability ?? 0);
+  return Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0;
+}
+
 function formatDealsTotalInCurrency(
   deals: Deal[],
   displayCurrency: DealCurrency,
@@ -852,7 +857,8 @@ export default function CrmPage() {
         const currency = (deal.currency || 'USD').toUpperCase();
         const value = Number(deal.value);
         if (!Number.isFinite(value)) return acc;
-        acc[currency] = (acc[currency] || 0) + value;
+        const probability = getEffectiveDealProbability(deal, stages.find((stage) => stage.id === deal.stageId));
+        acc[currency] = (acc[currency] || 0) + value * probability;
         return acc;
       }, {});
       const entries = Object.entries(totalsByCurrency);
@@ -871,7 +877,7 @@ export default function CrmPage() {
       })();
       return { month, deals: dealsInMonth, totalLabel };
     });
-  }, [crmDisplayCurrency, forecastMonthOrder, forecastPipelineDeals, forecastYear, fx, fxLoading]);
+  }, [crmDisplayCurrency, forecastMonthOrder, forecastPipelineDeals, forecastYear, fx, fxLoading, stages]);
 
   const forecastUndatedDeals = useMemo(() => {
     return forecastPipelineDeals.filter((deal) => !toDateInputValue(deal.expectedCloseDate));
@@ -2492,6 +2498,7 @@ export default function CrmPage() {
                   return (
                     <div
                       key={`${forecastYear}-${month}`}
+                      data-testid={`forecast-month-${month + 1}`}
                       className="w-[260px] rounded-xl border border-white/10 bg-white/5 p-3"
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={(event) => {
@@ -2503,7 +2510,7 @@ export default function CrmPage() {
                     >
                       <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{label}</p>
                       <p className="mt-1 text-sm text-slate-300">Deals: {monthDeals.length}</p>
-                      <p className="text-sm text-amber-200">Total: {totalLabel}</p>
+                      <p className="text-sm text-amber-200">{t('forecast.weightedTotal')}: {totalLabel}</p>
                       <div className="mt-3 space-y-2">
                         {monthDeals.map((deal) => (
                           <button
@@ -2521,6 +2528,9 @@ export default function CrmPage() {
                             <p className="mt-1 text-xs text-slate-400">{deal.client ? getClientDisplayName(deal.client) : 'No client'}</p>
                             <p className="mt-1 text-xs text-slate-300">
                               {deal.currency} {Number(deal.value || 0).toLocaleString()}
+                            </p>
+                            <p className="mt-1 text-xs text-amber-200">
+                              {t('forecast.table.weighted')}: {formatCurrencyTotal(Number(deal.value || 0) * getEffectiveDealProbability(deal, stages.find((stage) => stage.id === deal.stageId)), deal.currency)} · {toProbabilityPct(getEffectiveDealProbability(deal, stages.find((stage) => stage.id === deal.stageId)))}%
                             </p>
                           </button>
                         ))}
@@ -3933,19 +3943,11 @@ function StageColumn({
     effectiveStatus === 'WON' && isOperationsLikeStage(stage.name)
       ? 'Operaciones'
       : t(`stageStatus.${effectiveStatus}`);
-  const getEffectiveDealProbability = (deal: Deal) => {
-    const raw = Number(deal.probability ?? stage.probability ?? 0);
-    if (!Number.isFinite(raw)) return 0;
-    if (raw < 0) return 0;
-    if (raw > 1) return 1;
-    return raw;
-  };
-
   const totals = deals.reduce<Record<string, number>>((acc, deal) => {
     const currency = (deal.currency || 'USD').toUpperCase();
     const value = Number(deal.value);
     if (!Number.isFinite(value)) return acc;
-    const weightedValue = value * getEffectiveDealProbability(deal);
+    const weightedValue = value * getEffectiveDealProbability(deal, stage);
     acc[currency] = (acc[currency] || 0) + weightedValue;
     return acc;
   }, {});
