@@ -1583,8 +1583,24 @@ export default function CrmPage() {
       if (announce) showClosingUndo(deal, merged, status);
       return merged;
     } catch (err) {
-      setDeals((prev) => prev.map((item) => (item.id === deal.id ? deal : item)));
       const message = err instanceof Error ? err.message : `Unable to mark ${status}`;
+      if (message.includes('[409]')) {
+        try {
+          const fresh = await api<Deal>(`/deals/${deal.id}`);
+          setDeals((prev) => prev.map((item) => item.id === deal.id ? fresh : item));
+          if ((fresh.status ?? getEffectiveStageStatus(fresh.stage || targetStage)) === 'OPEN') {
+            setClosingDraft((prev) => prev?.deal.id === deal.id ? { ...prev, deal: fresh } : makeClosingDraft(fresh, status));
+            setError(phase1.closeConflict);
+          } else {
+            setClosingDraft(null);
+            setError(phase1.alreadyClosed);
+          }
+          return null;
+        } catch {
+          // Preserve the form and rollback if refreshing the deal also fails.
+        }
+      }
+      setDeals((prev) => prev.map((item) => (item.id === deal.id ? deal : item)));
       setError(message);
       return null;
     } finally {
@@ -1601,7 +1617,18 @@ export default function CrmPage() {
     setStatusDropHover(null);
 
     if (status === 'LOST') {
-      setClosingDraft(makeClosingDraft(deal, status));
+      try {
+        const fresh = await api<Deal>(`/deals/${deal.id}`);
+        setDeals((prev) => prev.map((item) => item.id === deal.id ? fresh : item));
+        if ((fresh.status ?? 'OPEN') !== 'OPEN') {
+          setError(phase1.alreadyClosed);
+          return;
+        }
+        setError(null);
+        setClosingDraft(makeClosingDraft(fresh, status));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to refresh deal');
+      }
       return;
     }
 
@@ -1732,11 +1759,11 @@ export default function CrmPage() {
     const nextIso = `${forecastYear}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
     try {
-      await api<Deal>(`/deals/${dealId}`, {
+      const updated = await api<Deal>(`/deals/${dealId}`, {
         method: 'PATCH',
         body: JSON.stringify({ expectedCloseDate: nextIso }),
       });
-      setDeals((prev) => prev.map((deal) => (deal.id === dealId ? { ...deal, expectedCloseDate: nextIso } : deal)));
+      setDeals((prev) => prev.map((deal) => (deal.id === dealId ? { ...deal, ...updated } : deal)));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to move lead to forecast month';
       setError(message);

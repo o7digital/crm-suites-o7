@@ -67,6 +67,7 @@ async function mock(page: Page, failClose = false, sessionUser = user) {
       data = [{ id: "p1", name: "New Sales", isDefault: true }];
     else if (path === "/stages") data = stages;
     else if (path === "/deals") data = [deal];
+    else if (path === "/deals/d1") data = deal;
     else if (
       path === "/clients" ||
       path === "/products" ||
@@ -576,3 +577,68 @@ for (const scenario of [
     await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim())).toBe(scenario.accent);
   });
 }
+
+test('LOST refreshes the version and preserves the reason after a concurrent update', async ({ page }) => {
+  await mock(page);
+  let version = '2026-10-17T21:03:07.963Z';
+  const attempts: Record<string, unknown>[] = [];
+  await page.route('**/api/deals/d1', route => route.fulfill({ json: {
+    id: 'd1', title: 'Phase 1 opportunity', value: 5000, currency: 'USD', clientId: 'c1',
+    status: 'OPEN', stageId: 'open', pipelineId: 'p1', stage: stages[0], updatedAt: version,
+  } }));
+  await page.route('**/api/deals/d1/close', async route => {
+    attempts.push(route.request().postDataJSON());
+    if (attempts.length === 1) {
+      version = '2026-10-17T21:04:00.000Z';
+      await route.fulfill({ status: 409, json: { message: 'Deal changed. Refresh and try again.' } });
+    } else await route.fallback();
+  });
+  await page.goto('/crm');
+  await drop(page, 'LOST');
+  await page.getByTestId('loss-reason').selectOption('competitor');
+  await page.locator('textarea').fill('Keep this comment');
+  await page.getByTestId('confirm-close').click();
+  await expect(page.getByText('The deal was refreshed. Review the details and confirm again.').first()).toBeVisible();
+  expect(attempts[0].expectedUpdatedAt).toBe('2026-10-17T21:03:07.963Z');
+  await expect(page.getByTestId('loss-reason')).toHaveValue('competitor');
+  await expect(page.locator('textarea')).toHaveValue('Keep this comment');
+  await page.getByTestId('confirm-close').click();
+  await expect(page.getByTestId('undo-close')).toBeVisible();
+  expect(attempts[1]).toMatchObject({ expectedUpdatedAt: version, lossReason: 'competitor', lossComment: 'Keep this comment' });
+});
+
+test('LOST refreshes an already closed deal without sending another close', async ({ page }) => {
+  await mock(page);
+  let closeCalls = 0;
+  await page.route('**/api/deals/d1', route => route.fulfill({ json: {
+    id: 'd1', title: 'Phase 1 opportunity', value: 5000, currency: 'USD',
+    status: 'LOST', stageId: 'lost', pipelineId: 'p1', stage: stages[2],
+  } }));
+  await page.route('**/api/deals/d1/close', async route => { closeCalls++; await route.fallback(); });
+  await page.goto('/crm');
+  await drop(page, 'LOST');
+  await expect(page.getByText('This deal is already closed. The board was refreshed.')).toBeVisible();
+  await expect(page.getByTestId('confirm-close')).toHaveCount(0);
+  expect(closeCalls).toBe(0);
+});
+
+test('forecast month moves retain the server version for closing', async ({ page }) => {
+  await mock(page);
+  const version = '2026-10-17T21:05:00.000Z';
+  await page.route('**/api/deals/d1', route => route.fulfill({ json: {
+    id: 'd1', title: 'Phase 1 opportunity', value: 5000, currency: 'USD', clientId: 'c1',
+    status: 'OPEN', stageId: 'open', pipelineId: 'p1', stage: stages[0], updatedAt: version,
+    expectedCloseDate: route.request().postDataJSON().expectedCloseDate,
+  } }));
+  await page.goto('/crm');
+  await page.getByRole('button', { name: 'Forecast', exact: true }).click();
+  const transfer = await page.evaluateHandle(() => new DataTransfer());
+  await transfer.evaluate(dt => dt.setData('text/plain', 'd1'));
+  await page.getByTestId('forecast-month-11').dispatchEvent('drop', { dataTransfer: transfer });
+  await expect(page.getByTestId('forecast-month-11').getByRole('button', { name: /Phase 1 opportunity/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Kanban', exact: true }).click();
+  const closing = page.waitForRequest(req => req.url().endsWith('/deals/d1/close'));
+  await drop(page, 'WON');
+  expect((await closing).postDataJSON().expectedUpdatedAt).toBe(version);
+  await expect(page.getByTestId('undo-close')).toBeVisible();
+});

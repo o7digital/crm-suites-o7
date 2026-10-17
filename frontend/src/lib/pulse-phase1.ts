@@ -24,6 +24,8 @@ export const pulseLabels = {
     history: "Historique",
     configured: "Déjà enregistré · laisser vide pour conserver",
     complete: "Terminée",
+    closeConflict: "Le lead a été actualisé. Vérifiez les informations puis confirmez à nouveau.",
+    alreadyClosed: "Ce lead est déjà clôturé. Le tableau a été actualisé.",
   },
   en: {
     today: "Today",
@@ -50,6 +52,8 @@ export const pulseLabels = {
     history: "History",
     configured: "Already saved · leave blank to keep",
     complete: "Completed",
+    closeConflict: "The deal was refreshed. Review the details and confirm again.",
+    alreadyClosed: "This deal is already closed. The board was refreshed.",
   },
   es: {
     today: "Hoy",
@@ -76,6 +80,8 @@ export const pulseLabels = {
     history: "Historial",
     configured: "Guardado · dejar vacío para conservar",
     complete: "Completada",
+    closeConflict: "El deal se actualizó. Revisa los datos y confirma de nuevo.",
+    alreadyClosed: "Este deal ya está cerrado. Se actualizó el tablero.",
   },
 };
 export function phase1Labels(language: string) {
