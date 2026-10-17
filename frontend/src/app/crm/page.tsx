@@ -363,6 +363,9 @@ export default function CrmPage() {
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const proposalRef = useRef<HTMLInputElement | null>(null);
   const [crmDisplayCurrency, setCrmDisplayCurrency] = useState<DealCurrency>('MXN');
+  const currencyPreferenceKey = user?.id && user?.tenantId
+    ? `o7_crm_display_currency:${user.tenantId}:${user.id}`
+    : null;
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState<string>('');
   const [stages, setStages] = useState<Stage[]>([]);
@@ -622,10 +625,20 @@ export default function CrmPage() {
   useEffect(() => {
     if (!token) return;
     let active = true;
+    const readPreference = () => {
+      try {
+        const saved = currencyPreferenceKey ? localStorage.getItem(currencyPreferenceKey) : null;
+        return DEAL_CURRENCIES.includes(saved as DealCurrency) ? saved as DealCurrency : null;
+      } catch {
+        return null;
+      }
+    };
+    const savedCurrency = readPreference();
+    setCrmDisplayCurrency(savedCurrency ?? 'MXN');
     api<{ settings: TenantSettings }>('/tenant/settings', { method: 'GET' })
       .then((result) => {
         if (!active) return;
-        const rawCurrency = String(result.settings?.crmDisplayCurrency || 'MXN').toUpperCase();
+        const rawCurrency = readPreference() ?? String(result.settings?.crmDisplayCurrency || 'MXN').toUpperCase();
         setCrmDisplayCurrency(
           DEAL_CURRENCIES.includes(rawCurrency as DealCurrency) ? (rawCurrency as DealCurrency) : 'MXN',
         );
@@ -634,7 +647,7 @@ export default function CrmPage() {
         // Currency settings do not block the board.
       });
     return () => { active = false; };
-  }, [api, token]);
+  }, [api, token, currencyPreferenceKey]);
 
   useEffect(() => {
     if (!token) return;
@@ -2205,7 +2218,15 @@ export default function CrmPage() {
               <select
                 className="btn-secondary text-sm"
                 value={crmDisplayCurrency}
-                onChange={(e) => setCrmDisplayCurrency(e.target.value as DealCurrency)}
+                onChange={(e) => {
+                  const currency = e.target.value as DealCurrency;
+                  setCrmDisplayCurrency(currency);
+                  try {
+                    if (currencyPreferenceKey) localStorage.setItem(currencyPreferenceKey, currency);
+                  } catch {
+                    // Keep the selector usable when browser storage is unavailable.
+                  }
+                }}
                 title={t('field.currency')}
               >
                 {DEAL_CURRENCIES.map((cur) => (
