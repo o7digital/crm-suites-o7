@@ -2,7 +2,6 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
-  HttpException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -151,13 +150,8 @@ export class PulseActionsService {
           syncTaskChange: async () => {},
         } as unknown as GoogleCalendarService);
         const user = ctx.user;
-        const admin = member.role === 'OWNER' || member.role === 'ADMIN';
-        const visible = (c: any) => admin || c.ownerUserId === user.userId;
-        const getContact = async (id: string) => {
-          const c = await clients.findOne(id, user);
-          if (!visible(c)) throw new NotFoundException('Contact not found');
-          return c;
-        };
+        // Use the CRM's existing tenant/owner policy, rather than inventing an ACL.
+        const getContact = (id: string) => clients.findOne(id, user);
         const getDeal = async (id: string) =>
           dealView(await deals.findOne(id, user));
         const checkStage = async (pipelineId: string, stageId: string) => {
@@ -197,7 +191,7 @@ export class PulseActionsService {
               code: 'CONTACT_MATCH_REQUIRES_CHOICE',
               message:
                 'A matching contact exists. Ask the user to choose an existing ID; no records were created.',
-              candidates: matches.filter(visible).map(contactView),
+              candidates: matches.map(contactView),
             });
           return clients.create(
             { ...data, clientStatus: 'PROSPECT', ownerUserId: user.userId },
@@ -278,23 +272,21 @@ export class PulseActionsService {
               .toLocaleLowerCase()
               .normalize('NFD')
               .replace(/[\u0300-\u036f]/g, '');
-            const rows = (await clients.findAll(user))
-              .filter(visible)
-              .filter((c) =>
-                [
-                  c.firstName,
-                  c.name,
-                  [c.firstName, c.name].filter(Boolean).join(' '),
-                  c.email,
-                  c.phone,
-                ].some((v) =>
-                  v
-                    ?.toLocaleLowerCase()
-                    .normalize('NFD')
-                    .replace(/[\u0300-\u036f]/g, '')
-                    .includes(q),
-                ),
-              );
+            const rows = (await clients.findAll(user)).filter((c) =>
+              [
+                c.firstName,
+                c.name,
+                [c.firstName, c.name].filter(Boolean).join(' '),
+                c.email,
+                c.phone,
+              ].some((v) =>
+                v
+                  ?.toLocaleLowerCase()
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .includes(q),
+              ),
+            );
             result = {
               contacts: rows.slice(0, input.limit).map(contactView),
               total: rows.length,
@@ -320,7 +312,7 @@ export class PulseActionsService {
             if (matches.length)
               throw new ConflictException({
                 code: 'CONTACT_MATCH_REQUIRES_CHOICE',
-                candidates: matches.filter(visible).map(contactView),
+                candidates: matches.map(contactView),
               });
             result = contactView(
               await clients.update(input.clientId, input.changes, user),
@@ -348,6 +340,33 @@ export class PulseActionsService {
                   };
                 }),
               ),
+            };
+            break;
+          }
+          case 'pulse_search_opportunities': {
+            if (input.clientId) await getContact(input.clientId);
+            if (input.pipelineId)
+              await pipelines.findOne(input.pipelineId, user);
+            const q = input.query
+              ?.toLocaleLowerCase()
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '');
+            const rows = (await deals.findAll(input.pipelineId, user))
+              .map(dealView)
+              .filter(
+                (d) =>
+                  (!input.clientId || d.clientId === input.clientId) &&
+                  (!q ||
+                    d.title
+                      .toLocaleLowerCase()
+                      .normalize('NFD')
+                      .replace(/[\u0300-\u036f]/g, '')
+                      .includes(q)),
+              );
+            result = {
+              opportunities: rows.slice(0, input.limit),
+              total: rows.length,
+              requiresChoice: rows.length > 1,
             };
             break;
           }
@@ -391,30 +410,10 @@ export class PulseActionsService {
             break;
           case 'pulse_tasks': {
             if (input.clientId) await getContact(input.clientId);
-            // Validate linked opportunity permissions independently: the normal list
-            // service includes relations but doesn't filter owner access.
-            const allowed: any[] = [];
-            for (const t of await tasks.findAll(user, input.clientId)) {
-              if (
-                !admin &&
-                (t.assigneeId !== user.userId || !visible(t.client))
-              )
-                continue;
-              if (t.opportunityId) {
-                try {
-                  await getDeal(t.opportunityId);
-                } catch (e) {
-                  if (e instanceof HttpException && e.getStatus() === 404)
-                    continue;
-                  throw e;
-                }
-              }
-              allowed.push(taskView(t));
-            }
-            result = {
-              tasks: allowed.slice(0, input.limit),
-              total: allowed.length,
-            };
+            const rows = (await tasks.findAll(user, input.clientId)).map(
+              taskView,
+            );
+            result = { tasks: rows.slice(0, input.limit), total: rows.length };
             break;
           }
           case 'pulse_create_prospect_opportunity_followup': {

@@ -208,13 +208,13 @@ beforeAll(async () => {
       forbidUnknownValues: false,
     }),
   );
-  await app.init();
+  await app.listen(0, '127.0.0.1');
   db = app.get(PrismaService);
   oauth = app.get(PulseOAuthService);
   actions = app.get(PulseActionsService);
   a = await fixture('A');
   b = await fixture('B');
-});
+}, 120_000);
 afterAll(async () => {
   await app?.close();
 });
@@ -279,7 +279,7 @@ test('OAuth consent, PKCE, code replay, hashing, MCP initialize/list and read/wr
     .set('Accept', 'application/json, text/event-stream')
     .send({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} })
     .expect(200);
-  expect(listed.body.result.tools).toHaveLength(13);
+  expect(listed.body.result.tools).toHaveLength(14);
   expect(
     listed.body.result.tools.find((t: any) => t.name === 'pulse_create_contact')
       .annotations.readOnlyHint,
@@ -403,6 +403,14 @@ test('atomic real prospect + 50,000 MXN Deal + follow-up, concurrent retry, UI A
   );
   expect(changed.isError).toBe(true);
   expect(JSON.parse(changed.content[0].text).status).toBe(409);
+  const found: any = await actions.execute(
+    'pulse_search_opportunities',
+    { clientId: result.client.id },
+    t.ctx,
+  );
+  expect(found.result.opportunities.map((d: any) => d.id)).toContain(
+    result.opportunity.id,
+  );
   a.created = result;
   a.createdInput = input;
 });
@@ -496,13 +504,30 @@ test('cross-tenant and member ownership restrictions; spoofed selectors and task
   const ownerClient = await db.client.create({
     data: {
       tenantId: a.tenant.id,
-      name: 'Owner confidential',
+      name: 'Shared workspace contact',
       ownerUserId: a.owner.id,
     },
   });
-  await expect(
-    actions.execute('pulse_get_contact', { clientId: ownerClient.id }, ta.ctx),
-  ).rejects.toThrow('not found');
+  const shared: any = await actions.execute(
+    'pulse_get_contact',
+    { clientId: ownerClient.id },
+    ta.ctx,
+  );
+  expect(shared.result.id).toBe(
+    (await new ClientsService(db).findOne(ownerClient.id, a.user)).id,
+  );
+  const sharedTask = await db.task.create({
+    data: {
+      tenantId: a.tenant.id,
+      clientId: ownerClient.id,
+      title: 'Shared CRM task',
+      assigneeId: a.owner.id,
+    },
+  });
+  const sharedList: any = await actions.execute('pulse_tasks', {}, ta.ctx);
+  expect(sharedList.result.tasks.some((t: any) => t.id === sharedTask.id)).toBe(
+    true,
+  );
   const ownerDeal = await db.deal.create({
     data: {
       tenantId: a.tenant.id,

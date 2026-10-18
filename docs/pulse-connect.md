@@ -1,6 +1,6 @@
 # Pulse Connect — livraison MCP / OAuth individuel
 
-Version préparée le 17 octobre 2026, dans le worktree `crm-pulse-chatgpt`, branche `feature/chatgpt-mcp-oauth`. La production n'a pas été modifiée. Ce document décrit une version avec écritures réelles sur PostgreSQL et un parcours navigateur testé, pas une connexion déjà installée chez Eduardo.
+Version préparée le 17 octobre 2026, dans le worktree `crm-pulse-chatgpt`, branche `feature/chatgpt-mcp-oauth`. La branche de livraison repose sur le SHA exact de l'API de production ; les quatre commits frontend de dev non liés à ce chantier ont été laissés hors de la livraison. La production n'a pas été modifiée. Ce document décrit une version avec écritures réelles sur PostgreSQL et un parcours navigateur testé, pas une connexion déjà installée chez Eduardo.
 
 ## Audit de l'existant
 
@@ -26,7 +26,7 @@ Les scopes sont `pulse:read`, `pulse:write` et `offline_access`. Le consentement
 | `pulse_search_contacts`, `pulse_get_contact` | recherche et lecture de Client/PROSPECT |
 | `pulse_create_contact`, `pulse_update_contact` | création PROSPECT et modification de coordonnées |
 | `pulse_pipelines` | pipelines et étapes du workspace |
-| `pulse_get_opportunity` | lecture d'un Deal autorisé |
+| `pulse_search_opportunities`, `pulse_get_opportunity` | recherche et lecture d'un Deal autorisé |
 | `pulse_create_opportunity`, `pulse_update_opportunity` | création et modification de Deal |
 | `pulse_move_opportunity` | déplacement vers une étape OPEN du même pipeline |
 | `pulse_create_task`, `pulse_tasks` | création et consultation des tâches/relances |
@@ -44,7 +44,7 @@ L'audit `PulseActionReceipt` conserve l'acteur, le workspace, la connexion, l'ac
 
 ### Périmètre des droits
 
-Les services existants restreignent les Deals des membres à leur propriétaire ; cette règle est conservée. Les administrateurs OWNER/ADMIN peuvent travailler dans leur workspace. Les contacts et la page de tâches historiques sont plus largement partagés dans le CRM : le connecteur applique volontairement une restriction supplémentaire aux membres (contacts leur appartenant, tâches leur étant assignées et relations visibles). Il n'élargit aucun droit du CRM et ne change pas les écrans existants. Cette différence conservatrice est à prendre en compte pour les anciens contacts sans propriétaire : un administrateur doit les assigner avant qu'un membre les pilote via ChatGPT. Eduardo est OWNER dans Zevi et n'est pas concerné par cette limite.
+Les contrôles reprennent les services métier existants : les Deals des membres sont limités à leur propriétaire, tandis que les contacts et les tâches sont partagés au sein du workspace dans le CRM actuel. Les relations d'une nouvelle tâche avec un Deal conservent le contrôle du propriétaire appliqué par TasksService. Les OWNER/ADMIN travaillent dans leur workspace. Aucun outil n'accepte un tenantId/userId/ownerId externe pour changer ce périmètre ; les créations sont attribuées à l'utilisateur connecté. Aucune permission nouvelle ni restriction arbitraire n'est introduite sur les fiches historiques. Les tests comparent aussi la visibilité des contacts partagés avec ClientsService.
 
 Les annotations MCP distinguent lecture et écriture ; le serveur ne désactive pas les confirmations ChatGPT. Le scope d'écriture autorise une capacité, pas une demande de contourner la confirmation de l'hôte.
 
