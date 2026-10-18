@@ -460,6 +460,7 @@ export default function CrmPage() {
     afterStageId: '',
   });
   const [workflowSaving, setWorkflowSaving] = useState(false);
+  const [workflowDeletePending, setWorkflowDeletePending] = useState(false);
   const [workflowAddingStage, setWorkflowAddingStage] = useState(false);
   const [workflowAddStageAttempted, setWorkflowAddStageAttempted] = useState(false);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
@@ -500,6 +501,8 @@ export default function CrmPage() {
     setWorkflowStageDropTarget(null);
   };
   const closeWorkflowModal = () => {
+    if (workflowSaving) return;
+    setWorkflowDeletePending(false);
     setShowWorkflowModal(false);
     setWorkflowError(null);
     setWorkflowInfo(null);
@@ -981,6 +984,7 @@ export default function CrmPage() {
       openNewWorkflowEditor();
       return;
     }
+    setWorkflowDeletePending(false);
     setWorkflowMode('edit');
     setWorkflowEditingPipelineId(pipelineId);
     setWorkflowPipelineName(selectedPipeline?.name || '');
@@ -991,6 +995,7 @@ export default function CrmPage() {
   };
 
   const openNewWorkflowEditor = () => {
+    setWorkflowDeletePending(false);
     setWorkflowMode('create');
     setWorkflowEditingPipelineId('');
     setWorkflowPipelineName('');
@@ -2155,13 +2160,7 @@ export default function CrmPage() {
   };
 
   const handleDeleteWorkflow = async () => {
-    if (workflowIsCreateMode || !workflowTargetPipelineId) return;
-    const confirmed =
-      typeof window === 'undefined'
-        ? true
-        : window.confirm(`Delete workflow "${workflowPipelineName || selectedPipeline?.name || ''}"?`);
-    if (!confirmed) return;
-
+    if (workflowIsCreateMode || !workflowTargetPipelineId || !workflowDeletePending || workflowSaving) return;
     setWorkflowSaving(true);
     setWorkflowError(null);
     setWorkflowInfo(null);
@@ -2188,7 +2187,8 @@ export default function CrmPage() {
         setHighlightStageId(null);
       }
 
-      closeWorkflowModal();
+      setWorkflowDeletePending(false);
+      setShowWorkflowModal(false);
       router.replace(nextPipeline ? `/crm?pipelineId=${nextPipeline.id}` : '/crm');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to delete workflow';
@@ -3201,17 +3201,27 @@ export default function CrmPage() {
                 </div>
 
                 {workflowInfo ? <p className="text-sm text-emerald-200">{workflowInfo}</p> : null}
-                {workflowError ? <p className="text-sm text-red-200">{workflowError}</p> : null}
               </div>
 
-              <div className="mt-6 flex items-center justify-between gap-2">
+              {workflowError ? <p role="alert" className="mt-4 shrink-0 text-sm text-red-200">{workflowError}</p> : null}
+              {workflowDeletePending ? (
+                <div role="alertdialog" aria-labelledby="workflow-delete-title" aria-describedby="workflow-delete-warning" className="mt-4 shrink-0 rounded-lg border border-red-400/30 bg-red-500/10 p-4">
+                  <p id="workflow-delete-title" className="font-semibold">{t('crm.deleteWorkflow')} — {pipelines.find((pipeline) => pipeline.id === workflowTargetPipelineId)?.name}</p>
+                  <p id="workflow-delete-warning" className="mt-2 text-sm">{t('crm.deleteWorkflowWarning')}</p>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <button autoFocus type="button" className="btn-secondary" disabled={workflowSaving} onClick={() => setWorkflowDeletePending(false)}>{t('common.cancel')}</button>
+                    <button type="button" className="rounded-lg border border-red-400/30 bg-red-500/20 px-4 py-2 text-sm font-semibold text-red-100 disabled:opacity-60" disabled={workflowSaving} onClick={handleDeleteWorkflow}>{workflowSaving ? t('common.saving') : t('common.delete')}</button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="mt-6 flex shrink-0 items-center justify-between gap-2">
                 <div>
                   {!workflowIsCreateMode ? (
                     <button
                       className="rounded-lg border border-red-400/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                       type="button"
-                      onClick={handleDeleteWorkflow}
-                      disabled={workflowSaving || workflowAddingStage}
+                      onClick={() => { setWorkflowDeletePending(true); setWorkflowError(null); }}
+                      disabled={workflowSaving || workflowAddingStage || workflowDeletePending}
                     >
                       {t('crm.deleteWorkflow')}
                     </button>
@@ -3229,7 +3239,7 @@ export default function CrmPage() {
                   className="btn-primary"
                   type="button"
                   onClick={handleSaveWorkflow}
-                  disabled={workflowSaving || workflowAddingStage}
+                  disabled={workflowSaving || workflowAddingStage || workflowDeletePending}
                 >
                   {workflowSaving ? t('common.saving') : t('common.save')}
                 </button>
