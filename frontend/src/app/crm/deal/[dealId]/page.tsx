@@ -211,9 +211,7 @@ export default function DealPage() {
       const nextProbabilityPct = parseProbabilityPct(form.probabilityPct);
       if (nextProbabilityPct === null) throw new Error('Probability must be between 0 and 100');
       const nextProbability =
-        nextProbabilityPct === parseProbabilityPct(selectedStageProbabilityPct)
-          ? null
-          : nextProbabilityPct / 100;
+        form.probabilityOverridesStage ? nextProbabilityPct / 100 : null;
 
       const updated = await api<Deal>(`/deals/${dealId}`, {
         method: 'PATCH',
@@ -248,11 +246,11 @@ export default function DealPage() {
     form.clientId,
     form.currency,
     form.expectedCloseDate,
+    form.probabilityOverridesStage,
     form.probabilityPct,
     form.stageId,
     form.title,
     form.value,
-    selectedStageProbabilityPct,
   ]);
 
   const handleDuplicate = useCallback(async () => {
@@ -408,15 +406,10 @@ export default function DealPage() {
                       value={form.probabilityPct}
                       onChange={(e) => {
                         const nextValue = e.target.value;
-                        const nextProbabilityPct = parseProbabilityPct(nextValue);
-                        const stageProbabilityPct = parseProbabilityPct(selectedStageProbabilityPct);
                         setForm((prev) => ({
                           ...prev,
                           probabilityPct: nextValue,
-                          probabilityOverridesStage:
-                            nextProbabilityPct === null || stageProbabilityPct === null
-                              ? true
-                              : nextProbabilityPct !== stageProbabilityPct,
+                          probabilityOverridesStage: true,
                         }));
                       }}
                     />

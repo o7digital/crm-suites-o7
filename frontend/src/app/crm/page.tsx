@@ -306,6 +306,11 @@ function parseProbabilityPct(value: string) {
   return parsed;
 }
 
+function getEffectiveDealProbability(deal: Deal, stage?: Stage) {
+  const raw = Number(deal.probability ?? stage?.probability ?? deal.stage?.probability ?? 0);
+  return Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0;
+}
+
 function formatDealsTotalInCurrency(
   deals: Deal[],
   displayCurrency: DealCurrency,
@@ -358,6 +363,9 @@ export default function CrmPage() {
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const proposalRef = useRef<HTMLInputElement | null>(null);
   const [crmDisplayCurrency, setCrmDisplayCurrency] = useState<DealCurrency>('MXN');
+  const currencyPreferenceKey = user?.id && user?.tenantId
+    ? `o7_crm_display_currency:${user.tenantId}:${user.id}`
+    : null;
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [pipelineId, setPipelineId] = useState<string>('');
   const [stages, setStages] = useState<Stage[]>([]);
@@ -452,6 +460,7 @@ export default function CrmPage() {
     afterStageId: '',
   });
   const [workflowSaving, setWorkflowSaving] = useState(false);
+  const [workflowDeletePending, setWorkflowDeletePending] = useState(false);
   const [workflowAddingStage, setWorkflowAddingStage] = useState(false);
   const [workflowAddStageAttempted, setWorkflowAddStageAttempted] = useState(false);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
@@ -492,6 +501,8 @@ export default function CrmPage() {
     setWorkflowStageDropTarget(null);
   };
   const closeWorkflowModal = () => {
+    if (workflowSaving) return;
+    setWorkflowDeletePending(false);
     setShowWorkflowModal(false);
     setWorkflowError(null);
     setWorkflowInfo(null);
@@ -617,10 +628,20 @@ export default function CrmPage() {
   useEffect(() => {
     if (!token) return;
     let active = true;
+    const readPreference = () => {
+      try {
+        const saved = currencyPreferenceKey ? localStorage.getItem(currencyPreferenceKey) : null;
+        return DEAL_CURRENCIES.includes(saved as DealCurrency) ? saved as DealCurrency : null;
+      } catch {
+        return null;
+      }
+    };
+    const savedCurrency = readPreference();
+    setCrmDisplayCurrency(savedCurrency ?? 'MXN');
     api<{ settings: TenantSettings }>('/tenant/settings', { method: 'GET' })
       .then((result) => {
         if (!active) return;
-        const rawCurrency = String(result.settings?.crmDisplayCurrency || 'MXN').toUpperCase();
+        const rawCurrency = readPreference() ?? String(result.settings?.crmDisplayCurrency || 'MXN').toUpperCase();
         setCrmDisplayCurrency(
           DEAL_CURRENCIES.includes(rawCurrency as DealCurrency) ? (rawCurrency as DealCurrency) : 'MXN',
         );
@@ -629,7 +650,7 @@ export default function CrmPage() {
         // Currency settings do not block the board.
       });
     return () => { active = false; };
-  }, [api, token]);
+  }, [api, token, currencyPreferenceKey]);
 
   useEffect(() => {
     if (!token) return;
@@ -852,7 +873,8 @@ export default function CrmPage() {
         const currency = (deal.currency || 'USD').toUpperCase();
         const value = Number(deal.value);
         if (!Number.isFinite(value)) return acc;
-        acc[currency] = (acc[currency] || 0) + value;
+        const probability = getEffectiveDealProbability(deal, stages.find((stage) => stage.id === deal.stageId));
+        acc[currency] = (acc[currency] || 0) + value * probability;
         return acc;
       }, {});
       const entries = Object.entries(totalsByCurrency);
@@ -871,7 +893,7 @@ export default function CrmPage() {
       })();
       return { month, deals: dealsInMonth, totalLabel };
     });
-  }, [crmDisplayCurrency, forecastMonthOrder, forecastPipelineDeals, forecastYear, fx, fxLoading]);
+  }, [crmDisplayCurrency, forecastMonthOrder, forecastPipelineDeals, forecastYear, fx, fxLoading, stages]);
 
   const forecastUndatedDeals = useMemo(() => {
     return forecastPipelineDeals.filter((deal) => !toDateInputValue(deal.expectedCloseDate));
@@ -962,6 +984,7 @@ export default function CrmPage() {
       openNewWorkflowEditor();
       return;
     }
+    setWorkflowDeletePending(false);
     setWorkflowMode('edit');
     setWorkflowEditingPipelineId(pipelineId);
     setWorkflowPipelineName(selectedPipeline?.name || '');
@@ -972,6 +995,7 @@ export default function CrmPage() {
   };
 
   const openNewWorkflowEditor = () => {
+    setWorkflowDeletePending(false);
     setWorkflowMode('create');
     setWorkflowEditingPipelineId('');
     setWorkflowPipelineName('');
@@ -1201,9 +1225,7 @@ export default function CrmPage() {
         throw new Error('Select an open stage in the destination pipeline');
       }
       const probability =
-        probabilityPct === parseProbabilityPct(selectedStageProbabilityPct)
-          ? null
-          : probabilityPct / 100;
+        form.probabilityOverridesStage ? probabilityPct / 100 : null;
 
       if (editingDeal) {
         const pipelineChanged = targetPipelineId !== editingDeal.pipelineId;
@@ -1566,8 +1588,24 @@ export default function CrmPage() {
       if (announce) showClosingUndo(deal, merged, status);
       return merged;
     } catch (err) {
-      setDeals((prev) => prev.map((item) => (item.id === deal.id ? deal : item)));
       const message = err instanceof Error ? err.message : `Unable to mark ${status}`;
+      if (message.includes('[409]')) {
+        try {
+          const fresh = await api<Deal>(`/deals/${deal.id}`);
+          setDeals((prev) => prev.map((item) => item.id === deal.id ? fresh : item));
+          if ((fresh.status ?? getEffectiveStageStatus(fresh.stage || targetStage)) === 'OPEN') {
+            setClosingDraft((prev) => prev?.deal.id === deal.id ? { ...prev, deal: fresh } : makeClosingDraft(fresh, status));
+            setError(phase1.closeConflict);
+          } else {
+            setClosingDraft(null);
+            setError(phase1.alreadyClosed);
+          }
+          return null;
+        } catch {
+          // Preserve the form and rollback if refreshing the deal also fails.
+        }
+      }
+      setDeals((prev) => prev.map((item) => (item.id === deal.id ? deal : item)));
       setError(message);
       return null;
     } finally {
@@ -1584,7 +1622,18 @@ export default function CrmPage() {
     setStatusDropHover(null);
 
     if (status === 'LOST') {
-      setClosingDraft(makeClosingDraft(deal, status));
+      try {
+        const fresh = await api<Deal>(`/deals/${deal.id}`);
+        setDeals((prev) => prev.map((item) => item.id === deal.id ? fresh : item));
+        if ((fresh.status ?? 'OPEN') !== 'OPEN') {
+          setError(phase1.alreadyClosed);
+          return;
+        }
+        setError(null);
+        setClosingDraft(makeClosingDraft(fresh, status));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to refresh deal');
+      }
       return;
     }
 
@@ -1715,11 +1764,11 @@ export default function CrmPage() {
     const nextIso = `${forecastYear}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
     try {
-      await api<Deal>(`/deals/${dealId}`, {
+      const updated = await api<Deal>(`/deals/${dealId}`, {
         method: 'PATCH',
         body: JSON.stringify({ expectedCloseDate: nextIso }),
       });
-      setDeals((prev) => prev.map((deal) => (deal.id === dealId ? { ...deal, expectedCloseDate: nextIso } : deal)));
+      setDeals((prev) => prev.map((deal) => (deal.id === dealId ? { ...deal, ...updated } : deal)));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to move lead to forecast month';
       setError(message);
@@ -2111,13 +2160,7 @@ export default function CrmPage() {
   };
 
   const handleDeleteWorkflow = async () => {
-    if (workflowIsCreateMode || !workflowTargetPipelineId) return;
-    const confirmed =
-      typeof window === 'undefined'
-        ? true
-        : window.confirm(`Delete workflow "${workflowPipelineName || selectedPipeline?.name || ''}"?`);
-    if (!confirmed) return;
-
+    if (workflowIsCreateMode || !workflowTargetPipelineId || !workflowDeletePending || workflowSaving) return;
     setWorkflowSaving(true);
     setWorkflowError(null);
     setWorkflowInfo(null);
@@ -2144,7 +2187,8 @@ export default function CrmPage() {
         setHighlightStageId(null);
       }
 
-      closeWorkflowModal();
+      setWorkflowDeletePending(false);
+      setShowWorkflowModal(false);
       router.replace(nextPipeline ? `/crm?pipelineId=${nextPipeline.id}` : '/crm');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to delete workflow';
@@ -2201,7 +2245,15 @@ export default function CrmPage() {
               <select
                 className="btn-secondary text-sm"
                 value={crmDisplayCurrency}
-                onChange={(e) => setCrmDisplayCurrency(e.target.value as DealCurrency)}
+                onChange={(e) => {
+                  const currency = e.target.value as DealCurrency;
+                  setCrmDisplayCurrency(currency);
+                  try {
+                    if (currencyPreferenceKey) localStorage.setItem(currencyPreferenceKey, currency);
+                  } catch {
+                    // Keep the selector usable when browser storage is unavailable.
+                  }
+                }}
                 title={t('field.currency')}
               >
                 {DEAL_CURRENCIES.map((cur) => (
@@ -2494,6 +2546,7 @@ export default function CrmPage() {
                   return (
                     <div
                       key={`${forecastYear}-${month}`}
+                      data-testid={`forecast-month-${month + 1}`}
                       className="w-[260px] rounded-xl border border-white/10 bg-white/5 p-3"
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={(event) => {
@@ -2505,7 +2558,7 @@ export default function CrmPage() {
                     >
                       <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{label}</p>
                       <p className="mt-1 text-sm text-slate-300">Deals: {monthDeals.length}</p>
-                      <p className="text-sm text-amber-200">Total: {totalLabel}</p>
+                      <p className="text-sm text-amber-200">{t('forecast.weightedTotal')}: {totalLabel}</p>
                       <div className="mt-3 space-y-2">
                         {monthDeals.map((deal) => (
                           <button
@@ -2523,6 +2576,9 @@ export default function CrmPage() {
                             <p className="mt-1 text-xs text-slate-400">{deal.client ? getClientDisplayName(deal.client) : 'No client'}</p>
                             <p className="mt-1 text-xs text-slate-300">
                               {deal.currency} {Number(deal.value || 0).toLocaleString()}
+                            </p>
+                            <p className="mt-1 text-xs text-amber-200">
+                              {t('forecast.table.weighted')}: {formatCurrencyTotal(Number(deal.value || 0) * getEffectiveDealProbability(deal, stages.find((stage) => stage.id === deal.stageId)), deal.currency)} · {toProbabilityPct(getEffectiveDealProbability(deal, stages.find((stage) => stage.id === deal.stageId)))}%
                             </p>
                           </button>
                         ))}
@@ -3145,17 +3201,27 @@ export default function CrmPage() {
                 </div>
 
                 {workflowInfo ? <p className="text-sm text-emerald-200">{workflowInfo}</p> : null}
-                {workflowError ? <p className="text-sm text-red-200">{workflowError}</p> : null}
               </div>
 
-              <div className="mt-6 flex items-center justify-between gap-2">
+              {workflowError ? <p role="alert" className="mt-4 shrink-0 text-sm text-red-200">{workflowError}</p> : null}
+              {workflowDeletePending ? (
+                <div role="alertdialog" aria-labelledby="workflow-delete-title" aria-describedby="workflow-delete-warning" className="mt-4 shrink-0 rounded-lg border border-red-400/30 bg-red-500/10 p-4">
+                  <p id="workflow-delete-title" className="font-semibold">{t('crm.deleteWorkflow')} — {pipelines.find((pipeline) => pipeline.id === workflowTargetPipelineId)?.name}</p>
+                  <p id="workflow-delete-warning" className="mt-2 text-sm">{t('crm.deleteWorkflowWarning')}</p>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <button autoFocus type="button" className="btn-secondary" disabled={workflowSaving} onClick={() => setWorkflowDeletePending(false)}>{t('common.cancel')}</button>
+                    <button type="button" className="rounded-lg border border-red-400/30 bg-red-500/20 px-4 py-2 text-sm font-semibold text-red-100 disabled:opacity-60" disabled={workflowSaving} onClick={handleDeleteWorkflow}>{workflowSaving ? t('common.saving') : t('common.delete')}</button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="mt-6 flex shrink-0 items-center justify-between gap-2">
                 <div>
                   {!workflowIsCreateMode ? (
                     <button
                       className="rounded-lg border border-red-400/20 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                       type="button"
-                      onClick={handleDeleteWorkflow}
-                      disabled={workflowSaving || workflowAddingStage}
+                      onClick={() => { setWorkflowDeletePending(true); setWorkflowError(null); }}
+                      disabled={workflowSaving || workflowAddingStage || workflowDeletePending}
                     >
                       {t('crm.deleteWorkflow')}
                     </button>
@@ -3173,7 +3239,7 @@ export default function CrmPage() {
                   className="btn-primary"
                   type="button"
                   onClick={handleSaveWorkflow}
-                  disabled={workflowSaving || workflowAddingStage}
+                  disabled={workflowSaving || workflowAddingStage || workflowDeletePending}
                 >
                   {workflowSaving ? t('common.saving') : t('common.save')}
                 </button>
@@ -3419,12 +3485,6 @@ export default function CrmPage() {
 
                 <label className="block text-sm text-slate-300">
                   {t('crm.probability')}
-                  <div>
-                  {editingDeal && <DealActivityHistory dealId={editingDeal.id} />}
-                  <label className="text-sm text-slate-300">{phase1.nextAction}</label>
-                  <input type="date" value={form.nextActionAt} onChange={e => setForm(prev => ({ ...prev, nextActionAt: e.target.value }))} className="mt-1 w-full rounded-lg bg-white/5 px-3 py-2 text-sm ring-1 ring-white/10" />
-                  {editingDeal && <p className="mt-2 text-xs text-slate-400">{phase1.lastActivity}: {editingDeal.lastActivityAt ? new Date(editingDeal.lastActivityAt).toLocaleString() : '—'}</p>}
-                </div>
                 <div className="relative mt-2">
                     <input
                       type="number"
@@ -3434,15 +3494,10 @@ export default function CrmPage() {
                       value={form.probabilityPct}
                       onChange={(e) => {
                         const nextValue = e.target.value;
-                        const nextProbabilityPct = parseProbabilityPct(nextValue);
-                        const stageProbabilityPct = parseProbabilityPct(selectedStageProbabilityPct);
                         setForm((prev) => ({
                           ...prev,
                           probabilityPct: nextValue,
-                          probabilityOverridesStage:
-                            nextProbabilityPct === null || stageProbabilityPct === null
-                              ? true
-                              : nextProbabilityPct !== stageProbabilityPct,
+                          probabilityOverridesStage: true,
                         }));
                       }}
                     />
@@ -3451,6 +3506,13 @@ export default function CrmPage() {
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500">{t('crm.probabilityHint')}</p>
+                </label>
+
+                {editingDeal && <DealActivityHistory dealId={editingDeal.id} />}
+                <label className="block text-sm text-slate-300">
+                  {phase1.nextAction}
+                  <input type="date" value={form.nextActionAt} onChange={e => setForm(prev => ({ ...prev, nextActionAt: e.target.value }))} className="mt-2 w-full rounded-lg bg-white/5 px-3 py-2 text-sm ring-1 ring-white/10" />
+                  {editingDeal && <p className="mt-2 text-xs text-slate-400">{phase1.lastActivity}: {editingDeal.lastActivityAt ? new Date(editingDeal.lastActivityAt).toLocaleString() : '—'}</p>}
                 </label>
 
                 <label className="block text-sm text-slate-300">
@@ -3939,19 +4001,11 @@ function StageColumn({
     effectiveStatus === 'WON' && isOperationsLikeStage(stage.name)
       ? 'Operaciones'
       : t(`stageStatus.${effectiveStatus}`);
-  const getEffectiveDealProbability = (deal: Deal) => {
-    const raw = Number(deal.probability ?? stage.probability ?? 0);
-    if (!Number.isFinite(raw)) return 0;
-    if (raw < 0) return 0;
-    if (raw > 1) return 1;
-    return raw;
-  };
-
   const totals = deals.reduce<Record<string, number>>((acc, deal) => {
     const currency = (deal.currency || 'USD').toUpperCase();
     const value = Number(deal.value);
     if (!Number.isFinite(value)) return acc;
-    const weightedValue = value * getEffectiveDealProbability(deal);
+    const weightedValue = value * getEffectiveDealProbability(deal, stage);
     acc[currency] = (acc[currency] || 0) + weightedValue;
     return acc;
   }, {});

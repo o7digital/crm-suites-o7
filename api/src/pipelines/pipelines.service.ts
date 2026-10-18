@@ -62,15 +62,23 @@ export class PipelinesService {
     await requireWorkspaceAdmin(this.prisma, user);
     await this.ensureBelongs(id, user);
 
-    await this.prisma.dealStageHistory.deleteMany({
-      where: {
-        tenantId: user.tenantId,
-        deal: { pipelineId: id },
-      },
+    // Transferred deals can still reference this workflow's stages in their history.
+    // Remove those references before the stages, and roll everything back on failure.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.dealStageHistory.deleteMany({
+        where: {
+          tenantId: user.tenantId,
+          OR: [
+            { deal: { pipelineId: id } },
+            { fromStage: { pipelineId: id } },
+            { toStage: { pipelineId: id } },
+          ],
+        },
+      });
+      await tx.deal.deleteMany({ where: { pipelineId: id, tenantId: user.tenantId } });
+      await tx.stage.deleteMany({ where: { pipelineId: id, tenantId: user.tenantId } });
+      return tx.pipeline.delete({ where: { id } });
     });
-    await this.prisma.deal.deleteMany({ where: { pipelineId: id, tenantId: user.tenantId } });
-    await this.prisma.stage.deleteMany({ where: { pipelineId: id, tenantId: user.tenantId } });
-    return this.prisma.pipeline.delete({ where: { id } });
   }
 
   private async ensureBelongs(id: string, user: RequestUser) {
