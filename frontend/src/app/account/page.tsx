@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { AppShell } from '../../components/AppShell';
 import { Guard } from '../../components/Guard';
 import { useAuth } from '../../contexts/AuthContext';
@@ -36,6 +38,7 @@ export default function AccountPage() {
           <h1 className="text-3xl font-semibold">{t('account.myInformation')}</h1>
         </div>
 
+        <Link href="/connect/pulse" className="btn-secondary mb-4">Conexiones ChatGPT</Link>
         <div className="card p-6">
           <div className="grid gap-4 md:grid-cols-2">
             <div>

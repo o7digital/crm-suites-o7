@@ -6,6 +6,13 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../contexts/I18nContext';
 
+function returnPath() {
+  if (typeof window === 'undefined') return '/';
+  const value = new URLSearchParams(window.location.search).get('returnTo') || '/';
+  // Only the OAuth consent screen is an allowed post-login destination.
+  return /^\/connect\/pulse(?:\?request=[a-f0-9-]{36})?$/.test(value) ? value : '/';
+}
+
 export default function LoginPage() {
   const hasClerk = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
   const { login, token } = useAuth();
@@ -21,7 +28,7 @@ export default function LoginPage() {
       router.replace('/sign-in');
       return;
     }
-    if (token) router.replace('/');
+    if (token) router.replace(returnPath());
   }, [hasClerk, token, router]);
 
   useEffect(() => {
@@ -35,7 +42,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      router.push('/');
+      router.push(returnPath());
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unable to login';
       setError(message);

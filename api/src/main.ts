@@ -1,7 +1,7 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, RequestMethod } from '@nestjs/common';
 import { SchemaUpgraderService } from './prisma/schema-upgrader.service';
 
 async function bootstrap() {
@@ -14,6 +14,7 @@ async function bootstrap() {
     .filter(Boolean);
   const allowlist = new Set<string>([
     'http://localhost:3000',
+    'https://chatgpt.com',
     'https://crm-suites-o7.vercel.app',
     'https://crm.o7digitalgroup.com',
     ...explicitOrigins,
@@ -36,7 +37,11 @@ async function bootstrap() {
     },
     credentials: true,
   });
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', { exclude: [
+    { path: '.well-known/oauth-authorization-server', method: RequestMethod.GET },
+    { path: '.well-known/oauth-protected-resource', method: RequestMethod.GET },
+    { path: '.well-known/oauth-protected-resource/api/mcp', method: RequestMethod.GET },
+  ] });
   // Avoid stale data when routed through CDNs/proxies (Vercel/Railway).
   app.use((_req: any, res: any, next: any) => {
     res.setHeader('Cache-Control', 'no-store');
