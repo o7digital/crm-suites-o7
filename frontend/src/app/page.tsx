@@ -405,7 +405,7 @@ export default function DashboardPage() {
               value={USD.format(weightedPipelineTotal)}
               hint={strongestPipeline ? strongestPipeline.name : 'Sin pipeline activo'}
               tone="violet"
-              bars={activePipelineTotals.slice(0, 8).map((pipeline) => pipeline.weightedOpenValueUsd)}
+              bars={primaryPipelineTotals.map((pipeline) => pipeline.weightedOpenValueUsd)}
             />
           </div>
         )}
@@ -416,10 +416,9 @@ export default function DashboardPage() {
           <div className="mt-4 grid gap-4 lg:grid-cols-12">
             <div className="space-y-4 lg:col-span-9">
               <PipelineTotalsCard
-                totals={activePipelineTotals}
+                totals={primaryPipelineTotals}
                 total={weightedPipelineTotal}
                 hint={pipelineTotalsHint}
-                hiddenCount={primaryPipelineTotals.length - activePipelineTotals.length}
               />
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -485,12 +484,10 @@ function PipelineTotalsCard({
   totals,
   total,
   hint,
-  hiddenCount,
 }: {
   totals: PipelineTotal[];
   total: number;
   hint: string;
-  hiddenCount: number;
 }) {
   const maxValue = Math.max(...totals.map((pipeline) => pipeline.weightedOpenValueUsd), 1);
 
@@ -510,8 +507,8 @@ function PipelineTotalsCard({
       <div className="mt-5 space-y-3">
         {totals.length === 0 ? (
           <EmptyState
-            title="Sin pipelines activos"
-            body="Los pipelines sin valor o sin deals abiertos no se muestran en el resumen principal."
+            title="Sin pipelines"
+            body="Crea un workflow en CRM para verlo aquí."
           />
         ) : (
           totals.map((pipeline) => (
@@ -550,7 +547,6 @@ function PipelineTotalsCard({
       </div>
       <div className="mt-3 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
         <p>{hint}</p>
-        {hiddenCount > 0 ? <p>{hiddenCount} pipelines sin valor ocultos</p> : null}
       </div>
     </div>
   );

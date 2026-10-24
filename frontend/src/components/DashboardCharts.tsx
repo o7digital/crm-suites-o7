@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ChartVisual } from './ReportingCharts';
 import { useI18n } from '../contexts/I18nContext';
-import { compactPoints, type ChartPoint } from '../lib/reporting-charts';
+import { type ChartPoint } from '../lib/reporting-charts';
 
 const labels = {
   en: {title:'Your workspace at a glance', deals:'Opportunities by status', tasks:'Tasks by status', pipelines:'Open opportunities by pipeline', open:'Open', won:'Won', lost:'Lost', pending:'Pending', progress:'In progress', done:'Completed', empty:'No data yet. Charts will appear as your workspace becomes active.', other:'Other', reporting:'Customize charts in Reporting', hint:'Current workspace · all available activity'},
@@ -25,7 +25,7 @@ export function DashboardCharts({ stats, tasks, pipelines }: Props) {
   const cards = [
     { title:l.deals, kind:'pie' as const, points:[point('open',l.open,stats.open.count),point('won',l.won,stats.won.count),point('lost',l.lost,stats.lost.count)] },
     { title:l.tasks, kind:'pie' as const, points:Object.entries(tasks).map(([status,count]) => point(status,statusLabels[status] || status,count)) },
-    { title:l.pipelines, kind:'bar' as const, points:compactPoints(pipelines.map(p => point(p.pipelineId,p.name,p.open)).sort((a,b)=>b.value-a.value),l.other) },
+    { title:l.pipelines, kind:'bar' as const, points:pipelines.map(p => point(p.pipelineId,p.name,p.open)).sort((a,b)=>b.value-a.value) },
   ];
   return <section aria-label={l.title} className="mt-6">
     <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-semibold">{l.title}</h2><p className="mt-1 text-xs text-slate-400">{l.hint}</p></div><Link href="/admin/reporting" className="text-sm text-cyan-300 hover:underline">{l.reporting}</Link></div>
