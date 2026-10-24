@@ -1,5 +1,7 @@
 # Bascule proposée — à valider avant toute production
 
+> Bascule autorisée et réalisée le 23 octobre 2026 sur la version préservant les correctifs récents. État actuel et rollback : [rapport de production](pulse-connect-production-20261023.md). La procédure ci-dessous est historique : ses anciens SHA ne doivent pas être repris pour une nouvelle intervention.
+
 Aucune commande ci-dessous n'a été exécutée en production pendant ce chantier. Mailcow, DNS, proxy, sauvegarde de secours et dispositifs de continuité restent inchangés.
 
 ## Changements précis

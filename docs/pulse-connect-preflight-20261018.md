@@ -1,5 +1,7 @@
 # Précontrôle du déploiement Pulse Connect — 18 octobre 2026
 
+> Suite autorisée le 23 octobre : livraison réalisée avec la variante `dc85052`. Voir [le rapport de production](pulse-connect-production-20261023.md). Les réserves d'autorisation de ce précontrôle sont historiques ; le test ChatGPT reste à terminer après réception de sa callback exacte.
+
 ## Conclusion
 
 Le SHA initialement approuvé est `28a9151a770fe52d2a0ee922e0c17a00c69aa6b3`. Il ne doit pas être déployé tel quel : les deux composants de production ont reçu des correctifs plus récents. Une branche de livraison `release/pulse-connect-preserve-frontend` fusionne ce commit avec la production actuelle `6af760f1fa8447706303bf8b5af2175ae4946130` et conserve intégralement ces correctifs. Cette variante est préparée et testée ; sa bascule reste à confirmer, car son SHA diffère du SHA explicitement validé.

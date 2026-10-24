@@ -1,5 +1,7 @@
 # Résultats Pulse Connect
 
+> Mise à jour du 23 octobre 2026 : API/frontend et migration 0042 livrés. Voir [le rapport de production](pulse-connect-production-20261023.md) pour les versions, les tests rejoués et le blocage callback ChatGPT. Les sections ci-dessous conservent les résultats historiques de validation initiale.
+
 ## État
 
 - Implémenté : serveur MCP distant, 14 outils, OAuth individuel, scopes, consentement/révocation, validation, restrictions, audit et retry transactionnel.

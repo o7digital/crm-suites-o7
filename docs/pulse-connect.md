@@ -1,5 +1,7 @@
 # Pulse Connect — livraison MCP / OAuth individuel
 
+> État actuel au 23 octobre 2026 : déployé sur le VPS et Vercel avec la migration 0042 ; callback et parcours réel ChatGPT encore à valider. Voir [le rapport de production](pulse-connect-production-20261023.md). L'audit ci-dessous décrit la situation initiale du 17 octobre.
+
 Version préparée le 17 octobre 2026, dans le worktree `crm-pulse-chatgpt`, branche `feature/chatgpt-mcp-oauth`. La branche de livraison repose sur le SHA exact de l'API de production ; les quatre commits frontend de dev non liés à ce chantier ont été laissés hors de la livraison. La production n'a pas été modifiée. Ce document décrit une version avec écritures réelles sur PostgreSQL et un parcours navigateur testé, pas une connexion déjà installée chez Eduardo.
 
 ## Audit de l'existant
