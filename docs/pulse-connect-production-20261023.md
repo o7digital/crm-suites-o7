@@ -1,5 +1,7 @@
 # Pulse Connect — livraison en production du 23 octobre 2026
 
+Complément du 24 octobre : [restauration réelle de la sauvegarde, contrôle du schéma et navigateur, étapes ChatGPT restantes](pulse-connect-verification-20261024.md). Le compte de test est maintenant aussi disponible dans le fichier privé `Bureau/Rapports O7/PULSE-CONNECT-COMPTE-TEST-PRIVE.txt`.
+
 Intervention réalisée les 23 octobre (Mexico) / 24 octobre 2026 UTC. Ce rapport remplace l'état de production des rapports initiaux et du précontrôle du 18 octobre.
 
 ## Version et préservation des changements récents
