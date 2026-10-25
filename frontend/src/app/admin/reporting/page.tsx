@@ -7,6 +7,7 @@ import { useApi, useAuth } from '../../../contexts/AuthContext';
 import { getClientDisplayName } from '@/lib/clients';
 import { SalesFollowUpReport } from '@/components/SalesFollowUpReport';
 import { salesClosedDate, salesDealStatus, type SalesDeal } from '@/lib/sales-reporting';
+import { MonthlySalesReport } from '@/components/MonthlySalesReport';
 import { ReportingCharts } from '@/components/ReportingCharts';
 import { useI18n } from '@/contexts/I18nContext';
 import type { ChartRow } from '@/lib/reporting-charts';
@@ -505,6 +506,7 @@ export default function AdminReportingPage() {
 
         {!loading && rangeValid ? (
           <div className="report-print-area space-y-6">
+            <MonthlySalesReport deals={deals} startDate={startDate} endDate={endDate} />
             <ReportingCharts sales={chartSales} tasks={chartTasks} granularity={granularity} startDate={startDate} endDate={endDate} />
             <SalesFollowUpReport deals={deals} tasks={tasks} startDate={startDate} endDate={endDate} />
             <div className="card p-4">

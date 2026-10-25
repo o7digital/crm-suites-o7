@@ -22,6 +22,14 @@ test('customizes charts, preserves account preferences, separates currencies and
     await route.fulfill({ json: data });
   });
   await page.goto('/admin/reporting');
+  const monthly = page.getByRole('region', { name: 'Monthly sales', exact: true });
+  await expect(monthly).toBeVisible();
+  await monthly.getByLabel('Sales currency').selectOption('USD');
+  await expect(monthly.getByRole('row', { name: /USD sale/ })).toContainText('100 USD');
+  await expect(monthly.getByRole('row', { name: /MXN sale/ })).toHaveCount(0);
+  await monthly.getByLabel('Sales currency').selectOption('MXN');
+  await expect(monthly.getByRole('row', { name: /MXN sale/ })).toContainText('900 MXN');
+  await expect(monthly.getByRole('row', { name: /USD sale/ })).toHaveCount(0);
   const charts = page.getByRole('region', { name: 'Your reporting charts' });
   await expect(charts.locator('article')).toHaveCount(3);
   await page.getByLabel('Currency 2', { exact: true }).selectOption('USD');
