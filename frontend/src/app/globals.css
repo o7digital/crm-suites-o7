@@ -255,6 +255,112 @@ a {
   color: color-mix(in srgb, var(--foreground) 88%, #0f172a 12%) !important;
 }
 
+/* Pastel status text needs darker ink on the light theme surfaces. */
+
+:root[data-theme-mode='day'] :is(
+  .text-teal-50,
+  [class*="text-teal-50/"],
+  .text-teal-100,
+  [class*="text-teal-100/"],
+  .text-teal-200,
+  [class*="text-teal-200/"],
+  .text-teal-300,
+  [class*="text-teal-300/"]
+) {
+  color: #0f766e !important;
+}
+
+:root[data-theme-mode='day'] :is(
+  .text-emerald-50,
+  [class*="text-emerald-50/"],
+  .text-emerald-100,
+  [class*="text-emerald-100/"],
+  .text-emerald-200,
+  [class*="text-emerald-200/"],
+  .text-emerald-300,
+  [class*="text-emerald-300/"]
+) {
+  color: #047857 !important;
+}
+
+:root[data-theme-mode='day'] :is(
+  .text-rose-50,
+  [class*="text-rose-50/"],
+  .text-rose-100,
+  [class*="text-rose-100/"],
+  .text-rose-200,
+  [class*="text-rose-200/"],
+  .text-rose-300,
+  [class*="text-rose-300/"]
+) {
+  color: #be123c !important;
+}
+
+:root[data-theme-mode='day'] :is(
+  .text-red-50,
+  [class*="text-red-50/"],
+  .text-red-100,
+  [class*="text-red-100/"],
+  .text-red-200,
+  [class*="text-red-200/"],
+  .text-red-300,
+  [class*="text-red-300/"]
+) {
+  color: #b91c1c !important;
+}
+
+:root[data-theme-mode='day'] :is(
+  .text-amber-50,
+  [class*="text-amber-50/"],
+  .text-amber-100,
+  [class*="text-amber-100/"],
+  .text-amber-200,
+  [class*="text-amber-200/"],
+  .text-amber-300,
+  [class*="text-amber-300/"]
+) {
+  color: #92400e !important;
+}
+
+:root[data-theme-mode='day'] :is(
+  .text-lime-50,
+  [class*="text-lime-50/"],
+  .text-lime-100,
+  [class*="text-lime-100/"],
+  .text-lime-200,
+  [class*="text-lime-200/"],
+  .text-lime-300,
+  [class*="text-lime-300/"]
+) {
+  color: #3f6212 !important;
+}
+
+:root[data-theme-mode='day'] :is(
+  .text-violet-50,
+  [class*="text-violet-50/"],
+  .text-violet-100,
+  [class*="text-violet-100/"],
+  .text-violet-200,
+  [class*="text-violet-200/"],
+  .text-violet-300,
+  [class*="text-violet-300/"]
+) {
+  color: #425f1a !important;
+}
+
+:root[data-theme-mode='day'] :is(
+  .text-sky-50,
+  [class*="text-sky-50/"],
+  .text-sky-100,
+  [class*="text-sky-100/"],
+  .text-sky-200,
+  [class*="text-sky-200/"],
+  .text-sky-300,
+  [class*="text-sky-300/"]
+) {
+  color: #075985 !important;
+}
+
 @media print {
   @page {
     margin: 12mm;
