@@ -525,3 +525,68 @@ enum TaskPriority {
   HIGH
   URGENT
 }
+
+// Individual OAuth connections. Tokens and authorization codes are stored hashed.
+model PulseOAuthRequest {
+  id            String   @id @default(uuid())
+  clientId      String
+  redirectUri   String
+  resource      String
+  challenge     String
+  scopes        String[]
+  state         String
+  expiresAt     DateTime
+  consumedAt    DateTime?
+}
+
+model PulseOAuthGrant {
+  id            String   @id @default(uuid())
+  userId        String
+  tenantId      String
+  clientId      String
+  scopes        String[]
+  timeZone      String
+  createdAt     DateTime @default(now())
+  revokedAt     DateTime?
+  tokens        PulseOAuthToken[]
+  codes         PulseOAuthCode[]
+  @@index([userId, tenantId])
+}
+
+model PulseOAuthCode {
+  hash          String   @id
+  grantId       String
+  redirectUri   String
+  challenge     String
+  resource      String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  grant         PulseOAuthGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+}
+
+model PulseOAuthToken {
+  hash          String   @id
+  grantId       String
+  kind          String
+  resource      String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  grant         PulseOAuthGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  @@index([grantId])
+}
+
+// Both durable retry receipts and an actor-attributed audit, committed with mutations.
+model PulseActionReceipt {
+  id            String   @id @default(uuid())
+  tenantId      String
+  userId        String
+  grantId       String
+  operationId   String
+  action        String
+  inputHash     String
+  changes       Json
+  result        Json
+  createdAt     DateTime @default(now())
+  @@unique([tenantId, userId, operationId])
+  @@index([tenantId, userId, createdAt])
+}

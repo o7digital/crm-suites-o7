@@ -1,4 +1,20 @@
 import { test, expect, Page } from "@playwright/test";
+
+test('Pulse Connect remains accessible without a session', async ({ page }) => {
+  const response = await page.goto('/connect/pulse');
+  expect(response?.status()).toBe(200);
+  await expect(page.getByRole('heading', { name: 'Conectar Pulse con ChatGPT' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Iniciar sesión en Pulse' })).toHaveAttribute('href', '/login?returnTo=%2Fconnect%2Fpulse');
+});
+
+test('account exposes ChatGPT connections and support sessions cannot consent', async ({ page }) => {
+  await mock(page);
+  await page.goto('/account');
+  await page.getByRole('link', { name: 'Conexiones ChatGPT' }).click();
+  await expect(page.getByText('Sal del acceso de soporte', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Autorizar conexión' })).toHaveCount(0);
+});
+
 const user = {
   id: "u1",
   tenantId: "t1",
@@ -163,7 +179,7 @@ async function drop(page: Page, status: "WON" | "LOST") {
 test("support can create the first workflow and reopen it for editing", async ({ page }) => {
   await mock(page);
   let pipelines: unknown[] = [];
-  let createdStages: unknown[] = [];
+  const createdStages: unknown[] = [];
   await page.route("**/api/pipelines", async route => {
     if (route.request().method() === "POST") {
       const pipeline = { id: "customer-pipeline", ...route.request().postDataJSON() };
@@ -395,7 +411,7 @@ test("a monthly package sends its duration, first date and workflow", async ({ p
     await route.fulfill({ json: {
       id: "monthly-1", title: "Monthly package", value: 1200, currency: "USD",
       status: "OPEN", pipelineId: "p1", stageId: "open",
-      recurrenceIndex: 1, recurrenceMonths: 6,
+      recurrenceIndex: 1, recurrenceMonths: 12,
     } });
   });
   await page.goto("/crm");
@@ -403,7 +419,7 @@ test("a monthly package sends its duration, first date and workflow", async ({ p
   await page.getByLabel("Deal name").fill("Monthly package");
   await page.getByTestId("recurring-deal").check();
   await page.getByLabel("Monthly amount").fill("1200");
-  await page.getByTestId("recurrence-months").fill("6");
+  await page.getByTestId("recurrence-months").selectOption("12");
   await page.getByTestId("recurrence-start-date").fill("2026-11-30");
   const request = page.waitForRequest((req) =>
     req.method() === "POST" && new URL(req.url()).pathname === "/api/deals",
@@ -411,10 +427,10 @@ test("a monthly package sends its duration, first date and workflow", async ({ p
   await page.getByRole("button", { name: "Create deal" }).click();
   expect((await request).postDataJSON()).toEqual(expect.objectContaining({
     title: "Monthly package", value: 1200, pipelineId: "p1", stageId: "open",
-    recurrenceMonths: 6, recurrenceStartAt: "2026-11-30",
+    recurrenceMonths: 12, recurrenceStartAt: "2026-11-30",
     expectedCloseDate: "2026-11-30",
   }));
-  await expect(page.getByTestId("deal-card-monthly-1")).toContainText("Month 1/6");
+  await expect(page.getByTestId("deal-card-monthly-1")).toContainText("Month 1/12");
 });
 
 test("an existing open deal can become a monthly package", async ({ page }) => {
@@ -422,14 +438,14 @@ test("an existing open deal can become a monthly package", async ({ page }) => {
   await page.goto("/crm");
   await page.getByTestId("deal-card-d1").click();
   await page.getByTestId("recurring-deal").check();
-  await page.getByTestId("recurrence-months").fill("4");
+  await page.getByTestId("recurrence-months").selectOption("24");
   await page.getByTestId("recurrence-start-date").fill("2026-12-15");
   const request = page.waitForRequest((req) =>
     req.method() === "PATCH" && new URL(req.url()).pathname === "/api/deals/d1",
   );
   await page.getByRole("button", { name: "Save", exact: true }).click();
   expect((await request).postDataJSON()).toEqual(expect.objectContaining({
-    recurrenceMonths: 4, recurrenceStartAt: "2026-12-15",
+    recurrenceMonths: 24, recurrenceStartAt: "2026-12-15",
     pipelineId: "p1", stageId: "open",
   }));
 });

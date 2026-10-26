@@ -1,6 +1,7 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 
 export interface RequestUser {
+  supportImpersonation?: boolean;
   userId: string;
   tenantId: string;
   email: string;

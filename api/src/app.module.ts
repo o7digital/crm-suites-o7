@@ -1,3 +1,4 @@
+import { PulseConnectModule } from './pulse-connect/connect.module';
 import { SignaturesModule } from './signatures/signatures.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -28,6 +29,7 @@ import { OliviaIntegrationModule } from './olivia-integration/olivia-integration
 
 @Module({
   imports: [
+    PulseConnectModule,
     SignaturesModule,
     ConfigModule.forRoot({ isGlobal: true }),
     FxModule,
