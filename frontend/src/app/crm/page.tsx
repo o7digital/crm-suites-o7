@@ -14,6 +14,7 @@ import { phase1Labels } from '@/lib/pulse-phase1';
 import { DealActivityHistory } from '@/components/DealActivityHistory';
 import { WindowControls } from '../../components/WindowControls';
 import { WorkflowTransferDialog } from '../../components/WorkflowTransferDialog';
+import { HorizontalBoard } from '../../components/HorizontalBoard';
 
 type Pipeline = {
   id: string;
@@ -1761,6 +1762,8 @@ export default function CrmPage() {
       const parsedDay = Number(existingIso.slice(8, 10));
       day = Number.isFinite(parsedDay) && parsedDay >= 1 && parsedDay <= 31 ? parsedDay : 1;
     }
+    // A deal closing on the 31st must still move to a shorter month.
+    day = Math.min(day, new Date(forecastYear, month + 1, 0).getDate());
     const nextIso = `${forecastYear}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
     try {
@@ -2372,17 +2375,7 @@ export default function CrmPage() {
         {viewMode === 'KANBAN' && (statusFilter === 'ALL' || statusFilter === 'OPEN') ? (
           <>
           {/* Keep all stages on one line (no wrap). Horizontal scroll if needed. */}
-          <div
-            className="overflow-x-auto overscroll-x-contain pb-4 2xl:-ml-48 2xl:w-[calc(100%+24rem)]"
-            onWheel={(event) => {
-              // Keep horizontal trackpad gestures inside CRM board and avoid parent/page navigation.
-              const hasHorizontalIntent = Math.abs(event.deltaX) > 0 || event.shiftKey;
-              if (!hasHorizontalIntent) return;
-              event.preventDefault();
-              const horizontalDelta = Math.abs(event.deltaX) > 0 ? event.deltaX : event.deltaY;
-              event.currentTarget.scrollLeft += horizontalDelta;
-            }}
-          >
+          <HorizontalBoard testId="kanban-board" className="2xl:-ml-48 2xl:w-[calc(100%+24rem)]">
             <div className="flex w-max gap-4 pr-6">
               {visiblePipelineStages.map((stage) => (
                 <StageColumn
@@ -2421,7 +2414,7 @@ export default function CrmPage() {
                 />
               ))}
             </div>
-          </div>
+          </HorizontalBoard>
           </>
         ) : null}
 
@@ -2480,7 +2473,7 @@ export default function CrmPage() {
                 ))}
               </select>
             </div>
-            <div className="overflow-x-auto pb-2">
+            <HorizontalBoard testId="forecast-board">
               <div className="flex min-w-max gap-3">
                 <div
                   className="w-[260px] rounded-xl border border-dashed border-white/15 bg-white/[0.03] p-3"
@@ -2599,7 +2592,7 @@ export default function CrmPage() {
                   onMoveToLost={(dealId) => handleDropDealToStatus(dealId, 'LOST')}
                 />
               </div>
-            </div>
+            </HorizontalBoard>
           </div>
         ) : null}
 
